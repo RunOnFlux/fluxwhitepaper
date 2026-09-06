@@ -79,13 +79,16 @@ finds the IP:port that \FluxOS placed it on. \shipped
     arr/.style={-{Latex[length=2mm]}, thick},
   ]
     \node[box]   (client) {client};
-    \node[found, right=10mm of client] (dns) {DNS\\[-1pt]{\scriptsize Cloudflare \emph{or} \PDNS}};
-    \node[found, right=10mm of dns]    (ha)  {HAProxy\\[-1pt]{\scriptsize on the elected \FDM host}};
-    \node[flux,  right=10mm of ha]     (app) {application\\[-1pt]{\scriptsize container IP:port}};
+    %% 10mm gaps were narrower than the edge labels they had to hold, so
+    %% "A record" and "proxied" ran into the adjacent box borders.
+    \node[found, right=17mm of client] (dns) {DNS\\[-1pt]{\scriptsize Cloudflare \emph{or} \PDNS}};
+    \node[found, right=17mm of dns]    (ha)  {HAProxy\\[-1pt]{\scriptsize on the elected \FDM host}};
+    \node[flux,  right=17mm of ha]     (app) {application\\[-1pt]{\scriptsize container IP:port}};
 
-    \draw[arr] (client) -- node[lbl, above] {name} (dns);
-    \draw[arr] (dns) -- node[lbl, above] {\texttt{A} record} (ha);
-    \draw[arr] (ha)  -- node[lbl, above] {proxied} (app);
+    %% above=0.9mm rather than a bare `above': the labels were sitting on the arrows.
+    \draw[arr] (client) -- node[lbl, above=0.9mm] {name} (dns);
+    \draw[arr] (dns) -- node[lbl, above=0.9mm] {\texttt{A} record} (ha);
+    \draw[arr] (ha)  -- node[lbl, above=0.9mm] {proxied} (app);
 
     % HAProxy-bypassing shortcut for game applications
     \draw[arr, dashed] (dns.south) .. controls +(0,-11mm) and +(0,-11mm) ..
@@ -94,7 +97,7 @@ finds the IP:port that \FluxOS placed it on. \shipped
 
     %% Named and included in the fit: as a bare label above `ha' it printed on top of
     %% the dashed box's own "Foundation-operated" label, which sits at the same height.
-    \node[lbl, above=1.5mm of ha] (tls) {TLS termination, Host-header ACL,\\[-1pt]per-server health check};
+    \node[lbl, above=4mm of ha] (tls) {TLS termination, Host-header ACL,\\[-1pt]per-server health check};
     \node[draw, dashed, rounded corners=2pt, inner sep=3mm, fit=(dns)(ha)(tls),
           label={[lbl, yshift=1.5mm]above:{Foundation-operated}}] {};
   \end{tikzpicture}

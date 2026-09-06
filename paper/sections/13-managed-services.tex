@@ -322,7 +322,8 @@ rather than presenting both under a single ``managed database'' label.
   \node[ev] (r3)  at (58,5) {}; \node[lbl, below=0.5mm of r3] {replica\\acknowledges};
   \node[lbl, above=0.5mm] at (58,5) {\textbf{ack}};
   \draw[very thick] (58,3.6) -- (58,6.4);
-  \node[lbl, anchor=west] at (64,5.6) {loss window collapses to zero};
+  %% Same as the first timeline: 0.6 above a rule at y=5 still crosses the glyphs.
+  \node[lbl, anchor=west] at (64,7.6) {loss window collapses to zero};
 
   \node[lbl, anchor=west, fill=black!14, inner sep=1.2pt] at (0,46)
     {shaded: writes acknowledged to the client that a failover can still lose};
