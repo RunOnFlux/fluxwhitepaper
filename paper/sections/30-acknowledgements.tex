@@ -1,0 +1,44 @@
+\section*{Acknowledgements}
+\addcontentsline{toc}{section}{Acknowledgements}
+\label{sec:acknowledgements}
+
+Nothing described in the first half of this paper was built by its author alone, and most of it was
+not built by its author at all. \Flux{} has produced blocks since January 2018 and run an
+orchestration layer on top of them since 2019; eight years of that work is what made a document of
+this kind possible, because a specification can only be checked against a system that exists.
+
+My co-founders --- \textbf{Daniel Keller}, \textbf{Jeremy Anderson} and \textbf{Valter Silva} ---
+have carried this project alongside me since the beginning, and their contribution runs across the
+whole of the \Flux{} ecosystem rather than any one component of it: the chain, the cloud, the
+products built on both, and eight years of keeping all of it operating.
+
+The same is true of the developers who built what this paper documents. \textbf{David White} is
+principally responsible for \ArcaneOS, the measured-boot operating system that
+\Cref{sec:attested-execution} spends most of its length examining; the substrate that section
+describes is his design. \textbf{Kamil Piekarski}, \textbf{Ali Mahdavi} and \textbf{Vasilis
+Magkoutis} have built and operated large parts of the ecosystem across its layers, and the reader
+who encounters a component in Parts~III and~IV that simply works is encountering their work rather
+than any argument of mine.
+
+More broadly, the engineering, operations and support teams at InFlux Technologies wrote, deployed
+and have kept running nearly every component described here: \fluxd, \FluxOS, \fluxbench, \ArcaneOS,
+\FDM, \PDNS, the attestation service, the wallets and the tooling around them. Where this paper reads
+a design and finds it sound, that is their work.
+
+\textbf{The node operators are the network.} At the census this paper measures, \num{6489} machines
+were run by people who chose to post collateral and keep hardware online, in more than sixty
+countries, answerable to no one for doing so. Every capacity figure in \Cref{sec:deployed-today},
+every concentration measurement in \Cref{sec:governance}, and the entire argument of
+\Cref{sec:pnr} is a statement about their machines and their decisions. A decentralized network is
+an assertion until somebody runs the nodes.
+
+To the wider \Flux{} community --- the operators who have tested releases, the developers who have
+built on the platform, and everyone who has argued with the roadmap in public --- thank you. Several
+of the sharpest questions this paper tries to answer were asked first by people who do not work here.
+
+\paragraph{Responsibility.} The findings in this paper are the author's own, and so are its
+criticisms. It records places where the deployed system is weaker than it appears --- trust
+boundaries that concentrate more than a reader would expect, an incentive that does not do what its
+name suggests, an attestation that does not bind to a machine --- and no one named above has
+endorsed those conclusions or is answerable for them. Errors of fact, of reasoning and of judgement
+are mine.
