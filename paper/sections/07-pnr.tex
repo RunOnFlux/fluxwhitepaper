@@ -11,12 +11,14 @@ payment, of the full price, to \emph{one} address, and consensus --- not the pay
 and not \FluxOS --- would divide what arrives there. A fixed fraction would accrue to a
 protocol-held fee pool, and that pool would be paid out to node operators through the block
 subsidy's existing payee rotation, one small increment per block \planned
-\srcintent{evidence/design/08-answers-round-2.md}. The purpose of this section is to state that
+\srcintent{design intake}. The purpose of this section is to state that
 mechanism precisely enough to implement, to
 prove the fairness property the design rests on, to prove that the pooling defeats a timing attack
 that would otherwise invert the mechanism, and --- with equal care --- to state the two things the
 mechanism does \emph{not} do: it does not make operator income proportional to collateral, and it
-creates no incentive whatsoever to host anything.
+makes operator income independent of which applications a node runs. That second point is a
+statement about the eligibility gate rather than about willingness to work, because placement is the
+network's choice and not the operator's (\S\ref{sec:pnr:hosting}).
 
 \paragraph{Terminology hazard, stated once and before anything else.}
 \PoN (\emph{Proof of Node}) and \PNR (\emph{Progressive Node Rewards}) are different mechanisms, in
@@ -25,7 +27,7 @@ deployed consensus rule that replaced hashing: it selects one payee per tier per
 collateral-gated queue and pays that payee out of the block subsidy \shipped
 \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.cpp}{713--778}. \PNR is the planned revenue-sharing rule
 specified in this section: it takes a fraction of application payments and routes it to whichever
-nodes \PoN has already selected \planned \srcintent{evidence/design/02-pnr.md}. \PNR consumes \PoN's
+nodes \PoN has already selected \planned \srcintent{design intake}. \PNR consumes \PoN's
 payee set and adds no selection mechanism of its own. Wherever this section says ``the rotation'' it
 means \PoN's rotation; wherever it says ``the pool'' or ``the drip'' it means \PNR.
 
@@ -72,7 +74,14 @@ load-bearing here and are restated so that no proof silently assumes more than t
     \srccode{fluxd/\allowbreak{}src/\allowbreak{}emergencyblock.cpp}{183--191},
     \srccode{fluxd/\allowbreak{}src/\allowbreak{}rpc/\allowbreak{}emergencyblock.cpp}{64--77},
     \srccode{fluxd/\allowbreak{}src/\allowbreak{}miner.cpp}{487--489} (C9). This is an adversary capability the
-    mechanism must be designed against, not a hypothetical.
+    mechanism must be designed against, not a hypothetical. It is also, already, a public fact: the
+    key count, the threshold and the absent gating are all readable in an open-source repository and
+    every emergency block ever produced is on the chain, so stating it here discloses nothing that was
+    not disclosed by shipping it. What publication does change is that the capability becomes
+    \emph{legible}, and the paper's position is that the right response is to close it rather than to
+    leave it undescribed: time or stall gating in \fluxd{}, and the move to 3-of-4 over a freshly
+    generated key set that \S\ref{sec:governance} records as the team's intent, are both cheap
+    relative to the design work S1 below has to do to contain it.
   \item[\textbf{A4}] \emph{The eligibility gate is not operator-bound and not machine-bound.} The
     benchmark signature that admits a node to the payee set is produced by a process on the
     operator's own host under network-wide shared keys (C13), and the \ArcaneOS attestation
@@ -85,7 +94,7 @@ load-bearing here and are restated so that no proof silently assumes more than t
     have been paid for: the admission rule that binds a payment to a deployment is a \FluxOS
     validation rule, and the \flux-denominated price table is Foundation policy. The precise scope
     of ``consensus-enforced'' is thus: \emph{the distribution of application revenue is a consensus
-    rule; the obligation to pay, and the price, are policy} \srcdoc{plan/conflicts.md C38}.
+    rule; the obligation to pay, and the price, are policy} \srcdoc{reconciliation record}.
 \end{enumerate}
 \end{assumption}
 
@@ -97,7 +106,7 @@ and its generated data files were computed at $\ncount{\tC} = 3{,}246$
 \srcdoc{scripts/07-pnr-settlement.py, run 2026-09-03}; the one-node difference changes nothing at
 the precision reported. The activation-scale revenue figure $V_0 = 1{,}431{,}600 \flux$ per year is
 the team's assumption of $1{,}193$ applications at $100\flux$ per month, \emph{not} a measured
-receipt total \srcintent{evidence/design/02-pnr.md}; the census over the same window returned
+receipt total \srcintent{design intake}; the census over the same window returned
 $1{,}195$ application records and $7{,}486$ requested instances
 \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}. Every absolute
 \flux-denominated figure in \S\ref{sec:pnr:crossover} is linear in $V_0$; the growth-rate
@@ -123,7 +132,7 @@ for correctly-memoed payments, with no account and no server-issued credential \
 no second recipient, no fee component and no new transaction type: the settled decision is that the
 tenant would pay the full price once, and the division would be performed by rules in which no
 wallet, no agent and no \FluxOS release participates \planned
-\srcintent{evidence/design/08-answers-round-2.md} \srcdoc{plan/conflicts.md C36}.
+\srcintent{design intake} \srcdoc{reconciliation record}.
 
 \begin{definition}[\PNR application payment, \planned]
 \label{def:pnr:tx}
@@ -141,7 +150,7 @@ with $\hpon = 2{,}020{,}000$ \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainp
 $\redint = 1{,}051{,}200$ blocks \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{157},
 $\redmax = 20$ \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{158},
 $\hpa = 3{,}466{,}630$, $\rampstep = 0.05$ and $\nodesharecap = 0.50$
-\srcintent{evidence/design/02-pnr.md}. Write $r(\hgt) \defeq 100\,\nodeshare(\hgt) \in \mathbb{Z}$.
+\srcintent{design intake}. Write $r(\hgt) \defeq 100\,\nodeshare(\hgt) \in \mathbb{Z}$.
 
 Let $\mathsf{sink}$ denote the \emph{application-payment address}: one transparent address carried
 as a consensus constant from height $\hpa$ onward, whose identity is O14. Let $m_\app$ be the
@@ -171,6 +180,14 @@ arrives at the address, memo or no memo.
     the fee pool $\pool$, and $A_F \defeq v - A_\Phi$ is credited to the Foundation and paid through
     the \emph{existing} dev-fund coinbase output. The floor is taken once, over integers, per
     received output, and favours the Foundation by strictly less than $1\sat$ per payment.
+    The magnitude belongs at the point of definition and not only in \S\ref{sec:pnr:related}: at
+    activation this rule would send the Foundation \textbf{four times what it sends operators} from
+    every payment, and $\nodeshare$ does not reach $\nodesharecap = 0.50$ until the reduction of
+    October 2032. What PS4 changes is not, at first, how much --- today \SI{100}{\percent} of the
+    same money reaches the same address by policy --- but \emph{who can alter it}, and by what
+    procedure. That is the honest form of the claim, and a reader who wants the fraction to be
+    different should read \S\ref{sec:pnr:related}, where it is compared against Akash's, rather than
+    infer that consensus enforcement is itself the concession.
 \end{description}
 Write $F_\hgt$ and $G_\hgt$ for the sums of $A_\Phi$ and of $A_F$ over the outputs paying
 $\mathsf{sink}$ in block $\hgt$; gross receipts in that block are $F_\hgt + G_\hgt$, and
@@ -185,7 +202,7 @@ specification are now settled and are recorded here rather than left as paramete
 $H(m_\app)$ and is carried in an \texttt{OP\_RETURN}, which closes O3; the payment is not a new
 transaction type and needs no new serialisation, which closes half of O18; and the split is applied
 by consensus rather than by the payer or by \FluxOS, which closes the other half
-\srcintent{evidence/design/08-answers-round-2.md} \srcdoc{plan/conflicts.md C36, C38}.
+\srcintent{design intake} \srcdoc{reconciliation record}.
 
 \begin{remark}[O7 --- resolved by the retirement of the shielded pools]
 \label{rem:o7-moot}
@@ -196,7 +213,7 @@ elsewhere: both shielded pools are to be retired (\S\ref{sec:shielded-retirement
 its first element, not by argument within this section but because the alternative ceases to exist.
 
 Worth noting for the record: an intermediate answer had permitted shielded payers with a
-revealed-amount output \srcintent{08-answers-round-2.md, round 9}, which would have made PS4
+revealed-amount output \srcintent{design intake}, which would have made PS4
 computable while hiding the payer. That is a coherent design and it is now moot. \PNR{} is
 consequently simpler than any draft of this section assumed --- every receipt at $\mathsf{sink}$ is
 publicly attributable, and the fee pool's inflow is auditable by anyone.
@@ -226,7 +243,7 @@ one decision.
     consensus change, never by a \FluxOS release through the channel of \S12 and \S14.
   \item[\textbf{E3}] \emph{The coinbase would gain no output.} The Foundation share would be added
     to the dev-fund output and the drip to the three tier outputs, and nothing else would be added.
-    The team's constraint that the coinbase must not grow \srcintent{evidence/design/02-pnr.md}
+    The team's constraint that the coinbase must not grow \srcintent{design intake}
     would be met strictly, and met better than by any shape that adds an output.
 \end{enumerate}
 \end{property}
@@ -281,7 +298,7 @@ consensus-unspendable sink turns the application-revenue term of that arithmetic
 number anyone can query from a block explorer, with no party privileged to publish it and none able
 to withhold it. The consequence for \S\ref{sec:evaluation} is concrete: that section presently reasons from an
 \emph{assumed} $100\flux$ per application per month (Assumption~\ref{as:pnr:fleet})
-\srcintent{evidence/design/02-pnr.md}, and after activation the same quantity would be measured
+\srcintent{design intake}, and after activation the same quantity would be measured
 rather than assumed, which is also what would make O17 closable by observation. One qualification
 travels with the counter and must not be dropped: it would measure what settles through this path,
 so every channel excluded by O8 --- credits (\S16), \CumulusVPN, enterprise contracts --- is revenue
@@ -309,7 +326,7 @@ quadrupled the block rate and the multiplier preserves wall-clock duration \ship
 The instance count is bounded above at $100$; its lower bound is $3$ in general but $1$ for
 \specv{8} applications from height $2{,}176{,}519$, which is the value consensus-side validation
 enforces even though the published \texttt{deploymentinformation} endpoint continues to report $3$
-\shipped \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{818-828}, \srcdoc{plan/conflicts.md C33}. The duration floor is likewise $1$ block from height $1{,}964{,}447$ by the same validator, where the endpoint still reports $5{,}000$ \shipped \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{852-863}, \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appQuery/\allowbreak{}deploymentInfoService.js}{41-46}. The deployed schedule has six rows, i.e.\ five revisions since genesis; the
+\shipped \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{818-828}, \srcdoc{reconciliation record}. The duration floor is likewise $1$ block from height $1{,}964{,}447$ by the same validator, where the endpoint still reports $5{,}000$ \shipped \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{852-863}, \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appQuery/\allowbreak{}deploymentInfoService.js}{41-46}. The deployed schedule has six rows, i.e.\ five revisions since genesis; the
 current row, effective from height $1{,}597{,}156$, is
 $\pricevec = (0.03,\ 0.01,\ 0.004)\flux$ per unit with surcharges
 $(\text{port},\ \text{scope},\ \text{staticip}) = (0.4,\ 0.8,\ 0.4)\flux$ \shipped
@@ -317,10 +334,32 @@ $(\text{port},\ \text{scope},\ \text{staticip}) = (0.4,\ 0.8,\ 0.4)\flux$ \shipp
 $\price$ and never recomputes it.
 \end{definition}
 
-\notestablished{the exact \FluxOS aggregation --- the units of the price table, the rounding, and
-any enterprise or geolocation multipliers --- is not established by the evidence available to this
-section. The price \emph{table} above is measured; the formula that consumes it is stated as an
-interface and must be cited from the \FluxOS evidence before publication.}
+\paragraph{The aggregation, now read from the source rather than stated as an interface.} An earlier
+draft carried the units, rounding and multipliers of $\price$ as unestablished. They are established
+here, because a \flux-denominated consensus split over a quantity nobody has pinned down is not a
+specification. In \FluxOS's \texttt{app\allowbreak{}Price\allowbreak{}Per\allowbreak{}Month}, the
+applicable row is the last table entry with $\text{height} < \hgt$, and the rates carry implicit
+units: \texttt{cpu} is priced \emph{per \num{0.1} core} (the core count is multiplied by ten),
+\texttt{ram} \emph{per \SI{100}{\mega\byte}} (divided by one hundred) and \texttt{hdd} \emph{per
+\SI{1}{\giga\byte}}, summed across all components of a \specv{4}-or-later composition \shipped
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}appUtilities.js}{31--33,91--115}.
+The three surcharges are added once each where they apply: \texttt{scope} for an enterprise or
+node-targeted application, \texttt{staticip} for a static-IP request, and \texttt{port} \emph{per
+enterprise port} \shipped
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}appUtilities.js}{116--122}.
+
+Two details matter to \S\ref{sec:pnr:crossover} and are easy to get wrong. First, \textbf{the table
+prices three instances}: the summed total is divided by three to obtain the per-instance price, and
+instances beyond the first are added on top, with a \num{0.5}\flux{} floor per extra instance where
+the base price is below that and more than two extras are requested \shipped
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}appUtilities.js}{124--134}.
+Second, rounding is a \emph{ceiling} to \num{0.01}\flux{}, taken twice --- once on the per-instance
+price and again after the duration multiplier $\dur/L^{\ast}(\hgt)$ is applied \shipped
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}appSpecHelpers.js}{55--63}.
+No geolocation multiplier exists in this path. A marketplace multiplier and duration discounts of
+\num{3}/\num{6}/\SI{12}{\percent} do exist, but only in the USD-denominated \emph{quote}
+(\S\ref{sec:pnr:openparams}, O9), never in the on-chain \flux{} price that \FluxOS{} validates a
+payment against --- which is the quantity PS4 would divide. O3 is closed and this marker with it.
 
 Two consequences of Definition~\ref{def:pnr:price} deserve to be visible rather than discovered.
 First, the pool would receive $\nodeshare(\hgt)\,v$ regardless of how $\price$ was computed:
@@ -342,7 +381,7 @@ itself (O9) and the set of channels required to settle through $\mathsf{sink}$ (
 Two other shapes were considered against the same constraints --- the coinbase must not grow, not
 every wallet exposes multiple recipients, adoption should be fast --- and both were rejected. They
 are recorded because a reader will assume one of them was the easy option
-\srcdoc{plan/conflicts.md C36}.
+\srcdoc{reconciliation record}.
 
 \paragraph{Not a blockchain fee.} Carrying the operator share as transaction fee is the shape that
 looks free, and it is not, for four independent reasons. \emph{First}, fees accrue to the block
@@ -368,7 +407,7 @@ library in order to pay, which is precisely the friction \S18 exists to remove a
 wallet or agent runtime would carry; and it would have to be rolled out across every wallet, hosted
 tool and agent before any payment could settle at all, making adoption serial rather than immediate.
 It would remain available as a later addition carrying richer fields, and it would coexist with the
-address-and-memo path without invalidating it \planned \srcdoc{plan/conflicts.md C36}.
+address-and-memo path without invalidating it \planned \srcdoc{reconciliation record}.
 
 % ---------------------------------------------------------------------------
 \subsection{The pool as consensus state}
@@ -440,7 +479,7 @@ would reintroduce same-block recapture of $\tierratio{t}/\drip$.}
 The settlement decision created a question this specification had not needed to ask --- at which
 height the Foundation share $G_\hgt$ is computed --- and it is answered here: \textbf{on arrival},
 at the $\nodeshare$ in force at the receipt height, as PS4 states, and paid in the same block
-\srcintent{evidence/design/08-answers-round-2.md, round 18}.
+\srcintent{design intake}.
 
 The alternative considered was to let the pool receive the entire receipt and apply the division to
 the drip at payout, adding $\lfloor (100 - r(\hgt))\,D_\hgt/100 \rfloor$ to the existing dev-fund
@@ -500,7 +539,7 @@ the chain.
 
 \paragraph{Where the pool lives, and the two places it must not.} O2 asked whether $\pool_\hgt$ is
 held as a per-index delta, a coinbase field or a header field; the answer is the coinbase field, PC
-above, with every validator recomputing rather than trusting it \srcdoc{plan/conflicts.md C37}. Three
+above, with every validator recomputing rather than trusting it \srcdoc{reconciliation record}. Three
 properties decide it. \emph{Reorg-exactness would come free}, because the pool is a pure function of
 the chain: a reorg recomputes it, with no rollback journal and no possibility of the pool diverging
 from the UTXO set. \emph{No new database would be needed}, because validators already parse the
@@ -580,8 +619,17 @@ At $\drip = 86{,}400$ blocks and $\spacingpon = \SI{30}{\second}$
 \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{105}, the fill from zero would be
 $D_\hgt/F = 1 - q^{\hgt - \hpa}$: \SI{3.3}{\percent} after one day, \SI{20.8}{\percent} after a
 week, \SI{63.2}{\percent} after $\drip$ blocks, \SI{95.0}{\percent} after \SI{90}{\day}
-\srcdoc{plan/mech-pnr.md \S1.5}. \PNR would therefore ramp over roughly a quarter rather than switch
+\srcdoc{mechanism specification}. \PNR would therefore ramp over roughly a quarter rather than switch
 on, and the paper should not describe activation as a switch.
+
+\textbf{Nor should the activation announcement.} These four figures belong in it verbatim, before
+activation rather than after. An operator who has been told that \PNR{} pays \SI{20}{\percent} of
+application revenue, and who observes \SI{3.3}{\percent} of it on day one, will reasonably conclude
+the mechanism is broken; the same operator told in advance that the pool fills on a thirty-day time
+constant will read the same observation as confirmation that it works. This is the one place in
+\PNR{}'s deployment where the difference between a successful launch and a credibility problem is a
+communications decision rather than a design one, and it is recorded here so that it is nobody's
+oversight.
 
 \settlednote{No seed: $\pool_{\hpa-1}=0$ (\Cref{tab:pnr-recommended}). O11 --- initial seed $\pool_{\hpa-1}$. Domain: $\{0,\ \text{a Foundation-funded seed}\}$. A
 seed removes the ninety-day ramp; it is also a one-off Foundation transfer to operators and would
@@ -689,7 +737,7 @@ $\coll{\tN} = 12{,}500\flux$, $\coll{\tS} = 40{,}000\flux$
 $7.04/12.5 = 0.563$ for Nimbus and $17.96/40 = 0.449$ for Stratus: \textbf{per \flux of collateral,
 Cumulus is the better-compensated tier, by a factor of $2.23$ over Stratus.} The design intake's
 phrase ``proportional to collateral across tiers'' is therefore incorrect and is not used anywhere
-in this paper \srcintent{evidence/design/02-pnr.md} (C24). What \PNR income \emph{is} exactly
+in this paper \srcintent{design intake} (C24). What \PNR income \emph{is} exactly
 proportional to is \PoN issuance income --- it is issuance-shaped --- so the tilt toward Cumulus on a
 return-on-collateral basis is a pre-existing property of \PoN that \PNR would inherit and reinforce.
 \end{remark}
@@ -769,6 +817,14 @@ Cumulus nodes, \SI{5.96}{\percent} at $5{,}000$, \SI{7.80}{\percent} at $2\times
 \SI{11.93}{\percent} at $3\times$, \SI{16.21}{\percent} at $4\times$, and \SI{26.05}{\percent} at
 $20{,}000$ \srcdoc{scripts/07-pnr-settlement.py}.
 
+The last row is not a hypothetical, and the review trigger recommended below should be read in that
+light. The fleet has been substantially larger than it is now, and Cumulus is the tier that grows
+first when it grows, because it is the cheapest to enter. \textbf{A return to a fleet size this
+network has already sustained would fire the $2\times$ trigger}, so the trigger should be treated as
+a scheduled review of a constant that is fixed by consensus --- and therefore revisable only by
+network upgrade --- rather than as a remote contingency. Recording that now costs nothing; discovering
+it at $2\times$ costs a hard fork under time pressure.
+
 \paragraph{The value, and what it costs.} $\drip = 86{,}400$ blocks --- exactly $\SI{30}{\day}$ at
 $\SI{30}{\second}$ spacing --- giving a decay-side spread of \SI{3.83}{\percent}, a
 $\SI{20.79}{\day}$ half-life, and the recapture bound proved in \S\ref{sec:pnr:timing}, with
@@ -779,10 +835,10 @@ revenue, which is a delay line and not a treasury (Remark~\ref{rem:pnr:delayline
 $\drip = \rot{\tC}$ that the intake first suggested is rejected on the \SI{171.79}{\percent} figure
 in Table~\ref{tab:pnr:drip}. $\drip$ is not to be adaptive to node count: node count is itself
 gameable by registration, and a fixed constant with margin dominates
-\srcintent{evidence/design/02-pnr.md}.
+\srcintent{design intake}.
 
 \paragraph{Ratified.} $\drip = 86{,}400$ blocks is settled and O1 is closed
-\srcintent{evidence/design/08-answers-round-2.md}. The trade-off it resolves does not disappear with
+\srcintent{design intake}. The trade-off it resolves does not disappear with
 the decision and is restated once so that a later revision starts from it: spread
 $\approx \rot{\tC}/\drip$ and targeted recapture $\approx \tierratio{t}/\drip$ both fall with
 $\drip$, while lag, activation ramp and steady-state pool size $F\drip$ all rise with it, over the
@@ -847,7 +903,7 @@ one node of each tier, aligned & \textbf{\SI{100}{\percent}} & \textbf{\SI{20}{\
 of \SI{66.7}{\percent} and \SI{100}{\percent} are fractions of the \emph{operator share}, not of the
 payment}; as fractions of what the tenant pays they are \SI{13.3}{\percent} and \SI{20}{\percent} at
 activation, rising to \SI{33.3}{\percent} and \SI{50}{\percent} at the cap
-\srcintent{evidence/design/02-pnr.md}.}
+\srcintent{design intake}.}
 \label{tab:pnr:nextblock}
 \end{table}
 
@@ -996,10 +1052,52 @@ leak: the party that sets the price table would be exposed to one fifth of it.
 \end{remark}
 
 % ---------------------------------------------------------------------------
-\subsection{\PNR creates no incentive to host}
+\subsection{What \PNR{} does and does not incentivise}
 \label{sec:pnr:hosting}
 
-This is the sharpest question about the design and it is answered here rather than buried.
+This is the sharpest question about the design and it is answered here rather than buried. It is
+also the one most easily stated wrongly, so the distinction comes first.
+
+\textbf{\PNR{} is a strong incentive to \emph{operate a node}.} It is the mechanism by which
+application revenue reaches operators at all, and on the team's own projection it becomes the largest
+component of operator income \srcintent{design intake}. Nothing below qualifies that.
+
+What the property proves is narrower: income does not vary with \emph{which} applications a
+particular node happens to run. That is not a free-riding opportunity, because \textbf{an operator
+does not choose what to host}. \FluxOS{}'s spawner selects a candidate at random from the
+network-wide application list \shipped
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{311},
+and no opt-out, allowlist or per-application refusal exists anywhere in the deployed orchestration
+code. Placement is the network's decision, not the operator's. An operator who wanted to collect
+\PNR{} while hosting nothing could not simply decline work; they would have to appear eligible while
+providing no real capacity --- which is a statement about the \emph{eligibility gate}, not about the
+reward.
+
+\paragraph{What that does and does not imply for sequencing, at the right magnitude.} It is
+tempting, and this paper was tempted, to conclude that hardening attestation is a
+\emph{precondition} for \PNR{} because \PNR{} raises the payoff to passing the gate without doing the
+work by exactly what it pays. The first half is true; the inference is not, and the arithmetic is in
+this section already. At activation \PNR{} would pay $\num{286320}\flux$ per year against
+$\num{6386040}\flux$ per year of issuance already paid through \emph{the same unbound gate}
+(\S\ref{sec:pnr:crossover}). \PNR{} would raise the prize for faking eligibility by
+\SI{4.5}{\percent}. \textbf{The gate problem is a \PoN{} problem today, and \SI{95.7}{\percent} of it
+exists whether or not \PNR{} ever ships.}
+
+Two conclusions follow, and the second is the one this paper now carries.
+\begin{enumerate}
+  \item Hardening the eligibility gate is the network's most urgent security work \emph{on its own
+  merits}, independent of \PNR{}. Framing it as a \PNR{} precondition understates it by more than an
+  order of magnitude and invites the reply that a \SI{4.3}{\percent} supplement is not worth blocking.
+  \item The defensible sequencing rule is therefore not ``\PNR{} waits'' but \textbf{\PNR{}'s ramp
+  tracks attestation's completion}: activation at $\nodeshare = 0.20$ adds little to an exposure that
+  already exists, while each step of the ramp toward $\nodesharecap = 0.50$ moves a larger share of
+  operator income behind a gate whose strength should have risen to meet it. This is a schedule
+  coupling, not a blocking dependency, and it does not hand an opponent of \PNR{} a principled veto.
+\end{enumerate}
+\Cref{sec:feasibility} and \Cref{sec:migration} state the same edge in the same terms. What makes the
+coupling achievable rather than aspirational is the finding in
+\S\ref{sec:boot-chain}: the image-bound PCR policy the hardening needs is already generated on every
+capable machine, and what is missing is a key bound to it and a verifier that reads it.
 
 \begin{property}[Zero marginal hosting incentive, \planned]
 \label{prop:pnr:nohosting}
@@ -1011,7 +1109,9 @@ in the \PoN queue and of nothing else. In particular
 \]
 identically, at every parameter value. The marginal \emph{cost} of hosting --- CPU, memory,
 bandwidth, disk, and under \S23 the operational burden of evictions --- is strictly positive.
-Therefore the private incentive of every node is to remain in the paid set at minimum real cost.
+Therefore the private incentive of every node is to remain in the paid set at minimum real cost ---
+which, given that placement is not the operator's to refuse, is a claim about how cheaply a node can
+satisfy the eligibility gate, not about whether it will accept the work it is given.
 \end{property}
 
 \begin{proof}
@@ -1030,9 +1130,18 @@ refusal to host reduced network revenue by its $1/6{,}489$ share, i.e.\
 $\Delta V = 220.7\flux$ per year at $V_0$. That node's own income would fall by
 $w\,\nodeshare\,\Delta V$, which at $\nodeshare = 0.20$ is
 $0.001\flux$ per year for a Cumulus node, $0.007$ for Nimbus and $0.018$ for Stratus; at
-parity-scale revenue ($22\times$) and at the cap, $0.06$--$1.0\flux$ per year. \textbf{Under any
-hosting cost above a few satoshis, free-riding dominates for every node at every parameter value in
-range.} This is not a tuning problem; it is structural to the settled decision to pay all nodes.
+parity-scale revenue ($22\times$) and at the cap, $0.06$--$1.0\flux$ per year. \textbf{The collective
+interest in the network hosting well is real; the private share of it is negligible at every
+parameter value in range.} This is not a tuning problem; it is structural to the settled decision to
+pay all nodes.
+
+What that does \emph{not} say --- and an earlier draft of this remark did say --- is that free-riding
+dominates. Free-riding would require the ability to decline the work, and no such ability exists
+(\S\ref{sec:pnr:hosting}). The correct reading is narrower and points somewhere useful: \PNR{}
+supplies no incentive gradient that rewards hosting \emph{well}, so what protects hosting quality is
+entirely the eligibility gate and the \num{640}-block re-confirmation that removes nodes failing it
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.cpp}{790--820} --- which is
+the same conclusion the sequencing argument above reaches, from the other side.
 \end{remark}
 
 \begin{remark}[The correct framing, and the cross-section consequence]
@@ -1046,7 +1155,7 @@ operators with tenants will be wrong.
 directly whether some fraction of \PNR should be conditioned on hosting, the team's position is that
 it should not: the network decides placement, so paying only the nodes an application landed on
 ``would be a luck game and can be also misused by node ops that will try to play it trying to force
-installation'' \srcintent{08-answers-round-2.md, round 11} (\planned). That reasoning is sound and
+installation'' \srcintent{design intake} (\planned). That reasoning is sound and
 follows from a mechanism this paper documents elsewhere. Placement is opportunistic self-selection
 with a \SI{90}{\second} broadcast collision wait resolved earliest-broadcast-wins
 (\S\ref{sec:fluxos-placement}); attaching income to placement would convert that race into a
@@ -1056,23 +1165,27 @@ opportunistic placement, hosting-conditioned pay would select for latency and ma
 service quality.
 
 So \Cref{prop:pnr:nohosting} should be read as a \emph{choice with a stated cost}, not as an
-oversight. What the choice does not do is remove the cost, and the rest of this remark stands
-unchanged: free-riding remains individually rational, and the whole hosting guarantee is transferred
-onto the eligibility gate. What actually compels hosting is the \emph{eligibility gate}:
-a node is a \PoN payee, and therefore a \PNR payee, only if it is confirmed with a
-\fluxbench-signed transaction and, in the target architecture, attested (\S14). \PNR's hosting
+oversight. What the choice does not do is remove the cost: the whole hosting guarantee is transferred
+onto the eligibility gate. A node is a \PoN payee, and therefore a \PNR payee, only if it is confirmed
+with a \fluxbench-signed transaction and, in the target architecture, attested (\S14). \PNR's hosting
 guarantee is precisely the strength of that gate and nothing more.
 
 By Assumption~\ref{as:pnr} A4 that gate is weaker than it looks in exactly the relevant way: the
 benchmark is self-reported by a process on the operator's own host under network-wide shared keys
 (C13), and the attestation signature is not machine-bound (C22). The two findings compose badly.
 \textbf{\PNR would raise the payoff to passing the gate without doing the work, by exactly what it
-pays} --- \SI{4.29}{\percent} of operator income at activation
-(\S\ref{sec:pnr:crossover}), more as the ramp advances (C24). \S4 and \S14 establish the gate's
-properties; \S\ref{sec:feasibility} classes the remaining attestation work; and \S\ref{sec:migration} must sequence the attestation fix
-\emph{before or with} \PNR activation rather than after it. Attested execution is not adjacent to
-\PNR; it is what would make \PNR pay for something. This specification records that as a hard
-dependency.
+pays} --- \SI{4.29}{\percent} of operator income at activation (\S\ref{sec:pnr:crossover}), more as
+the ramp advances (C24).
+
+The complementary figure is what turns that observation into a schedule rather than a veto, and it is
+stated here so the two never travel apart: the remaining \SI{95.71}{\percent} of operator income at
+activation is \emph{issuance already paid through the same gate}. The gate problem is not created by
+\PNR{} and would not be removed by cancelling it. \S4 and \S14 establish the gate's properties;
+\S\ref{sec:feasibility} classes the remaining attestation work as engineering once it is scoped to the
+TPM population; and \S\ref{sec:migration} couples \PNR's \emph{ramp} to that work rather than blocking
+activation on a bonded network that is neither necessary for the fix nor deliverable by
+\Cref{tab:pnr:activation}'s first row. Attested execution is not adjacent to \PNR; it is what would
+make \PNR pay for something, and it is what already makes issuance pay for something.
 \end{remark}
 
 \begin{openproblem}[Hosting-conditioned eligibility, dependency D1]
@@ -1254,11 +1367,10 @@ than an inefficiency, so it is worth restating why it was asked before recording
 
 Two forfeiture events exist and they are not the same. \textbf{Ordinary expiry} forfeits nothing: an
 application's prepaid period is consumed as it runs, the application expires when it is exhausted,
-its data is deleted, and there is no refund and no residue \srcintent{08-answers-round-2.md, round
-5}. \textbf{Moderation eviction} is different, because it interrupts a period that has been paid for
+its data is deleted, and there is no refund and no residue \srcintent{design intake}. \textbf{Moderation eviction} is different, because it interrupts a period that has been paid for
 and not yet consumed: an application evicted at height $\hgt_b$ with paid-through height
 $e_\app > \hgt_b$ leaves an unearned remainder, and the author has settled that this remainder is
-forfeited rather than refunded \srcintent{08-answers-round-2.md, round 5}. The question is where that
+forfeited rather than refunded \srcintent{design intake}. The question is where that
 value goes.
 
 \textbf{It must not go to $\pool$.} If forfeited balances flowed to the fee pool, the operators who
@@ -1279,7 +1391,7 @@ supply argument of \S\ref{sec:monetary-policy}, since a burn is exactly represen
 function whereas a Foundation transfer is not.
 
 \settlednote{O16: \textbf{burn} the unearned remainder on moderation eviction, adopted
-\srcintent{08-answers-round-2.md, round 11}. $\pool$ is excluded by S2, and refund by the settled
+\srcintent{design intake}. $\pool$ is excluded by S2, and refund by the settled
 forfeiture position. The implementing choice --- an explicit output to a provably unspendable script,
 or an omission from the coinbase --- belongs to \S\ref{sec:governance}, which owns the enforcement
 path; both realise the same supply effect.}
@@ -1329,7 +1441,7 @@ annually thereafter                    & $+\redint$    &            & $\times 9/
 $\hpon + k\,\redint$ with $\hpon = 2{,}020{,}000$ and $\redint = 1{,}051{,}200$
 \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{153,157}; the subsidy column is the as-coded per-step-truncating
 path $14\cdot(9/10)^{\mathrm{red}(\hgt)}$ multiplied by $1/2$ from $\hpa$
-\srcintent{evidence/design/02-pnr.md}. Dates are $\SI{30}{\second}$ extrapolations from the \PoN
+\srcintent{design intake}. Dates are $\SI{30}{\second}$ extrapolations from the \PoN
 activation timestamp anchor and carry the drift documented in \S\ref{sec:evaluation} (about $\SI{0.8}{\day}$ over
 $796{,}820$ blocks); the intake gives one of them a day later. The intake says the cap is reached
 ``$\sim$2033''; the grid gives October 2032.}
@@ -1351,7 +1463,7 @@ The design intake activated \PNR{} at PA~Depletion simultaneously with the paral
 cut, while the public roadmap stated that parallel-asset mining retirement comes \emph{only after}
 \PNR{} is demonstrably paying operators, ninety days announced, with the two in different halves of
 2027. The team has settled it: activation is \textbf{simultaneous}, both at
-$\hpa = \num{3466630}$ \srcintent{08-answers-round-2.md, round 5} (\planned), superseding the
+$\hpa = \num{3466630}$ \srcintent{design intake} (\planned), superseding the
 roadmap's strictly-after ordering (\S\ref{sec:pa-sequencing}).
 
 The consequence is recorded rather than smoothed over, because simultaneity removes a check the
@@ -1370,7 +1482,7 @@ oversight.
 governs. Real terms are a clearly-labelled secondary analysis with price treated as an exogenous
 parameter. No price prediction, target, or investment framing appears anywhere in this section, and
 a claim made in one denomination is never defended with reasoning from the other
-\srcintent{evidence/design/07-pricing-and-price.md}. \textbf{Parity depends on demand growth, not on
+\srcintent{design intake}. \textbf{Parity depends on demand growth, not on
 price.}
 
 \paragraph{Bases.} Operator issuance excludes the dev-fund remainder: it is
@@ -1380,7 +1492,7 @@ $\tfrac{13.5}{14}\,\subsidy\,\blocksyear$, not $\subsidy\,\blocksyear$, because 
 \SI{3.7}{\percent} high} for exactly this reason: it reports $33{,}112{,}800\flux$ per year of parity
 revenue at activation where the operator-only basis gives $31{,}930{,}200$, and
 $6{,}622{,}560\flux$ per year of issuance where the operator-only basis gives $6{,}386{,}040$
-\srcintent{evidence/design/02-pnr.md}. The generated data carries both bases
+\srcintent{design intake}. The generated data carries both bases
 \srcdoc{paper/data/pnr\_crossover.dat}.
 
 \paragraph{At activation.} With $\nodeshare = 0.20$ and $\subsidy = 6.3\flux$ per block, operator
@@ -1458,7 +1570,7 @@ is a statement about demand, and this paper makes no such statement.}
 \label{rem:pnr:contraction}
 Asked what happens if demand does not arrive, the team's answer is that the network shrinks: hosting
 that many FluxNodes stops being economic, some operators leave, ``which would mean more flux
-allocation for other node ops'' \srcintent{08-answers-round-2.md, round 11} (\planned). The team
+allocation for other node ops'' \srcintent{design intake} (\planned). The team
 also reports the observed direction is the opposite --- demand rising, with faster growth
 anticipated from AI-driven deployments --- and this paper records that as stated intent, not as a
 measurement it can confirm.
@@ -1476,7 +1588,7 @@ demand-funded designs hold, and it does not depend on demand materialising.
 rise}, and the two answers are in tension in a way neither alone reveals.
 \Cref{sec:23:measurement} measures four owner identities reaching the \SI{25}{\percent}
 moderation threshold, and the stated remedy for that concentration is growth: ``as network grows it
-will be more decentralized'' \srcintent{08-answers-round-2.md, round 11}. But the stated response to
+will be more decentralized'' \srcintent{design intake}. But the stated response to
 weak demand is contraction --- and contraction concentrates. Under the demand shortfall this
 subsection describes, the operators who exit first are the marginal ones, which are disproportionately
 single-node operators rather than the large holders whose collateral drives the concentration
@@ -1563,7 +1675,9 @@ as a forecast gives the following years-to-parity after activation.
 \small
 \begin{tabular}{lrrrrr}
 \toprule
-real growth $g$ $\backslash$ price multiple $m$ & $0.5$ & $1$ & $2$ & $5$ & $10$\\
+ & \multicolumn{5}{c}{exogenous price multiple $m$}\\
+\cmidrule(l){2-6}
+real growth $g$ & $0.5$ & $1$ & $2$ & $5$ & $10$\\
 \midrule
 \SI{0}{\percent}   & $14.6$ & never & never & never & never\\
 \SI{10}{\percent}  & $7.6$  & $11.6$ & $14.6$ & $19.6$ & $26.1$\\
@@ -1620,7 +1734,7 @@ never be used to defend one another.}
 \end{figure}
 
 \settlednote{Trailing receipts at $\mathsf{sink}$ (\Cref{tab:pnr-recommended}). O17 --- the measured revenue baseline that should replace ``$100\flux$ per application per
-month''. Domain: $\{\text{trailing receipts at the payment sink } \texttt{t3Nryf\ldots}$,
+month''. Domain: $\{\text{trailing receipts at the payment sink}$,
 $\text{list-price value of the measured resource totals}\}$; the census gives $8{,}972$ vCPU,
 $17{,}544{,}229$~MB of RAM and $160{,}107$~GB of disk across $7{,}486$ instances
 \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}. Every absolute figure in
@@ -1653,10 +1767,10 @@ is guessed anywhere in this section, and none of the closed ones is stated witho
 \toprule
 id & decision & settled value & provenance\\
 \midrule
-O1 & drip constant $\drip$ & $86{,}400$ blocks, i.e.\ exactly \SI{30}{\day} at \SI{30}{\second} & \srcintent{evidence/design/08-answers-round-2.md}\\
-O2 & commitment of $\pool_\hgt$ & committed in the coinbase (PC) and recomputed by every validator; no separate store, no header field & \srcintent{evidence/design/08-answers-round-2.md}, \srcdoc{plan/conflicts.md C37}\\
-O3 & memo semantics & \texttt{OP\_RETURN} binding $H(m_\app)$, carried and not interpreted by consensus (PS2) & \srcintent{evidence/design/08-answers-round-2.md}\\
-O18 & serialisation and enforcement boundary & one output of the full price to $\mathsf{sink}$ (PS1); consensus applies the split (PS4); \FluxOS checks only existence, memo and coverage & \srcintent{evidence/design/08-answers-round-2.md}, \srcdoc{plan/conflicts.md C36, C38}\\
+O1 & drip constant $\drip$ & $86{,}400$ blocks, i.e.\ exactly \SI{30}{\day} at \SI{30}{\second} & \srcintent{design intake}\\
+O2 & commitment of $\pool_\hgt$ & committed in the coinbase (PC) and recomputed by every validator; no separate store, no header field & \srcintent{design intake}, \srcdoc{reconciliation record}\\
+O3 & memo semantics & \texttt{OP\_RETURN} binding $H(m_\app)$, carried and not interpreted by consensus (PS2) & \srcintent{design intake}\\
+O18 & serialisation and enforcement boundary & one output of the full price to $\mathsf{sink}$ (PS1); consensus applies the split (PS4); \FluxOS checks only existence, memo and coverage & \srcintent{design intake}, \srcdoc{reconciliation record}\\
 \bottomrule
 \end{tabular}
 \caption{Decisions closed since the first draft of this specification \planned. All four are team
@@ -1678,7 +1792,7 @@ O5 & $D_{\hgt,t}$ with no payee in tier $t$ & stays in pool; dev fund; other tie
 O6 & partition residue $\epsilon_\hgt$ & pool; dev fund & $\le 2\sat$ per block either way; must be fixed to avoid divergence\\
 O7 & shielded payers & transparent value required; Sapling with revealed amount; excluded & consensus needs the received value for PS4; the hide-payer/reveal-amount construction is \S21's\\
 \textbf{O8} & scope of payments required to settle at $\mathsf{sink}$ & new deployments; renewals; credit top-ups (\S16); \CumulusVPN; enterprise & every excluded channel is revenue outside the consensus split and invisible to the revenue counter\\
-O9 & price-table rebasing & discretionary; rule-based; USD oracle & a rule removes a Foundation lever; an oracle adds a trust dependency\\
+O9 & price-table rebasing & discretionary; rule-based against a real-terms anchor; receipts-referencing (withdrawn as circular) & revisions are already on-chain and dated; a real-terms rule needs the price feed the quoting path already runs\\
 O10 & drip ordering & from $\pool_{\hgt-1}$; after applying $F_\hgt$ & parent-state: coinbase checkable early, producer cannot influence own drip; post-inflow: one block less lag, same-block recapture returns\\
 O11 & initial seed $\pool_{\hpa-1}$ & $0$; Foundation-funded seed & seed removes the $\sim$90-day ramp but is a one-off transfer and must be labelled one\\
 O12 & fleet-growth guard on $\drip$ & none; documented hard-fork review trigger & at $4\times$ Cumulus the spread is \SI{16}{\percent}; an automatic rule is a manipulation surface\\
@@ -1693,8 +1807,8 @@ O20 & PA cut applied uniformly & uniform $\times 1/2$; other & changes operator 
 \end{tabular}
 \caption{Parameters of the \PNR settlement mechanism, after the closures of
 Table~\ref{tab:pnr:closed}; the values since settled are in \Cref{tab:pnr-recommended}, and O4, O8,
-O14 and O19 remain open. The bold row is the one that gates the rest. Mirrored in
-\texttt{plan/\allowbreak{}decisions-needed.\allowbreak{}md}.}
+O14 and O19 remain open. The bold row is the one that gates the rest, and it is mirrored in the
+open-decisions record.}
 \label{tab:pnr:open}
 \end{table}
 
@@ -1712,7 +1826,7 @@ counter under-reports}; to \S23,
 
 Each parameter still open above is given a recommended value here, with the reasoning that produced
 it. Each was proposed by this paper and \textbf{confirmed by the author}
-\srcintent{08-answers-round-2.md, round 11}, and several are simply a
+\srcintent{design intake}, and several are simply a
 recommendation to keep the default that \Cref{def:pnr:pool} already takes --- which is worth stating
 explicitly, because a default that nobody has ratified is not the same object as a default that has
 been examined and kept.
@@ -1720,7 +1834,7 @@ been examined and kept.
 \begin{table}[H]
 \centering\footnotesize
 \caption{Values for the open \PNR{} parameters. Proposed by this paper and \textbf{confirmed by the
-author} \srcintent{08-answers-round-2.md, round 11}. \planned, \srcinferred{} for the derivations.}
+author} \srcintent{design intake}. \planned, \srcinferred{} for the derivations.}
 \label{tab:pnr-recommended}
 \begin{tabular}{@{}llp{0.46\linewidth}@{}}
 \toprule
@@ -1732,8 +1846,9 @@ O6 partition residue & \textbf{stays in $\pool$} & \num{0.021}\flux/year does no
 plumbing \\
 O7 shielded payers & \textbf{moot} & pools retired; all settlement transparent
 (\Cref{rem:o7-moot}) \\
-O9 price rebasing & \textbf{rule-based} & removes a Foundation lever without adding an oracle
-dependency \\
+O9 price rebasing & \textbf{rule-based, real-terms anchor} & a receipts-referencing rule is
+circular; the price feed it would need is already running off-consensus, with the on-chain table as a
+floor \\
 O10 drip ordering & \textbf{from $\pool_{\hgt-1}$} & keep the default: coinbase checkable before the
 block's own receipts \\
 O11 initial seed & \textbf{0} & a seed is a one-off Foundation transfer to operators \\
@@ -1757,14 +1872,50 @@ makes the first ninety days an honest measurement of whether demand exists. If t
 harsh, the correct instrument is the activation schedule, not a subsidy that muddies what the pool
 balance means.
 
-\textbf{O9, rule-based rebasing.} The price table is today a Foundation lever over pool inflow with
-no consensus involvement, which sits awkwardly beside a mechanism whose legitimacy rests on operators
-being paid from receipts rather than from discretion. Of the three options, an oracle imports a trust
-dependency that would need its own threat model and its own section; discretion preserves the lever.
-A rule --- rebasing on a published function of trailing measured receipts, adjusted at fixed
-intervals --- removes the lever without adding a dependency, and it is the only option under which a
-tenant can predict next period's price from public data. What the rule should be is left open; that
-it should be a rule is the recommendation.
+\textbf{O9, price-table rebasing --- and a circularity the first draft of this recommendation did not
+see.} The price table is a lever over pool inflow, which sits awkwardly beside a mechanism whose
+legitimacy rests on operators being paid from receipts rather than from discretion. Two corrections
+have to be made before the recommendation can stand.
+
+\emph{First, the lever is narrower than ``Foundation policy'' suggests.} A price revision is not a
+configuration edit: it is an on-chain message, sent from a Foundation multisig address to itself,
+carrying the seven-field table \texttt{p\_cpu\_ram\_hdd\_minPrice\_port\_scope\_staticip}, which every
+node parses from its own copy of the chain and applies from the message's height onward \shipped
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}explorerService.js}{279--303,387},
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}chainUtilities.js}{9--52}.
+The authority is one multisig; the \emph{exercise} of it is public, dated, ordered and
+non-repudiable, and every node computes prices from the same on-chain history. That is a materially
+better starting point than a table published over an API, and the paper should credit it.
+
+\emph{Second, ``a published function of trailing measured receipts'' is circular.} Receipts are price
+times volume. A rule that sets next period's price from last period's receipts has no exogenous
+anchor: it is a feedback loop that can drift arbitrarily far from the cost of the resources being
+sold, in either direction, and calling it a rule rather than a lever changes who turns the crank, not
+whether the number means anything. What the deployed table has actually tracked across its five
+revisions --- a \SI{100}{\percent}-fold fall in the CPU rate --- is real cost and the \flux{} price,
+not receipts.
+
+So the choice is a real one and it should be stated as such. \emph{Either} the rule targets a
+real-terms anchor, in which case it needs a price feed, \emph{or} it stays discretionary and the paper
+says so. What it cannot be is a rule that appears to remove discretion while quietly reintroducing it.
+
+On the first branch, one fact changes the cost of the option: \textbf{a price feed already exists in
+the deployed system}, and this paper's earlier framing of an oracle as a new dependency was wrong.
+The quoting path fetches a live \flux/USD rate from \texttt{viprates.\allowbreak{}runonflux.\allowbreak{}io}, falls
+back to CoinGecko, and falls back again to a compiled-in constant; it prices a USD-denominated table,
+applies duration discounts and a \flux{}-payment discount, and returns the \emph{larger} of that
+figure and the on-chain \flux{} price \shipped
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}appSpecHelpers.js}{440--522}. The
+on-chain table is thus already a floor beneath a USD-anchored quote. A real-terms rebasing rule would
+not import a trust dependency the network lacks; it would move one it already runs into a place where
+its failure modes have to be specified --- which is a smaller step than this section previously
+claimed, and a more honest description of the status quo.
+
+\emph{Recommendation, revised.} Adopt a rule that rebases against a real-terms anchor, and state the
+feed and its failure behaviour as part of the rule rather than as an implementation detail; the
+consensus-side floor already in place bounds what a bad feed can do to receipts. If that is judged too
+much trust to formalise, keep the table discretionary and say so plainly. The one option this paper
+withdraws is the receipts-referencing rule, which is circular.
 
 \textbf{O17, trailing receipts rather than list-price value.} The placeholder baseline of
 ``\num{100}\flux{} per application per month'' should be replaced by the trailing receipts actually
@@ -1788,8 +1939,8 @@ Ethereum, post-EIP-1559 & block proposer (priority fee); base fee burned & per-t
 Filecoin \citep{filecoin2017} & the specific storage provider & per-deal escrow released on proof of storage, with slashing & payment strictly conditional on proven service there; unconditional and network-wide here (H4, P7). \Flux would trade the proof-of-service dependency for fairness and simplicity, and inherit the free-rider problem of \S\ref{sec:pnr:hosting} in exchange\\
 Akash \citep{akash} & the winning provider & tenant escrow drawn down per block at the bid price, with a take rate to a community pool & no per-lease escrow to the host and no auction; the network take would be \SIrange{80}{50}{\percent} to a Foundation address rather than a governance-controlled pool. Stated without softening\\
 Render \citep{render} & node operators in proportion to work & burn-and-mint: payments burned, emissions minted to workers & burn-and-mint ties reward to metered work. The settled design rejects both the burn and the metering, which is exactly the roadmap model superseded by C1\\
-Dash masternodes & one masternode per block, longest-since-paid queue & block subsidy plus a treasury share & the nearest structural precedent for Proposition~\ref{prop:pnr:rotation}; Dash never routed application fees through the rotation. \Flux would be that rotation plus a fee pool \srcdoc{plan/mech-pnr.md \S9}\\
-Cosmos SDK \texttt{x/distribution} & all validators in proportion to stake, every block, lazily accumulated & transaction fees, with a community tax & exact and immediate, but requires per-validator accumulators and withdraw transactions. \Flux would pay through three existing coinbase outputs with no per-node state and no claim transaction (P4, P5), accepting a bounded \SI{3.83}{\percent} spread and a twenty-day lag instead. This is the road not taken \srcdoc{plan/mech-pnr.md \S9}\\
+Dash masternodes & one masternode per block, longest-since-paid queue & block subsidy plus a treasury share & the nearest structural precedent for Proposition~\ref{prop:pnr:rotation}; Dash never routed application fees through the rotation. \Flux would be that rotation plus a fee pool \srcdoc{mechanism specification}\\
+Cosmos SDK \texttt{x/distribution} & all validators in proportion to stake, every block, lazily accumulated & transaction fees, with a community tax & exact and immediate, but requires per-validator accumulators and withdraw transactions. \Flux would pay through three existing coinbase outputs with no per-node state and no claim transaction (P4, P5), accepting a bounded \SI{3.83}{\percent} spread and a twenty-day lag instead. This is the road not taken \srcdoc{mechanism specification}\\
 \bottomrule
 \end{tabular}
 \caption{\PNR against fee-handling and work-payment prior art.}

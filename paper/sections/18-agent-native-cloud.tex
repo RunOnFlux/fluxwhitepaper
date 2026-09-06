@@ -130,7 +130,7 @@ an agent that never needs a human, and each is small enough to name precisely ra
   \item \emph{Silent underpayment on the direct-payment path.} A registration or update whose
     payment is short of the computed price is dropped with a log line and no rejection signal
     returned to the payer \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMessaging/\allowbreak{}messageVerifier.js}{777,835}
-    \srcintent{plan/mech-credits-renewal.md \S1.3}. For a human this is a
+    \srcintent{mechanism specification}. For a human this is a
     support ticket. For an unattended agent it is the one failure mode with no recovery path at
     all: the funds are already spent, the deployment does not exist, and nothing tells the caller
     either fact.
@@ -154,7 +154,7 @@ This is \planned, gated on the FluxCloud/\FluxEdge merge \srcroadmap{flux-roadma
 \S15 has already established what matters here: GPU passthrough today is whole-device, granted
 via Kubernetes' \texttt{nvidia.com/gpu} resource request and \texttt{NVIDIA\_VISIBLE\_DEVICES}
 bus-index isolation, with no MIG, vGPU or time-slicing anywhere in the stack
-\srccode{pouwbackend/\allowbreak{}rancher/\allowbreak{}deployment.go}{914-982} \srcdoc{plan/conflicts.md, C23}. The
+\srccode{pouwbackend/\allowbreak{}rancher/\allowbreak{}deployment.go}{914-982} \srcdoc{reconciliation record}. The
 consequence for this section, stated once and not re-derived: a per-second \emph{price} does not
 require a per-second \emph{allocation} primitive, and nothing here blocks quoting or billing a
 whole GPU by the second. What per-second billing cannot yet mean, on the allocation primitive
@@ -171,7 +171,7 @@ classes neither as Extension: attested execution is Research$\to$Engineering (ro
 spending is Research (row 13) because the L1 cannot enforce $\budget$
 (\Cref{prop:budget-balance}, \Cref{tab:two-authorities}). What is deployable today is the funded
 allowance of \Cref{con:allowance} --- a funded key with a swept revocation address, which the
-mechanism specification classes as Extension \srcintent{plan/mech-agent-identity.md \S6} --- whose
+mechanism specification classes as Extension \srcintent{mechanism specification} --- whose
 bound is the balance behind the key, not a budget the chain enforces.
 
 \paragraph{Why this matters architecturally rather than commercially.} The properties an

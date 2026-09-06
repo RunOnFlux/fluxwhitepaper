@@ -113,8 +113,7 @@ depends on is treated by \FDM's own code as always present — the presence chec
 \texttt{true} for any domain ending in these suffixes, so \FDM never calls \texttt{certbot} for
 them \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domain/\allowbreak{}cert.js}{18-22}.
 \decided{the wildcard certificate is managed by InFlux Technologies USA LLC and renewed
-periodically against the \texttt{runonflux.io} domain \srcintent{08-answers-round-2.md, rounds
-24--25}. This is less of a concentration than it first reads. Behind any certificate there must be
+periodically against the \texttt{runonflux.io} domain \srcintent{design intake}. This is less of a concentration than it first reads. Behind any certificate there must be
 some company managing the domain --- that is a property of the web PKI rather than of \Flux{} --- and
 what matters is whether the arrangement can be replicated. It can: \texttt{flux-domain-manager} is
 public under AGPL-3.0, the application specification already admits tenant-set custom domains

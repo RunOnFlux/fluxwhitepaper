@@ -4,7 +4,9 @@ applications, on a chain that replaced proof-of-work with collateral-gated sorti
 \num{2020000}. This paper does two things. It describes the deployed system --- consensus, node
 tiering and benchmarking, monetary policy, orchestration and placement, addressing, attested
 execution, and the Zcash-derived shielded layer --- at a depth from which the behaviour could be
-reimplemented or audited, citing source by file and line. It then specifies the target architecture
+reimplemented or audited, citing source by file and line --- with the caveat, stated in full in
+\S\ref{sec:limitations}, that a minority of the components cited are private repositories a reader
+cannot open, and that one class of finding in those is deliberately stated without coordinates. It then specifies the target architecture
 at the same depth: revenue-funded operator compensation replacing issuance, a redesigned bridge,
 a content-reporting quorum, application specification v9, a bonded attestation network,
 post-quantum migration, and the machine-facing interfaces an autonomous tenant needs to provision,
@@ -24,14 +26,19 @@ not.
 Several findings are not what the roadmap or the design intent would predict, and the paper reports
 them as measured. A fee pool with a per-block drip is necessary because deterministic payment
 rotation otherwise admits a timing attack recapturing most of an operator's own fee; the same pool
-design, by paying every node regardless of what it hosts, leaves no marginal incentive to host at
-all, which makes hardening the eligibility gate a precondition for revenue-funded rewards rather
-than a follow-on. Collateral-weighted moderation is Sybil-resistant by construction and, at the
+design pays every node regardless of what it hosts, so it supplies no gradient rewarding good
+hosting, and what compels performance is the eligibility gate --- which the deployed benchmark and
+attestation path does not bind to a machine. Hardening that gate is urgent independently of
+revenue-sharing rather than because of it: at activation the gate would already be admitting
+\SI{95.7}{\percent} of operator income as issuance, and the new mechanism would add the other
+\SI{4.3}{\percent}. The distribution of that revenue would be a consensus rule;
+\emph{which} revenue is subject to it, and at what price, would remain policy, and the paper marks
+that boundary wherever the decentralization claim rests on it. Collateral-weighted moderation is Sybil-resistant by construction and, at the
 measured ownership distribution, not censorship-resistant: four owner identities reach the proposed
 removal threshold, and no weighting or remedy in the design space raises that number. The shielded
 pools have been closed to new entrants by consensus since 2021 and hold \SI{0.0225}{\percent} of
 supply; they are to be retired rather than reopened, leaving \Flux{} settling transparently and
 treating payment privacy as an unsolved problem rather than a delivered feature. A header format chosen for consensus reasons forecloses light-client
 bridging. Of twenty-two mechanisms assessed, six are extensions of what exists, eleven are
-engineering, one has moved from research toward engineering, and four are open research problems
+engineering, and four are open research problems
 --- which the paper names rather than absorbs.

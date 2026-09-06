@@ -251,7 +251,7 @@ the entire nominal cap, against a main chain that has issued \num{429466823.97}\
 minted into a contract, not what remains outstanding. What becomes of the issuer-held remainder is
 decided: the Foundation immobilises its own legacy holdings by transferring them to a published
 per-chain dead address (\S\ref{sec:bridging-migration}; \planned
-\srcintent{08-answers-round-2.md, round 18}).
+\srcintent{design intake}).
 
 \paragraph{Measured outstanding liability, all ten chains resolved.} Using \texttt{balance-\allowbreak{}checker}'s
 registry as the operand, the outstanding liability --- \texttt{totalSupply} minus the sum of the six
@@ -345,9 +345,9 @@ chains imposes on the operating team.
 The settled decision responds to that cost structure by shrinking the chain count and by treating
 every survivor as a fresh build rather than a migration of the existing contract. Ethereum and BNB
 Chain are mandatory at launch, with Solana following later
-\srcintent{03-parallel-assets.md}. Every surviving token — Ethereum and BNB Chain included, not only
+\srcintent{design intake}. Every surviving token — Ethereum and BNB Chain included, not only
 Solana — is to receive a full contract relaunch rather than a continuation of the existing deployment
-\srcintent{03-parallel-assets.md}, with independent audit before deployment stated as a precondition,
+\srcintent{design intake}, with independent audit before deployment stated as a precondition,
 alongside multi-signature administrative control, per-chain issuance caps, pausability, and published
 reserve accounting \srcroadmap{flux-roadmap-public.md:96-97}. This is \planned in its entirety: no
 relaunched contract, audit, or migration has occurred as of the evidence surveyed here.
@@ -355,7 +355,7 @@ relaunched contract, audit, or migration has occurred as of the evidence surveye
 Ethereum and BNB Chain are both EVM chains, and the design intake states this explicitly as a point
 in the decision's favor: the mandatory pair at launch is one EVM codebase deployed twice, not two
 independent contract designs, with a separate Solana program to follow later
-\srcintent{03-parallel-assets.md}. Against the ten-chain footprint of
+\srcintent{design intake}. Against the ten-chain footprint of
 Table~\ref{tab:parallel-assets}, that is a material reduction in the number of independent things an
 auditor, an exchange, or the operating team has to reason about, even before the remaining eight
 chains are formally retired.
@@ -367,11 +367,11 @@ Two documents disagreed on which two chains ship alongside Solana. The public ro
 and Base as the first pair, and later names ``Ethereum, Base and Solana'' as the chains consolidation
 concentrates on \srcroadmap{flux-roadmap-public.md:97,131}. The design intake stated, twice, that the
 mandatory launch pair is Ethereum and BNB Chain, with Solana following later
-\srcintent{03-parallel-assets.md}. Base (an Ethereum L2, OP Stack) and BNB Chain (an independent L1)
+\srcintent{design intake}. Base (an Ethereum L2, OP Stack) and BNB Chain (an independent L1)
 are not the same chain by any reading.
 
 This is now settled directly by the team: \textbf{Base is retired, and no later re-addition is
-contemplated} (\planned; \srcintent{08-answers-round-2.md, round 5}). That closes the question in the
+contemplated} (\planned; \srcintent{design intake}). That closes the question in the
 direction the design intake already implied — Base is not a survivor — rather than leaving open which
 second chain accompanies Ethereum. The roadmap's naming of Base is recorded here because it is a real
 divergence between the team's own public and internal statements, not because the paper adjudicates it
@@ -398,12 +398,12 @@ The construction that replaces today's custodial \Fusion mechanism — canonical
 attested proof-of-reserve — is specified in \S\ref{sec:bridging}. The migration's terms are now set.
 Contract changes are prepared in advance and take effect at PA Depletion ($\hpa$, height
 3{,}466{,}630, \S\ref{sec:pa-sequencing}), simultaneous with the swap contract, so nothing is switched
-off without notice (\planned; \srcintent{08-answers-round-2.md, round 5}).
+off without notice (\planned; \srcintent{design intake}).
 
 \paragraph{Two migration paths, and they are different mechanisms.} A holder's exposure to the
 migration depends entirely on which of two paths that holder's chain is on, and the paper separates
 them because conflating them misstates the exposure by two orders of magnitude
-(\planned; \srcintent{08-answers-round-2.md, round 7}).
+(\planned; \srcintent{design intake}).
 
 \begin{description}
 \item[Snapshot-and-carry, for Ethereum and BNB Chain only.] Ethereum and BNB Chain survive. Their contracts
@@ -416,20 +416,20 @@ them because conflating them misstates the exposure by two orders of magnitude
   elements of it that are undecided. \textbf{This path covers exactly these two chains.} Solana is a
   survivor in the sense that a new deployment follows later, but its \emph{legacy} holders are not
   carried: they redeem through the second path below and re-enter the new Solana deployment later if
-  they choose (\planned; \srcintent{08-answers-round-2.md, round 8}). ``Surviving'' and
+  they choose (\planned; \srcintent{design intake}). ``Surviving'' and
   ``snapshot-carried'' are therefore not the same set, and only the latter escapes the window.
 \item[Holder-initiated redemption, for the retiring chains.] Avalanche C-Chain, Base, Polygon and
   the non-EVM assets are retired. From $\hpa$ a \textbf{6-month redemption window} opens, during
   which \Fusion — the existing custodial swap and claim mechanism of \S\ref{sec:pa-acquisition} — is
   the stated route back to main-chain \flux, at 1:1 (\planned;
-  \srcintent{08-answers-round-2.md, round 5}). The holder must act. \textbf{That route is
+  \srcintent{design intake}). The holder must act. \textbf{That route is
   one-directional}: during the window it permits migrating \emph{to} the main chain and claiming
   \emph{on} the main chain only, and nothing else (\planned;
-  \srcintent{08-answers-round-2.md, round 7}).
+  \srcintent{design intake}).
 \end{description}
 
 \textbf{Unclaimed balances at window close pass to the Flux Foundation to fund development}
-(\planned; \srcintent{08-answers-round-2.md, round 5}). That term reaches only the second path, so
+(\planned; \srcintent{design intake}). That term reaches only the second path, so
 it is stated next to the right number rather than next to the whole measured liability. Of the
 \num{223027781.21}\flux measured across all ten chains in
 Table~\ref{tab:issuer-liability}, \num{216800880.41}\flux sits on Ethereum and BNB Chain — surviving,
@@ -452,7 +452,7 @@ unaffected by it.
 A measurement prerequisite precedes any of this, and it is now partly satisfied. The bridge design's
 conservation requirement --- that minted supply on a destination chain never exceed what is actually
 backed --- forbids any migration mint before the per-asset legacy supply on each retiring chain, and
-whether that chain's reserves actually cover it, has been confirmed \srcintent{plan/mech-bridge.md}.
+whether that chain's reserves actually cover it, has been confirmed \srcintent{mechanism specification}.
 \Cref{sec:pa-supply-accounting} above supplies the first half of that confirmation --- the measured
 outstanding liability itself --- for all ten chains in Table~\ref{tab:parallel-assets}:
 all ten legacy assets, totalling \num{223027781.21}\flux outstanding
@@ -469,7 +469,7 @@ paper.
 The public roadmap and the design intake originally stated this differently, and an earlier draft of
 this paper carried it as an open conflict (C1a). It is now settled directly by the team: \PNR
 activation and the parallel-asset emission cut are \textbf{simultaneous}, both at PA Depletion,
-height $\hpa = 3{,}466{,}630$ (2027-03-12) (\planned; \srcintent{08-answers-round-2.md, round 5}).
+height $\hpa = 3{,}466{,}630$ (2027-03-12) (\planned; \srcintent{design intake}).
 This \textbf{supersedes} the roadmap's stated gate — that retirement of any parallel asset's mining
 rewards ``comes only after PNR v2 is demonstrably paying operators,'' with retirement itself
 scheduled in H2~2027, ``announced at least 90 days ahead'' \srcroadmap{flux-roadmap-public.md:133,159}

@@ -159,7 +159,7 @@ carrying \texttt{messageHASH} in an \texttt{OP\_RETURN} (\S16)
 \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{241--245}. All application revenue on the network lands at
 that one transparent address, by policy and not by consensus (\S12, \S16).
 
-Both apparent disagreements here are resolved. The duration denominator carries a \PoN{} fork branch --- $22{,}000$ blocks before activation, $88{,}000$ from height $2{,}020{,}000$, the multiplier preserving wall-clock duration --- and \S7's definition now states it. The instance lower bound is $3$ in general and $1$ for \specv{8} applications from height $2{,}176{,}519$; the published endpoint reports $3$ regardless, which is a defect in the endpoint rather than a disagreement between sections \srcdoc{plan/conflicts.md C30, C33}.
+Both apparent disagreements here are resolved. The duration denominator carries a \PoN{} fork branch --- $22{,}000$ blocks before activation, $88{,}000$ from height $2{,}020{,}000$, the multiplier preserving wall-clock duration --- and \S7's definition now states it. The instance lower bound is $3$ in general and $1$ for \specv{8} applications from height $2{,}176{,}519$; the published endpoint reports $3$ regardless, which is a defect in the endpoint rather than a disagreement between sections \srcdoc{reconciliation record}.
 
 \paragraph{3. The payment is validated.}
 No consensus rule sees any of this. Each node's own chain-scan loop,
@@ -234,7 +234,7 @@ a path, the signature would not say what a tenant needs: the Ed25519 key used by
 for the default, \texttt{cdn}, \texttt{mesh} and \texttt{app} purposes is derived from static values
 compiled identically into every \fluxsas binary, so a valid attestation demonstrates possession of
 something every copy of the software contains rather than that a particular machine booted a
-particular image (\S14) \srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{411--481}. One layer down, the eligibility
+particular image (\S14) \srcprivate{\SAS{} API server}. One layer down, the eligibility
 gate that admits a node to the paid set at all is a benchmark signature produced by a process on the
 operator's own host and verified against \texttt{vec\allowbreak{}Benchmarking\allowbreak{}Public\allowbreak{}Keys}, five network-wide keys
 with timestamp validity windows --- collateral binds the tier, and the benchmark signature does not
@@ -244,7 +244,7 @@ fail-closed exit codes \num{50}--\num{57} that power the machine off rather than
 seal against PCR~7, and a dm-verity root filesystem (\S14). But the allow-list of known-good verity
 root hashes is served by two Flux-operated web endpoints that \textbf{fail open} --- if both are
 unreachable, the watchdog treats the node as secure and does nothing
-\srccode{fluxsas/\allowbreak{}src/\allowbreak{}watchdog.h}{566--596}. The honest summary of this step is that measured boot
+\srcprivate{\SAS{} watchdog}. The honest summary of this step is that measured boot
 imposes real cost on a remote attacker, and that the assurance a node offers is a Flux-operated one
 rather than a hardware-rooted, tenant-verifiable one.
 
@@ -353,7 +353,7 @@ not be left behind on older versions and would not be offered the choice: the se
 \textbf{forced}, an application-update message carrying a special signature that rewrites every
 application forward onto \specv{9}, after which updates on older specification versions would be
 disabled and, once the fleet had moved, the legacy validation paths removed (\S10)
-\srcintent{evidence/design/08-answers-round-2.md}. That supersedes the version-floor-plus-deprecation
+\srcintent{design intake}. That supersedes the version-floor-plus-deprecation
 design and is the better answer to the \num{322}-application, \SI{26.9}{\percent} legacy tail of
 step~1 of the first pass, because it would clear the tail at one moment rather than letting it trail
 off at each owner's own pace. It also creates a capability this paper names rather than lets a reader
@@ -391,7 +391,7 @@ One transaction, one recipient, one memo. The settled shape is a single transpar
 full price $\price(\app,\hgt)$ to $\mathsf{sink}$ --- one application-payment address carried as a
 consensus constant from $\hpa$ onward --- together with one zero-value \texttt{OP\_RETURN} whose data
 field is the \num{32}-byte $H(m_\app)$; these are rules PS1 and PS2 of \S7
-\srcintent{evidence/design/08-answers-round-2.md} \srcdoc{plan/conflicts.md C36}. There would be no
+\srcintent{design intake} \srcdoc{reconciliation record}. There would be no
 second output, no fee component and no new transaction type. The payer would construct one recipient
 and its own change and would perform no other arithmetic, so any wallet able to pay an address and
 attach a memo --- and any agent holding a bare wallet API --- could construct a valid payment without
@@ -459,7 +459,7 @@ recomputed by every validator from the parent value and the block body as
   \pool_\hgt \;=\; \pool_{\hgt-1} \;-\; D_\hgt \;+\; \text{receipts}_\hgt ,
 \]
 with a block whose committed value differs from the recomputation being invalid (\S7, rule PC)
-\srcintent{evidence/design/08-answers-round-2.md} \srcdoc{plan/conflicts.md C37}. That closes O2, and
+\srcintent{design intake} \srcdoc{reconciliation record}. That closes O2, and
 the reasons \S7 gives for it are the ones that matter to a reimplementer rather than to a reader:
 reorg-exactness would come free, because the pool would be a pure function of the chain, so a reorg
 would recompute it with no rollback journal and no way for the pool to diverge from the UTXO set; no
@@ -524,7 +524,7 @@ an operator who is also a tenant and times a payment to land the block before it
 recaptures exactly $\tierratio{t}/\drip$ of its contribution --- $7.72 \times 10^{-6}$ for a Stratus
 node at the settled $\drip$, three orders of magnitude inside the design's own requirement (\S7). The
 drip constant is settled at $\drip = \num{86400}$ blocks, exactly \SI{30}{\day} at \SI{30}{\second}
-spacing, which closes O1 \srcintent{evidence/design/08-answers-round-2.md}. The trade-off it resolves
+spacing, which closes O1 \srcintent{design intake}. The trade-off it resolves
 does not disappear with the decision, and \S7 restates it so that a later revision starts from it:
 within-tier spread $\approx \rot{\tC}/\drip$ and targeted recapture $\approx \tierratio{t}/\drip$
 both fall with $\drip$, while lag, activation ramp and steady-state pool size $F\drip$ all rise with
@@ -666,7 +666,7 @@ application hash to be banned, shaped after the deployed start and confirm trans
 \emph{indexed}, so that any node could enumerate the open reports on an application from its own
 chain state; it would carry no fee and no bond, and its confirmation height $\hgt_0$ would fix the
 canonical clock and \emph{freeze the electorate} (\S23)
-\srcintent{evidence/design/08-answers-round-2.md}. A window of
+\srcintent{design intake}. A window of
 $\Delta_{\mathrm{vote}} = \num{2880}$ blocks --- \SI{24}{\hour} at \SI{30}{\second} spacing, chosen
 short on the team's reasoning that removal often needs to be fast --- would open on that
 confirmation. Each vote would be a second special transaction, signed with a node \emph{owner} key
@@ -707,13 +707,13 @@ or a shared collateral funding transaction are merged: safety against wrongful e
 a property of the mechanism but the assumption that three or four specific parties do not agree
 (\S23). The category taxonomy was the single open parameter on which the mechanism's consistency with
 the roadmap's own published ``behaviour, not content'' principle depended; its scope is now ruled on
---- the quorum is a network-level content veto, superseding that principle (\Cref{rem:content-veto})
---- and only its enumeration remains open. The rest of what this composition first carried as
+--- the taxonomy is confined to behavioural harm, so the principle stands and the quorum is an
+enforcement path for it (\Cref{rem:content-veto}) --- and only its enumeration remains open. The rest of what this composition first carried as
 undecided is settled at the values of \Cref{tab:23-recommended}: the banned hash is over
 $(\mathsf{app\_name}, \mathsf{owner})$, which is also the enforcement scope; inclusion of the ban
 memo is consensus-required at every height at which a carried report remains unbanned, over the
 first such report in the order least crossing height, then least $H(r)$, and a report on a hash
-already in the ban set is invalid \srcintent{08-answers-round-2.md, round 18};
+already in the ban set is invalid \srcintent{design intake};
 $\Delta_{\mathrm{exec}} = \num{120}$ and $\Delta_W = \num{20160}$ blocks;
 the relay policy for fee-less transactions is a per-identity mempool quota; the graduated
 \SI{10}{\percent} and \SI{15}{\percent} tiers, each of which one or two identities can reach alone,
@@ -729,7 +729,7 @@ decides whether the tenure gate does any work and remains unverified. And one re
 back to \S7: forfeited tenant balances must never enter $\pool$, or
 evicting an application would pay the fleet that voted to evict it.
 
-The notation collision this composition exposed has been resolved: $\kappa$ now denotes \S23's collusion-set size and nothing else. \S14's claim object is written $\mathsf{cl}$ and the bridge's per-chain cap is $\overline{M}_c$ \srcdoc{plan/conflicts.md C43}.
+The notation collision this composition exposed has been resolved: $\kappa$ now denotes \S23's collusion-set size and nothing else. \S14's claim object is written $\mathsf{cl}$ and the bridge's per-chain cap is $\overline{M}_c$ \srcdoc{reconciliation record}.
 
 \paragraph{12. Operators would be compensated.}
 From issuance \emph{and} revenue. At the proposed activation height $\hpa = \num{3466630}$ the
@@ -755,13 +755,13 @@ and of nothing else, so its derivative with respect to applications hosted would
 
 Sequencing conflict C1a, which the transition table below depends on, is settled: \PNR{} activation
 and the parallel-asset emission cut are \textbf{simultaneous} at $\hpa = \num{3466630}$
-\srcintent{08-answers-round-2.md, round 5} (\planned), superseding the roadmap's strictly-after
+\srcintent{design intake} (\planned), superseding the roadmap's strictly-after
 ordering (\Cref{rem:c1a-settled}). The accepted cost is stated with the decision rather than beneath
 it: simultaneity means no external observer can confirm that \PNR{} pays operators before
 parallel-asset mining rewards are retired, because there is no interval in which one has happened and
 the other has not.
 
-A numeric disagreement this composition exposed has been resolved in favour of \S7's basis: operator issuance at \PNR{} activation is $\num{6386040}\flux$ per year on the operator-only basis, and \S23's launch-deterrent proposition now uses it. The derived per-node deterrent of about $\num{0.10}\flux$ per Stratus node per application per year is unaffected at the precision stated \srcdoc{plan/conflicts.md C43}.
+A numeric disagreement this composition exposed has been resolved in favour of \S7's basis: operator issuance at \PNR{} activation is $\num{6386040}\flux$ per year on the operator-only basis, and \S23's launch-deterrent proposition now uses it. The derived per-node deterrent of about $\num{0.10}\flux$ per Stratus node per application per year is unaffected at the precision stated \srcdoc{reconciliation record}.
 
 \begin{remark}[The two retrieval heights are not a disagreement]
 The measured chain tip appears as \num{2917115} in \S4, \S7's rotation remark, \S20 and \S23, and as
@@ -865,10 +865,9 @@ $G_{\mathrm{g}}, G_{\mathrm{s}}, \Delta_{\mathrm{pre}}, \price^{\mathrm{res}}$ s
 11 & unsigned GitHub file; $\kappa_{\mathrm{deployed}} = 1$; no record; \SIrange{7}{13}{\hour} to
 fleet-wide effect & indexed report transaction; \SI{24}{\hour} window; fee-less votes; \fluxd counts
 the quorum internally; ban memo in the coinbase, one per block; \FluxOS purges. $\vthresh = 0.25$
-absolute, $\kappa(0.25) = 4$ & category enumeration fixed (its scope is settled as a network-level
-content veto); the remaining parameters settled at \Cref{tab:23-recommended}; one \fluxd
-verification outstanding --- whether re-addressing resets a node's age (the emergency-path coinbase
-rules are verified) \\
+absolute, $\kappa(0.25) = 4$ & category enumeration fixed (its scope is settled as behavioural
+harm); the remaining parameters settled at \Cref{tab:23-recommended}; both \fluxd{} verifications now
+closed --- re-addressing does reset a node's age, and the emergency-path coinbase rules hold \\
 \addlinespace
 12 & issuance only; $\subsidypon$, tier bases $1{:}3.5{:}9$, dev fund $0.5\flux$ & issuance plus
 revenue; $\nodeshare$ from $0.20$ to $\nodesharecap = 0.50$; \SI{4.29}{\percent} of operator income
@@ -877,29 +876,33 @@ at activation & demand growth, not price (parity at $22.3\times V_0$); C1a seque
 \end{longtable}
 \endgroup
 
-\paragraph{The dependency that reorders everything.}
+\paragraph{The dependency that shapes everything.}
 Read the table down the ``target'' column and the mechanisms look independent; read it down the last
 column and one edge dominates all the others. \PNR would pay every confirmed node through the \PoN
-rotation regardless of what that node hosts, so the marginal income from hosting would be exactly
-zero and the private stake any single node has in aggregate network demand would be between
-$0.001\flux$ and $0.018\flux$ per year at activation scale (\S7). Free-riding would therefore
-dominate at every parameter value in range, and this is structural to the settled decision to pay all
-nodes rather than a tuning error. What actually compels hosting is not the payment but the
-\emph{eligibility gate}: a node is a \PoN payee, and hence a \PNR payee, only if it is confirmed with
-a \fluxbench-signed transaction and, at target, attested. \S4 establishes that the benchmark
+rotation regardless of \emph{which} applications that node hosts, so the private stake any single
+node has in aggregate network demand would be between $0.001\flux$ and $0.018\flux$ per year at
+activation scale (\S7). That is not a free-riding opportunity --- placement is the network's choice
+and an operator cannot decline it (\S7) --- but it does mean \PNR{} supplies no gradient rewarding
+good hosting, and this is structural to the settled decision to pay all nodes rather than a tuning
+error. What actually compels performance is not the payment but the \emph{eligibility gate}: a node
+is a \PoN payee, and hence a \PNR payee, only if it is confirmed with a \fluxbench-signed transaction
+and, at target, attested. \S4 establishes that the benchmark
 signature is verified against five network-wide shared keys and is produced by a process on the
 operator's own host, so it is not operator-bound; \S14 establishes that the attestation signature is
 derived from constants compiled identically into every binary, so it is not machine-bound. The two
 compose badly, and the composition is the reason this section exists.
 
-\begin{property}[Attestation hardening precedes revenue-funded compensation]
+\begin{property}[Revenue-funded compensation raises an existing exposure rather than creating one]
 \label{prop:e2e-gate}
 \planned. Under the settled \PNR constraints --- beneficiaries are all confirmed nodes, and there is
-no metering or attestation dependency between payment and placement --- activating \PNR before
-hardening the eligibility gate strictly increases the expected payoff to occupying the paid set
-without providing capacity, by exactly the amount \PNR pays: \SI{4.29}{\percent} of operator income
-at activation and more as $\nodeshare$ ramps toward $\nodesharecap$. Hardening the gate afterwards
-does not undo the interval.
+no metering or attestation dependency between payment and placement --- activating \PNR strictly
+increases the expected payoff to occupying the paid set without providing capacity, by exactly the
+amount \PNR pays: \SI{4.29}{\percent} of operator income at activation, rising as $\nodeshare$ ramps
+toward $\nodesharecap$. The complementary bound is the one that decides the schedule. The other
+\SI{95.71}{\percent} of that payoff is issuance already paid through the same gate today, so the
+exposure is a property of \PoN{} and \PNR{} is a \SI{4.5}{\percent} increment on it. Hardening the
+gate afterwards does not undo the interval; the interval it fails to undo is one twenty-third of the
+standing one.
 \end{property}
 
 \begin{proof}[Proof sketch]
@@ -909,18 +912,23 @@ by nothing. By \S4 and \S14 the predicate admitting a node to that queue is a be
 operator's own host can produce under network-wide keys, together with an attestation that
 demonstrates possession of a value every copy of the software contains. Hence the cost of satisfying
 the predicate without providing the underlying capacity is unchanged by \PNR while the reward for
-satisfying it rises, and the difference is the increase in expected payoff. The final clause is not a
-mechanism claim but an ordering one: capacity that was never provided during the interval cannot be
-retroactively required, and \S\ref{sec:feasibility} classes the attestation work as a prerequisite rather than an
-increment for exactly this reason. The step is a sketch and not a proof because it does not quantify
+satisfying it rises, and the difference is the increase in expected payoff. The complementary bound
+is arithmetic: operator issuance at $\hpa$ is \num{6386040}\flux\ per year against \PNR's
+\num{286320}\flux\ (\S7), and both pass the same predicate. The step is a sketch and not a proof because it does not quantify
 the cost side --- what it takes to occupy the paid set without providing capacity is not measured
 anywhere in this paper, and \S7's Open Problem on hosting-conditioned eligibility is the construction
 that would close it.
 \end{proof}
 
-The sequencing consequence is therefore not a preference. \S\ref{sec:migration} must place the attestation fix before
-or with \PNR activation, never after it; the alternative deploys an incentive to fake eligibility
-before the mechanism that would detect faking exists.
+The sequencing consequence is therefore not a preference, but it is also not the blocking dependency
+an earlier draft of this paragraph asserted. Two things follow, and \S\ref{sec:migration} states the
+schedule in these terms. Hardening the gate is the network's most urgent security work
+\emph{independent of \PNR}, because almost all of the exposure it addresses is standing exposure that
+\PNR{} did not create and will not remove. And \PNR's \emph{ramp} --- not its activation --- is what
+should track that hardening, because the ramp is where the share of operator income sitting behind an
+unbound gate actually grows. Placing the fix ``before or with activation, never after'' overstates
+what the arithmetic supports and prices a \SI{4.3}{\percent} supplement as though it were the whole
+exposure.
 
 \paragraph{What the reader should notice about the two passes.}
 Read as one document, the two passes make a single claim, and it is the thesis this paper has been

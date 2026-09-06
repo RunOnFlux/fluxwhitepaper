@@ -1,7 +1,7 @@
 \section{Feasibility and distance to target}
 \label{sec:feasibility}
 
-The position this paper has been asked to test is that Flux's substrate is already good and the
+The position this section tests is that Flux's substrate is already good and the
 remaining work is extension rather than invention. That is a testable claim, and this section tests
 it rather than repeating it. The result is mixed in a specific and useful way: the cloud layer
 largely supports the claim, and four mechanisms do not.
@@ -21,7 +21,9 @@ assigned from the evidence gathered in Parts II--IV, not from schedule optimism:
 
 A note on what an honest assignment costs. If every row came out \emph{Extension}, the exercise would
 have failed. Four rows are \emph{Research}, and three of those four are load-bearing for the thesis in
-\S\ref{sec:introduction}.
+\S\ref{sec:introduction}. One row --- the attested tier --- has moved \emph{down} in difficulty since
+the first draft of this table, and that is recorded with the same visibility as a move upward would
+be, because a survey that only ever revises in the direction of caution is not measuring anything.
 
 \subsection{The table}
 
@@ -34,20 +36,20 @@ have failed. Four rows are \emph{Research}, and three of those four are load-bea
 1 & \PNR settlement and fee pool & \PoN payment rotation, deterministic and \emph{measured} to equalise within one rotation per tier; consensus-enforced coinbase splits already exist & Pool as consensus state with a reorg-exact serialisation (settled: coinbase-committed) and $\drip$ (settled: 86{,}400 blocks) --- \S\ref{sec:pnr} & Engineering \\
 2 & Parallel-asset consolidation & Ten deployed contracts; audited Schnorr \mbox{ERC-4337} account on seven EVM chains & Reaching holders of retired assets and handling unclaimed balances --- coordination, not code & Engineering \\
 3 & Bounded, publicly verifiable bridge & Audited Schnorr account; Solana multisig live on mainnet & Keeping administrative control decentralized \emph{and} bounded & Engineering \\
-4 & Bonded attestation network & Measured boot, dm-verity, LUKS, fail-closed \texttt{fes}; \texttt{purpose=\allowbreak{}mesh} implemented with no consumer & The attestation key is not machine-bound, so a bond would secure a signature anyone with the software can produce & Research $\rightarrow$ Engineering \\
+4 & Attested tier (bonded network as proposed) & Measured boot, dm-verity, LUKS, fail-closed \texttt{fes}, a TPM2 mandatory to boot, and an image-bound PCR 4/7/11 policy already generated on every capable machine; \texttt{purpose=\allowbreak{}mesh} implemented with no consumer & Binding the attestation key to that policy and exposing a verifier --- engineering, for the TPM population; impossible for the SoftHSM fallback, which should be excluded from the tier. Separately, the \emph{bond} cannot be forfeited: there is no slashing in \Flux{} by decision (\Cref{op:slashing}), so the deployable tier is registered, not bonded & Engineering \\
 5 & \appspec \specv{9} & 932 files changed, 7{,}763 test cases per push, draining and per-app-CA TLS wired & Migrating 322 deployed applications across six legacy versions without evicting any & Extension \\
 6 & Main-chain pruning & \texttt{-prune} fully wired and inherited; \FluxNode registry already in a separate store & Retaining registry and collateral UTXOs across pruning depth & Extension \\
 7 & Collateral maturity & Coinbase-maturity precedent; registry enumerable & Defining ``continued participation'' so upgrades stay instant while exits wait & Engineering \\
 8 & Post-quantum migration & Nothing: a repo-wide search returns zero hits & Primitive unchosen; residue classes outside collateral. Collateral path designed (\S\ref{sec:pq-frontier}) & Research \\
 9 & Moderation quorum & Node owner keys and collateral weights; a \mbox{GitHub-file} blocklist as today's mechanism & Four owner identities (three under linkage) reach the 25\% threshold; no mechanism change fixes concentration & Research \\
 10 & Direct per-deployment payment & \emph{Shipped twice}: application registration, and \CumulusVPN's memo-derived entitlement & None; this is the mature path & Extension \\
-11 & Deposited credits and renewal & \texttt{appsmonitor} auto-renewal with Foundation-held keys & Authorising a recurring charge without a custodian and without an allowance primitive --- placed outside protocol scope: the protocol offers no auto-renewal, and credits are a third-party custodial service built on \Flux{} \srcintent{08-answers-round-2.md, round 9} & Engineering \\
+11 & Deposited credits and renewal & \texttt{appsmonitor} auto-renewal with Foundation-held keys & Authorising a recurring charge without a custodian and without an allowance primitive --- placed outside protocol scope: the protocol offers no auto-renewal, and credits are a third-party custodial service built on \Flux{} \srcintent{design intake} & Engineering \\
 12 & Agent deployment authority & \FluxOS validates owner signatures over specifications on every node & None; it composes with existing validation & Extension \\
 13 & Agent \emph{spending} authority, bounded & \mbox{ERC-4337} session-key substrate on EVM chains; scoped revocable FluxEdge tokens (action-bounded) & Not possible on the \Flux L1 without a new trusted party or new consensus state & Research \\
 14 & Agent-native provisioning API & Shipped MCP tools; OpenAPI 3.1.1 FluxEdge API with scoped tokens and auto-revocation & Inherits row 13 for its bounds & Extension \\
 15 & Natural-language deployment & \texttt{DeploymentYAML}: retrieval-augmented generation producing Kubernetes YAML; Orbit specification generation & Whether a human can meaningfully audit a generated specification before signing & Engineering \\
 16 & Shielded value & Sapling notes, encryption, commitment tree, nullifiers, Groth16 --- all deployed and inherited & None; it runs & Extension \\
-17 & Shielded payment for deployments & The primitives above & \emph{Withdrawn}: both pools are to be retired \srcintent{08-answers-round-2.md, round 10} & --- \\
+17 & Shielded payment for deployments & The primitives above & \emph{Withdrawn}: both pools are to be retired \srcintent{design intake} & --- \\
 18 & Proving a shielded payment funds a \emph{specific} deployment unlinkably & Note commitments and nullifiers & An application address is itself a workload identifier; at 35.4 renewals/day a payment is a singleton in its block & Research (moot after retirement) \\
 19 & Orchard/Halo2 migration & Sapling/Groth16 deployed; no Orchard present & Consensus change plus audit scoping; now a future option rather than a migration & Engineering \\
 19b & Shielded-pool retirement & Both pools live, closed to entry, 96{,}479.94\,FLUX & Sunset height, outreach, and removal of the Rust proving stack & Engineering \\
@@ -61,7 +63,11 @@ today'' entry are given in the section that describes it.}
 \end{longtable}
 }
 
-\noindent Tally: \textbf{Extension 6, Engineering 11, Research$\rightarrow$Engineering 1, Research 4.}
+\noindent Tally: \textbf{Extension 6, Engineering 12, Research 4.} Row 4 moved from
+Research$\rightarrow$Engineering to Engineering on two findings recorded in
+\S\ref{sec:attested-execution}: the image-binding machinery is already deployed and unconsumed rather
+than absent, and the bond's forfeiture problem is not open but decided against, which removes the
+mechanism rather than leaving it unsolved.
 
 \subsection{The four Research items, which are not equally hard}
 
@@ -114,27 +120,42 @@ the provisioning API are all Extension, and the \specv{9} substrate is demonstra
 The proposition that \Flux can extend rather than invent its way to an agent-serving cloud is
 \emph{largely correct, for everything except payment bounds and payment privacy}.
 
-Where it does not hold, row 4 is the load-bearing case. The roadmap treats the bonded attestation
-network as an extension of an existing attestation service, but the existing service does not provide
-the property the bonded design needs to build on: an attestation demonstrates possession of a value
-shipped in every copy of the software, not that a given machine booted a given image
-(\S\ref{sec:attested-execution}). That is a prerequisite, not an increment, and it should be sequenced
-as one.
+Where it does not hold, row 4 remains the case to watch, though for a narrower reason than the
+first draft of this section gave. The roadmap treats the bonded attestation network as an extension of
+an existing attestation service, and the existing service does not provide the property the design
+needs to build on: an attestation demonstrates possession of a value shipped in every copy of the
+software, not that a given machine booted a given image (\S\ref{sec:attested-execution}). That is a
+prerequisite rather than an increment. But it is a prerequisite with its hardest component already
+built: \ArcaneOS{} generates an image-bound PCR policy on every TPM-capable machine and nothing
+consumes it (\S\ref{sec:boot-chain}), so the work is binding a key to an existing policy and serving a
+quote, not designing a hardware root. Two consequences: the tier should be \textbf{scoped to the TPM
+population}, since the SoftHSM fallback can never satisfy the requirement; and what \S\ref{sec:pnr}
+depends on is that scoped, achievable piece, not the bonded network as a whole.
 
 \subsection{The dependency that reorders the schedule}
 
 One edge in the dependency graph deserves to be lifted out of the table, because it changes what
 should ship first.
 
-\PNR pays all nodes from a shared pool, so a node's income does not depend on hosting; marginal
-hosting income is exactly zero and free-riding dominates at every parameter value
-(\S\ref{sec:pnr}). What compels hosting is therefore the eligibility gate --- and rows 4 and 9
-establish that the gate is neither operator-bound nor machine-bound. \textbf{\PNR raises the payoff to
-passing that gate without doing the work, by exactly what it pays.} Hardening attestation is thus a
-\emph{precondition} for \PNR activation rather than a parallel workstream; sequencing it afterwards
-would deploy an incentive to fake eligibility before the mechanism that detects faking exists. This
-single edge raises the practical difficulty of row 1 above its own construction class, and
-\S\ref{sec:migration} treats it as the schedule's binding constraint.
+\PNR pays all nodes from a shared pool, so a node's income does not depend on which applications it
+runs. That is not free-riding --- placement is not the operator's to refuse (\S\ref{sec:pnr:hosting})
+--- but it does mean \PNR{} supplies no gradient rewarding good hosting, so what compels performance
+is the eligibility gate, and rows 4 and 9 establish that the gate is neither operator-bound nor
+machine-bound. \textbf{\PNR raises the payoff to passing that gate without doing the work, by exactly
+what it pays.}
+
+The size of that increment decides how the edge should be drawn, and it is smaller than an earlier
+draft of this subsection implied. At activation \PNR{} would pay $\num{286320}\flux$ per year against
+$\num{6386040}\flux$ per year of issuance already flowing through the same gate: an increase of
+\SI{4.5}{\percent} in the prize (\S\ref{sec:pnr:crossover}). \textbf{The gate is a \PoN{} problem
+today, and \SI{95.7}{\percent} of the exposure exists whether or not \PNR{} ever activates.} Two
+corrections follow. Hardening attestation is the highest-priority security work in this table
+\emph{on its own merits}, and calling it a \PNR{} precondition understates it by more than an order of
+magnitude. And the sequencing rule that actually follows from the arithmetic is a coupling rather than
+a block: \PNR{}'s \emph{ramp} toward $\nodesharecap = 0.50$ should track the gate's hardening, since
+each step moves a larger share of operator income behind it, while activation at
+$\nodeshare = 0.20$ adds little to an exposure already present. \S\ref{sec:migration} carries the
+schedule in those terms.
 
 A second, milder dependency: rows 1, 5, 11, 14 and 21 all wait on \specv{9} fields that currently have
 no consumers --- \texttt{paymentMemo}, \texttt{referralCode} and \texttt{machineType}

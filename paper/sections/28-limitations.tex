@@ -47,69 +47,92 @@ setting the roadmap \srcinferred.
 
 \subsection{Limitations of this paper}
 
-Every entry below is recorded in \srcdoc{plan/gaps.md} as a claim the drafting process considered and
+Every entry below is recorded in \srcdoc{reconciliation record} as a claim the drafting process considered and
 could not support, together with what the paper does instead of asserting it.
 
 \paragraph{No realised measurement.} Two limitations are limits of public data, not of effort. First,
 no public endpoint reports bandwidth, latency, or realised utilisation of the deployed fleet — only
 requested resources from application specifications are visible. \S\ref{sec:evaluation} reports committed capacity
 (8,972 vCPU, 17.1\,TiB RAM, 160\,TB disk) and states plainly that realised utilisation is not
-measurable from public data, rather than estimating it (\srcdoc{plan/gaps.md, G13}). Second, operator
+measurable from public data, rather than estimating it (\srcdoc{reconciliation record}). Second, operator
 concentration is measurable only through the identities public chain data exposes. The owner-linked
 proxy is \texttt{payment\_address}; \texttt{pubkey} is the node's VPS message-signing key and not the
 owner key a vote would carry \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{154}. All such figures are lower
 bounds, since every distinct identity is counted as a distinct party. §23 and \S\ref{sec:evaluation} state the figures as lower bounds
 explicitly, and this section restates the true concentration measurement, by party rather than by
-key, as an open problem below (\srcdoc{plan/gaps.md, G12}).
+key, as an open problem below (\srcdoc{reconciliation record}).
+
+\paragraph{Not every cited repository is one the reader can open.} This is the most important
+limitation on the paper's own method, and it is stated first among the caveats about citation rather
+than buried among them. The paper cites source by file and line throughout, and for the majority of
+its citations --- \fluxd{}, \FluxOS{}, the network-policy channel, \FDM{}, the node front end, the
+storage service --- those repositories are public and any reader can check the line. For a minority
+they cannot: the benchmark client, the \SAS{} and its enrollment tooling, the \ArcaneOS{} image
+build, the HSM ceremony tooling, the release API, the auto-renewal service and the reachability
+fleet's inventory are private repositories. Claims cited to those rest on the authors' reading, and
+a reader has no way to audit them.
+
+Two consequences are worth being explicit about. First, the paper's central promise --- that the
+described behaviour could be reimplemented or audited from what is cited --- holds fully for the
+public components and only conditionally for the private ones; where a load-bearing claim could be
+re-anchored to public source it has been, and \S\ref{sec:consensus}'s benchmark-key finding is
+cited to \fluxd{}'s own consensus constants for exactly that reason
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{233--238}. Second, two of these components are
+private \emph{by decision} rather than by omission: the benchmark client and the \SAS{} remain
+closed until a mechanism exists that verifies node trustworthiness in a way that cannot be faked
+\srcintent{design intake}. That decision is the reason \S\ref{sec:14-disposition} states one class of
+finding as properties without coordinates, and a reader who wants to hold this paper to its own
+standard should know that the redaction is deliberate, bounded to that class, and explained where it
+is applied rather than exercised silently.
 
 \paragraph{No competitive price comparison.} No pricing data for hyperscalers or peer networks was
 gathered, and constructing a comparison would itself be exactly the kind of price claim the paper's
 register constraint forbids. \S\ref{sec:related-work} compares architectures against related systems, never prices
-(\srcdoc{plan/gaps.md, G14}).
+(\srcdoc{reconciliation record}).
 
 \paragraph{Provenance the corpus could not settle.} Four specific facts resisted a citable,
 unambiguous source when drafting began; two have since closed. The upstream \fluxd fork point cannot
 be read off a version string, but is now bracketed from consensus evidence --- at or after
 \texttt{zcashd} v2.1.0 (Blossom) and before v2.1.2 (Heartwood) --- rather than inferred from a
-release-notes directory listing (§20; \srcdoc{plan/gaps.md, G15, closed}). The
+release-notes directory listing (§20; \srcdoc{reconciliation record}). The
 \PoN activation height $\hpon = 2{,}020{,}000$ is a consensus fact, but the commonly cited activation
 date does not appear anywhere in source; the nearest in-repository evidence is a checkpoint timestamp
 that brackets, without establishing, the date, so the height is cited from code and the date only as
-measured from a block explorer with a retrieval date (\srcdoc{plan/gaps.md, G16}). The Kadena parallel
+measured from a block explorer with a retrieval date (\srcdoc{reconciliation record}). The Kadena parallel
 asset's claim and payout mechanism was absent from the repository named for it, which contains no
 code, and was located on a second pass in \texttt{fusion} and \texttt{flux-kda}; §6 now cites the
 claim path and the single-key treasury transfer, and what remains undocumented is how that treasury
-is replenished (\srcdoc{plan/gaps.md, G17, closed}).
+is replenished (\srcdoc{reconciliation record}).
 And whether \FluxOS actually consumes the \texttt{flux-spec} schema could not be determined from
 within \texttt{flux-spec} itself, which publishes no package and exports nothing, so §10 describes the
 two artifacts as separate rather than presenting them as one specification
-(\srcdoc{plan/gaps.md, G18}).
+(\srcdoc{reconciliation record}).
 
 \paragraph{Claims tested and rejected.} Eleven further claims were considered during drafting and
-found unsupportable; each is recorded in \srcdoc{plan/gaps.md} with the claim, why it fails, and what
+found unsupportable; each is recorded in \srcdoc{reconciliation record} with the claim, why it fails, and what
 the relevant section states instead. Four of them — that nodes vouch for what they serve, that
 benchmarking establishes hardware fitness, that \PoN inherits Nakamoto-style reorg cost, and that
 placement is deterministic — restate system properties argued fully in earlier sections and are not
 re-argued here; they appear again, as properties rather than as refused claims, in the list of system
-properties below (\srcdoc{plan/gaps.md, G1--G4}). The remaining seven are stated once, here, and nowhere else in
+properties below (\srcdoc{reconciliation record}). The remaining seven are stated once, here, and nowhere else in
 this paper: that the deployment assistant never signs is false on the default server-side path, so §19
 states the property per signing path rather than as one property of the system
-(\srcdoc{plan/gaps.md, G5}); that supply reaches a terminal value is false, so §5 gives the supply
+(\srcdoc{reconciliation record}); that supply reaches a terminal value is false, so §5 gives the supply
 function as unbounded with a vanishing rate and states its tail explicitly
-(\srcdoc{plan/gaps.md, G6}); that \Flux implements a proof-of-useful-work mechanism is false — the
+(\srcdoc{reconciliation record}); that \Flux implements a proof-of-useful-work mechanism is false — the
 name survives only as a module name with no work-submission, verification, or reward protocol — so §15
 describes the compute-rental marketplace as what it is and never invokes the term
-(\srcdoc{plan/gaps.md, G7}); that GPUs are hot-attachable is unsupported by any code in the four
+(\srcdoc{reconciliation record}); that GPUs are hot-attachable is unsupported by any code in the four
 GPU-adjacent repositories, so §15 states whole-device passthrough as the deployed mechanism and tags
-hot-attach \vision{} (\srcdoc{plan/gaps.md, G8}); that shielded supply is fully publicly verifiable is
+hot-attach \vision{} (\srcdoc{reconciliation record}); that shielded supply is fully publicly verifiable is
 weakened by turnstile enforcement being compiled in but disabled, so §20 states pool accounting as it
 is and names turnstile activation as the condition that would make the claim true
-(\srcdoc{plan/gaps.md, G9}); that application data survives a payment lapse is unsupported because no
+(\srcdoc{reconciliation record}); that application data survives a payment lapse is unsupported because no
 grace, suspension, or eviction state machine exists in code, so §16 specifies one as \planned{} with
 open parameters and states the deployed baseline — expiry arithmetic with no grace — separately
-(\srcdoc{plan/gaps.md, G10}); and that the network compensates a tenant for node failure is
+(\srcdoc{reconciliation record}); and that the network compensates a tenant for node failure is
 unsupported because no refund or SLA-credit mechanism exists anywhere, so §16 states that the remedy on
-offer is replacement, not refund (\srcdoc{plan/gaps.md, G11}).
+offer is replacement, not refund (\srcdoc{reconciliation record}).
 
 \subsection{Properties that do not hold}
 
@@ -118,9 +141,9 @@ Each has already been argued in the section cited; they are collected here rathe
 
 \begin{itemize}
 \item Benchmark results are not cryptographically bound to the operator or the host that produced
-  them (§4). \shipped; \srccode{fluxbench/\allowbreak{}src/\allowbreak{}chainparams.cpp}{46--71}.
+  them (§4). \shipped; \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{233--238}.
 \item Attestations are not bound to the machine that produced them, and no tenant-facing verification
-  path exists (§14). \shipped; \srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{411--481}.
+  path exists (§14). \shipped; \srcprivate{\SAS{} API server}.
 \item \PoN fork choice is a block-count race, not cumulative work: every block carries a fixed
   $2^{40}$ chainwork contribution regardless of its difficulty target (§4). \shipped;
   \srccode{fluxd/\allowbreak{}src/\allowbreak{}pow.cpp}{284--290}.
@@ -139,12 +162,12 @@ Each has already been argued in the section cited; they are collected here rathe
   height 835,554 (§20). \shipped; \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{1398--1408}.
 \item As specified, \PNR would create no marginal incentive to host, because payment reaches every
   node through the \PoN rotation independent of what that node runs (§7). \planned;
-  \srcintent{mech-pnr.md}.
+  \srcintent{mechanism specification}.
 \item Four owner identities (three under linkage) reach the moderation eviction threshold at the measured
   collateral distribution (§23). \shipped; \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}.
 \item A \Flux light client is not constructible on an external chain under the current header format,
   which forecloses light-client bridging (§22). \shipped, as a consequence of the header facts above;
-  \srccode{fluxd/\allowbreak{}src/\allowbreak{}pow.cpp}{284--290}; \srcintent{mech-bridge.md}.
+  \srccode{fluxd/\allowbreak{}src/\allowbreak{}pow.cpp}{284--290}; \srcintent{mechanism specification}.
 \item GPU resource requests are silently stripped, rather than queued or rejected, when a host is
   contended (§15). \shipped; established in §15.
 \item \texttt{Flux-Shared-DB} acknowledges a write before it has replicated (§13). \shipped;
@@ -156,12 +179,12 @@ Each has already been argued in the section cited; they are collected here rathe
 
 The following four items are classed \emph{Research} in the feasibility assessment: each names an
 open problem with no known good answer under the constraints \Flux operates within, rather than a
-build that merely has not happened yet \srcdoc{plan/feasibility.md}. Each is stated with what would
+build that merely has not happened yet \srcdoc{reconciliation record}. Each is stated with what would
 have to be true of a solution, not merely that a solution is hard to find.
 
 \begin{openproblem}[Post-quantum migration of outputs the protocol cannot move]
 A repository-wide search of \fluxd's source returns no post-quantum primitive of any kind
-\srcdoc{plan/feasibility.md, row 8}. The roadmap states the realistic threat as store-now-decrypt-later
+\srcdoc{reconciliation record}. The roadmap states the realistic threat as store-now-decrypt-later
 rather than live breakage, and frames migration as a multi-year effort, explicitly placing \Flux where
 Bitcoin and Ethereum are today: ``The realistic threat is store-now-decrypt-later, not live breakage.
 We publish a migration path on the NIST-standardised signature schemes. Migration itself is a
@@ -170,7 +193,7 @@ multi-year effort — this is where Bitcoin and Ethereum are too.''
 populations of value separately. Node collateral is a registered, enumerable set, so a migration
 targeting it first is tractable in a way a general UTXO migration is not — that is a structural
 advantage, not a solved problem, and the paper states it rather than claiming credit for it
-\srcdoc{plan/feasibility.md, per-mechanism notes}. Value sitting in ordinary transparent or shielded
+\srcdoc{reconciliation record}. Value sitting in ordinary transparent or shielded
 outputs the protocol has no authority to move is the harder case: a solution there would need either
 a voluntary, incentivised migration window before a cryptographically relevant quantum adversary is
 credible, or an accepted statement that some outputs will simply not migrate.
@@ -179,7 +202,7 @@ credible, or an accepted statement that some outputs will simply not migrate.
 \begin{openproblem}[Bounded agent spending on a UTXO chain without a new trusted party]
 Script validation on \fluxd is a pure function of the spending transaction and its own inputs; it
 cannot observe transaction history, so no script-level rule can enforce a rate limit or a cumulative
-spending cap \srcdoc{plan/feasibility.md, row 13}. The deployable answer available today — fund a
+spending cap \srcdoc{reconciliation record}. The deployable answer available today — fund a
 dedicated key and let its balance be the budget — is honest but coarse: it bounds total exposure, not
 rate, and it cannot be revoked partway through a spend. A solution that bounds spending more richly
 than a funded sub-key would have to supply either a co-signer, which reintroduces a trusted party the
@@ -192,7 +215,7 @@ finding a way to avoid both.
 \begin{openproblem}[Unlinkable payment for a specific deployment]
 An application's on-chain address is itself a workload identifier, so a construction proving that a
 payment funded \emph{that} address defeats its own purpose the moment it succeeds
-\srcdoc{plan/feasibility.md, row 18}. Two further constraints, drawn from the formal §21 design,
+\srcdoc{reconciliation record}. Two further constraints, drawn from the formal §21 design,
 narrow what a solution could look like. First, amount hiding is unsatisfiable for any payment typed
 by \PNR, because the fee pool is a public consensus integer and the payment amount is recoverable
 from it to within a few satoshi — a solution has to be scoped to exclude \PNR-typed payments from
@@ -212,7 +235,7 @@ At the measured ownership distribution, four owner identities (distinct \texttt{
 values) already clear the 25\% eviction threshold, falling to three once addresses linked by a shared
 node key or a shared collateral funding transaction are merged; the largest single identity holds
 10.71\% of collateral-weighted voting power across 237 Stratus nodes
-\srcdoc{plan/decisions-needed.md, item 11}. No reweighting, threshold change, or remedy within the
+\srcdoc{open-decisions record, item 11}. No reweighting, threshold change, or remedy within the
 moderation quorum's design space lowers that number: the best available reweighting moves the
 threshold from three colluding identities to six while making the threshold itself up to 13.6$\times$
 cheaper to buy, which is a worse trade, not a better one. A solution is therefore not a mechanism-design
@@ -227,10 +250,10 @@ on this problem means one of those two things happening, not a better-tuned thre
 
 \subsection{Open decisions}
 
-\srcdoc{plan/decisions-needed.md} records roughly eighty parameters that were open when drafting
+\srcdoc{open-decisions record} lists roughly eighty parameters that were open when drafting
 began across the mechanisms this paper specifies. Reproducing all of them here would not be a
 limitations section; it would be an appendix. Eighteen rounds of the design intake
-\srcintent{08-answers-round-2.md} have since settled most of them, each in the section that uses the
+\srcintent{design intake} have since settled most of them, each in the section that uses the
 value; the table below gives what is still open --- decisions no round has ruled on, and values this
 paper proposed that the author has not confirmed, which round 18 requires to be marked as
 recommendations rather than settled --- ordered by the section that carries each. Where the source does not
@@ -271,7 +294,7 @@ automatic migration at $\hstar = \num{3050000}$; none is stated in any artefact 
 not named in source & §10, \S\ref{sec:migration} \\
 \addlinespace
 \texttt{quorum\allowbreak{}Grant\allowbreak{}Activation\allowbreak{}Height}: the observed \specv{9}-stability condition that triggers it and
-the resulting height, deliberately decoupled from $\hstar$ \srcintent{08-answers-round-2.md, round 17}
+the resulting height, deliberately decoupled from $\hstar$ \srcintent{design intake}
 & not named in source & §10 \\
 \addlinespace
 Bonded attestation network parameters --- $n = 9$, $k = 6$, $\Delta_{\mathrm{chal}} = \num{2880}$
@@ -285,12 +308,12 @@ digest resolution in the tooling --- are this paper's recommendations, unconfirm
 \addlinespace
 Two signing-path architecture: describe the local-signing and operator-signing paths, as §19 does, or
 scope §19 to local signing alone; listed as still to be discussed
-\srcintent{08-answers-round-2.md, round 2} and not returned to since & the author (editorial framing
+\srcintent{design intake} and not returned to since & the author (editorial framing
 decision) & §17, §18, §19 \\
 \addlinespace
 ZIP-209 turnstile enforcement with \Flux-correct constants for the drain-only window: recommended by
 this paper; round 11 confirmed the window's heights, not the switch
-\srcintent{08-answers-round-2.md, round 18} & the author & §5, §20, §21 \\
+\srcintent{design intake} & the author & §5, §20, §21 \\
 \addlinespace
 Bridge: the checkable renunciation criteria (twelve months, \num{10000000}\flux{} of cumulative
 volume, zero defect-fixing upgrades), the delaying implementation of never-refused burns, and direct
@@ -300,11 +323,11 @@ audit-plus-operating-record shape (round 12) and the \num{10000000}\flux{} per-c
 \addlinespace
 Contract-held legacy balances on Ethereum and BSC: the set of LP, lending and bridge positions and
 their per-protocol resolution to beneficial holders, to be published before $\hsnap$; the treatment
-is settled \srcintent{08-answers-round-2.md, round 9} and the enumeration is not measured in this
+is settled \srcintent{design intake} and the enumeration is not measured in this
 corpus & Foundation and exchange partners & §22 \\
 \addlinespace
-Moderation category taxonomy: the enumeration of reportable categories, whose scope is ruled a
-network-level content veto \srcintent{08-answers-round-2.md, round 9} and whose members are undecided
+Moderation category taxonomy: the enumeration of reportable categories, whose scope is ruled
+behavioural harm \srcintent{design intake} and whose members are undecided
 & not named in source & §23 \\
 \end{longtable}
 \endgroup

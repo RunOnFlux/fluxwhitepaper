@@ -123,7 +123,7 @@ and receives a signature back; the service signs \emph{on the user's behalf} \sh
 \srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}flux/\allowbreak{}fluxSession.js}{60--73}. That remote service
 is the third-party payment facilitator of \S\ref{sec:paying:facilitator}: the same
 architecture, in which the operator generates and holds both of a user's private keys and
-the user never sees either \srcintent{08-answers-round-2.md, round 5}
+the user never sees either \srcintent{design intake}
 \srccode{console-api/\allowbreak{}src/\allowbreak{}db/\allowbreak{}models/\allowbreak{}FluxIdentity.ts}{13--28}; the identification of the two
 services follows from the observed protocol rather than from a read of this signer, which
 is not in the corpus \srcinferred. This is the path
@@ -169,7 +169,7 @@ is authorized only by a Firebase bearer token. \shipped\newline
 \srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}flux/\allowbreak{}fluxSession.js}{60--73} &
 Nothing: no per-transaction cap, no rate limit, no budget, no scope, and no revocation
 beyond invalidating the token itself. \srcinferred\newline
-\srcintent{plan/mech-agent-identity.md \S0} \\
+\srcintent{mechanism specification} \\
 \hline
 \end{tabular}
 \caption{The bound on a fully compromised signing credential, by path. The two rows are
@@ -202,7 +202,7 @@ change.
 The operator may choose to hand users the keys it holds for them — \(K_u\) in the notation
 of \S\ref{sec:paying:facilitator} — at which point its path becomes a local-signing one;
 it states that it may
-\srcintent{08-answers-round-2.md, round 5}. That is the operator's decision and not a
+\srcintent{design intake}. That is the operator's decision and not a
 protocol change — no consensus rule, no \FluxOS release and no \appspec field moves either
 way — and this paper records it without tracking it
 (\S\ref{sec:paying:facilitator}, Remark~\ref{rem:operatoroption}).
@@ -223,7 +223,7 @@ not arbitrary — they are structurally the same fields \S17's delegation scope
 \(\scopeset = (\mathcal{N}, \resvec^{\max}, \ninst^{\max}, \mathcal{I}, \dur^{\max}, \mathcal{G})\)
 already names, because a human reviewing a specification before signing it and a
 delegation certificate bounding an agent's authority to construct one are answering the
-same question. \planned \srcintent{plan/mech-agent-identity.md \S1.3}.
+same question. \planned \srcintent{mechanism specification}.
 
 The concrete failure this addresses is not hypothetical. The deployed tooling emits
 \texttt{runonflux/\allowbreak{}orbit:latest} — a mutable tag, not a content digest — with nothing in
@@ -307,7 +307,7 @@ construction would obtain automation whose worst case is bounded rather than ope
 the certificate fixes a scope \(\scopeset\) — permitted application names, a resource
 ceiling, a digest-pinned image set, a maximum duration and permitted geolocation
 constraints — and, where enforceable, a spending budget \(\budget\). \planned
-\srcintent{plan/mech-agent-identity.md \S1.3,\S1.5}. The qualifier is load-bearing and is
+\srcintent{mechanism specification}. The qualifier is load-bearing and is
 the reason this paragraph sits under the protocol's path: the construction presupposes a
 principal-held key, so it is available to a user on the local-signing path and to
 autonomous software holding its own key, and it is not available on the operator-signing

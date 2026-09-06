@@ -278,7 +278,7 @@ off-chain: \FluxOS's placement decision is recorded in gossiped, signed messages
 itself. The third leg exists but is weaker than ``attests the host'' implies: \ArcaneOS's attestation
 service already defines a purpose-scoped signing key for exactly this use — a \texttt{purpose=app}
 key sits alongside the existing, unconsumed \texttt{purpose=\allowbreak{}mesh} key
-(\shipped, \srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{411-481}) — but the signing material for every purpose
+(\shipped, \srcprivate{\SAS{} API server}) — but the signing material for every purpose
 is derived by HKDF from salt and domain values compiled identically into every binary, not from
 anything TPM- or machine-specific, so the attestation demonstrates that the signer holds a value
 shipped in every copy of the software, not that a particular machine booted a particular image; there
@@ -298,7 +298,7 @@ sortition work is the same header format a light client on another chain would n
 independently — and it cannot: without a commitment to the node set, without cumulative work to
 compare forks by, and with an emergency path that can override normal validity, no light-client rule
 derived from this header is sound. The most trust-minimising bridge architecture available to other
-chains is closed to Flux until the header changes \srcintent{plan/mech-bridge.md, \S22}. That is the
+chains is closed to Flux until the header changes \srcintent{mechanism specification}. That is the
 same asymmetry as the attested-placement argument, run in the other direction: a design decision made
 because one party controlled the whole stack, for one purpose, closed an option for a different
 purpose that a less integrated system might have kept open. Integration is not, on this evidence, a

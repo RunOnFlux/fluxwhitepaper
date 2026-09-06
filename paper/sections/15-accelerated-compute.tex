@@ -70,7 +70,7 @@ line instead breaks that invariant in a way a paper describing this system shoul
 \label{sec:accelerated-compute-pluggable}
 
 The roadmap's language of a ``pluggable'' or hot-attachable GPU has no counterpart in any of the
-four repositories surveyed \srcdoc{plan/conflicts.md, C23}. An exhaustive search across all four
+four repositories surveyed \srcdoc{reconciliation record}. An exhaustive search across all four
 repositories for hot-attach, hot-plug, hot-swap, and pluggable terminology returns exactly one hit
 outside vendor code, and it is unrelated: a \texttt{HotSwap} boolean field on OVH's public cloud
 catalog API describing disk RAID hot-swap on dedicated servers, not GPU attachment
@@ -228,7 +228,7 @@ adds a \texttt{machineType} enum with values \texttt{standard}, \texttt{gpu}, an
 which is the field the specification intends to eventually carry a GPU-bearing workload declaration
 \inprogress\ \srcbranch{flux}{feat/appspec-v9}{ZelBack/src/services/appRequirements/schemas/v9.json}.
 As \S10 establishes, this field currently has no consumer code anywhere in \FluxOS
-\srcdoc{plan/conflicts.md, C4}: it is declared in the schema and gated behind a feature flag that
+\srcdoc{reconciliation record}: it is declared in the schema and gated behind a feature flag that
 nothing in the codebase flips, not wired to any placement, pricing, or admission logic.
 
 \subsection{The workload class the substrate fits}
@@ -339,7 +339,7 @@ than merely demonstrable.
 Autoregressive decoding is memory-bandwidth-bound, not compute-bound: each token requires reading the
 active parameters once, so throughput is approximately achievable bandwidth divided by bytes read per
 token. On that model, and as the author's estimate rather than a measurement on \Flux{} hardware
-\srcintent{08-answers-round-2.md, round 28} (\planned):
+\srcintent{design intake} (\planned):
 
 \begin{center}
 \small
@@ -378,12 +378,12 @@ today request the property that actually determines inference speed.
 \notestablished{measured token rates for quantised models on each tier's reference hardware. The
 figures above are a bandwidth model, and the gap between that model and a real node --- memory
 configuration, NUMA topology, and what else is resident --- is precisely what a benchmark would
-close. \textbf{That benchmark is scheduled for Q4 2026} \srcintent{08-answers-round-2.md, round 29},
+close. \textbf{That benchmark is scheduled for Q4 2026} \srcintent{design intake},
 so this is a dated gap rather than an indefinite one: the estimate above is to be replaced by a
 measurement, not defended.}
 
 \paragraph{Where this is going.} \FluxCloud{} and \FluxEdge{} are to merge, offering accelerated
-capacity through one interface \srcintent{08-answers-round-2.md, round 28} (\planned). Until then the
+capacity through one interface \srcintent{design intake} (\planned). Until then the
 division is worth stating plainly, because it is a strength rather than an embarrassment:
 \FluxEdge{} rents whole GPUs for work that needs them, and \FluxCloud{} runs the model classes that
 do not --- which, as the table above shows, now includes models that were frontier-adjacent two years
@@ -408,8 +408,7 @@ scheduling can be made to match whatever a tier offers; and each run checkpoints
 eviction --- which on this network is ordinary, not exceptional --- costs a seed rather than a
 campaign. Particle transport for dose distribution, radiation-protection shielding, protein folding
 and molecular dynamics all sit in that class. The team intends to pursue it, with radiation-therapy
-research and facilities such as ELI Beamlines named as targets \srcintent{08-answers-round-2.md,
-round 20} (\planned).
+research and facilities such as ELI Beamlines named as targets \srcintent{design intake} (\planned).
 
 Three constraints govern whether that can be honestly sold, and the first of them rules out the code
 most often named for the purpose.
@@ -501,8 +500,7 @@ organ, and is used for radiation protection, internal dosimetry and radiotherapy
 2026-09-06}. A dose-distribution campaign over those phantoms is a container carrying Geant4 and a
 phantom definition, a seed, and a macro; the fleet runs $N$ seeds; the results sum. That is the
 \emph{same} shape as the folding deployments already running on the network, and it is what a
-``Folding@home for dose distribution'' would concretely mean here \srcintent{08-answers-round-2.md,
-round 20} (\planned).
+``Folding@home for dose distribution'' would concretely mean here \srcintent{design intake} (\planned).
 
 What makes it the right first workload is not its physics but its threat model: a reference phantom
 is a published international standard, and the geometry, the beam and the scored dose are all
@@ -526,8 +524,8 @@ hold. \Cref{prop:not-machine-bound} establishes that the key protecting the rand
 node-identity value at rest is a static constant compiled into every \fluxsas{} binary, and that the
 attestation keys derive from values compiled identically into every copy with no TPM, Secure Boot or
 per-machine input
-\shipped~\srccode{fluxsas/\allowbreak{}src/\allowbreak{}disk\_encryption.h}{200--228},
-\srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{411--481}. Encryption whose key every copy
+\shipped~\srcprivate{\SAS{} disk encryption},
+\srcprivate{\SAS{} API server}. Encryption whose key every copy
 of the software contains defends against a stolen disk and a casual reader; it does not defend
 against the operator of the machine, and the operator is precisely the adversary a confidentiality
 claim over patient imaging has to exclude. The remedy is the attestation network of

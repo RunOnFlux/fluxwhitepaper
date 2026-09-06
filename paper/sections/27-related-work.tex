@@ -36,7 +36,7 @@ is what \PoN's block-production sortition ranks and rotates \shipped\
 revenue-funded compensation is built on \planned\ \srcintent{§7}. Second, an enumerable operator set is
 a tractable target for a future key migration in a way an open, unbonded pool cannot be: collateral is
 already a registered set on \Flux, so a migration that starts there is a narrower problem than a
-general UTXO migration \vision\ \srcintent{plan/feasibility.md}. This is also what makes the resulting
+general UTXO migration \vision\ \srcintent{feasibility assessment}. This is also what makes the resulting
 eviction quorum Sybil-resistant by construction \citep{douceur2002sybil} — a property §23 relies on and
 this section returns to below. Neither property is free: collateral is capital locked against no
 guaranteed return, and an enumerable registry is also a measurably concentrated one — the largest single
@@ -124,7 +124,7 @@ Neither of the first two categories is presently constructible for \Flux, and th
 not the will. A light client needs three things \PoN's header does not give it. First, per the bridge
 design's own analysis, the header carries no commitment to the \FluxNode registry, so a verifier cannot
 check that a block's signer was an eligible operator without holding the full registry itself \planned\
-\srcintent{plan/mech-bridge.md}. Second, chainwork is fixed at $2^{40}$ per block regardless of
+\srcintent{mechanism specification}. Second, chainwork is fixed at $2^{40}$ per block regardless of
 difficulty \shipped\ \srccode{fluxd/\allowbreak{}src/\allowbreak{}pow.cpp}{284--290}, so there is no cumulative-work quantity a
 light client could use to prefer one candidate chain over another the way an SPV client does. Third, a
 2-of-4 emergency key set can produce a valid block outside \PoN's normal eligibility rule, with no time
@@ -138,7 +138,7 @@ collateral maturity \planned\ \srcintent{§8}.
 Atomic swaps do not fill this gap either, for a reason independent of the header: a swap exchanges FLUX
 that already exists on \Flux for an asset that already exists on the destination chain. It cannot mint
 FLUX on a chain where none yet exists, which is exactly what parallel-asset issuance requires \planned\
-\srcintent{plan/mech-bridge.md}. Swaps are the right primitive for \FusionX's exchange product, where
+\srcintent{mechanism specification}. Swaps are the right primitive for \FusionX's exchange product, where
 both assets already exist on both sides; they are not a candidate for the bridge itself. \Flux's
 remaining option, and the one §22 specifies, is canonical mint-and-burn under a bonded, capped
 custodian — closer to CCTP's trusted-attester model than to IBC's light client, with per-chain caps
@@ -148,8 +148,8 @@ client would otherwise do \planned\ \srcintent{§22}.
 \subsection{Attestation and bonded assertions}
 
 ArcaneOS's measured boot and Secure-Boot platform-key pinning \shipped\ \srccode{fluxsas/\allowbreak{}src/\allowbreak{}fes/\allowbreak{}fes.cpp}{70--81},
-its dm-verity root-hash verification \shipped\ \srccode{fluxsas/\allowbreak{}src/\allowbreak{}watchdog.h}{566--596}, and its
-LUKS-backed disk encryption \shipped\ \srccode{fluxsas/\allowbreak{}src/\allowbreak{}disk\_encryption.h}{200--228} do real work
+its dm-verity root-hash verification \shipped\ \srcprivate{\SAS{} watchdog}, and its
+LUKS-backed disk encryption \shipped\ \srcprivate{\SAS{} disk encryption} do real work
 against a remote attacker without any special hardware trust anchor. The question this section
 positions is not whether that machinery works but what the resulting attestation is rooted in. One line
 of prior art roots attestation in silicon: Intel SGX \citep{costan2016sgx} ties an attestation to a
@@ -165,14 +165,14 @@ The honest state of the current system is that neither model is yet in place. Th
 for the default, \texttt{cdn}, \texttt{mesh} and \texttt{app} attestation purposes is derived from
 static salt and domain values compiled identically into every binary; none of its inputs depends on TPM
 state, Secure Boot state, or any other per-machine value \shipped\
-\srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{411--481}. What that attestation demonstrates is that the signer
+\srcprivate{\SAS{} API server}. What that attestation demonstrates is that the signer
 holds a value shipped in every copy of the software, not that a particular machine booted a particular
 image. The trust root behind "this node booted something \Flux considers legitimate" is today entirely
 \Flux-operated, composed of the platform key above and a pair of \Flux-operated web services publishing
 allowed dm-verity root hashes that the watchdog polls roughly daily and treats as secure if unreachable
-\shipped\ \srccode{fluxsas/\allowbreak{}src/\allowbreak{}watchdog.h}{566--596}. Neither SGX's hardware root nor EigenLayer's
+\shipped\ \srcprivate{\SAS{} watchdog}. Neither SGX's hardware root nor EigenLayer's
 economic root is present yet; the \texttt{purpose=\allowbreak{}mesh} attestation type already compiled into
-\fluxsas with no consumer \shipped\ \srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{411--481} is the stated seed of
+\fluxsas with no consumer \shipped\ \srcprivate{\SAS{} API server} is the stated seed of
 the bonded design that would supply one \planned\ \srcintent{§14}.
 
 \subsection{Privacy}
@@ -193,7 +193,7 @@ unusual and should be stated as such rather than blurred: on settlement privacy 
 comparable to Bitcoin rather than to Zcash, and weaker than every privacy-focused chain in this
 survey. What it gains is a consensus layer with no proving system, no trusted-setup inheritance and
 no unenforced turnstile --- a smaller and more auditable object, which is the trade the team has
-chosen \srcintent{08-answers-round-2.md, round 10}.
+chosen \srcintent{design intake}.
 None of this machinery is \Flux's invention, and this paper does not claim otherwise: the cryptography,
 the setup, and the protocol are inherited in full.
 
@@ -217,7 +217,7 @@ available for free. The specific problem §21 identifies is narrower and, so far
 establishes, open: proving that a shielded payment funds a \emph{particular} deployment without
 revealing which one is hard precisely because an application's address is itself a workload identifier,
 so a spend statement naming that address defeats the purpose of hiding it \vision\
-\srcintent{plan/feasibility.md}. This has the shape of a blind-credential problem — proving membership
+\srcintent{feasibility assessment}. This has the shape of a blind-credential problem — proving membership
 in, or payment toward, a class without revealing which member —
 and the relevant literature is well developed: blind signatures \citep{chaum1982blind},
 anonymous credentials \citep{camenisch2001credentials}, compact e-cash
@@ -235,15 +235,15 @@ session key and the assets it can move: a paymaster or account contract can enfo
 on-chain, because the account itself is a program the chain executes. That answer is not available on
 \Flux's L1, which is a UTXO chain: script validation is a pure function of a spending transaction and
 its own inputs, with no access to spending history, so no script-level rule can enforce a rate limit or
-a cumulative cap on a delegated key (§17; \srcintent{plan/feasibility.md}). Macaroons
+a cumulative cap on a delegated key (§17; \srcintent{feasibility assessment}). Macaroons
 \citep{birgisson2014macaroons} fit the UTXO setting better than account abstraction does, because they
 push attenuation into the credential itself rather than into on-chain account state: a macaroon's
 caveats are checked by whoever verifies the credential, not by a ledger, which matches how deployment
 specifications are already validated off-chain against owner signatures on every node (§19;
-\srcintent{plan/feasibility.md}). That correspondence is the basis for §17's specification of bounded
+\srcintent{feasibility assessment}). That correspondence is the basis for §17's specification of bounded
 deployment authority \planned\ \srcintent{§17}. It is worth stating precisely what already exists and
 what does not: a scoped, revocable, rate-limited bearer token already governs \emph{actions} — start,
-stop, deploy, renew — through the FluxEdge API (§17; \srcintent{plan/feasibility.md}), and an
+stop, deploy, renew — through the FluxEdge API (§17; \srcintent{feasibility assessment}), and an
 MCP-exposed tool set can already sign and submit a deployment end to end on a custodial path with no
 bound on \emph{value} at all \shipped\
 \srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}mcp/\allowbreak{}createServer.js}{174--266}. §17 is therefore not inventing

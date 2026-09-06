@@ -103,7 +103,7 @@ because several of its capabilities cannot be acquired with any amount of \flux.
         binary; the node checks the firmware's enrolled PK against that pin
         \srccode{fluxsas/\allowbreak{}src/\allowbreak{}fes/\allowbreak{}fes.cpp}{70--81}.
   \item[\textbf{K7.}] The \fluxsas{} attestation signing material and the internal mTLS CA
-        \srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{411--481}, \srccode{fluxsas/\allowbreak{}tools/\allowbreak{}gen-certs.sh}{38}.
+        \srcprivate{\SAS{} API server}, \srccode{fluxsas/\allowbreak{}tools/\allowbreak{}gen-certs.sh}{38}.
   \item[\textbf{K8.}] The multisig that posts on-chain chain-parameter messages, which change the deployment price
         table with effect from their occurrence height
         \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}chainUtilities.js}{9--52}.
@@ -115,7 +115,7 @@ because several of its capabilities cannot be acquired with any amount of \flux.
 
 \decided{custody is \emph{personal}, not corporate. No legal entity holds these key sets: four
 named individuals --- Tadeas Kmenta, Valter Silva, Daniel Keller and Jeremy Anderson --- each hold
-one, personally governed \srcintent{08-answers-round-2.md, round 23}, matching the 3-of-4 emergency
+one, personally governed \srcintent{design intake}, matching the 3-of-4 emergency
 and bridge configuration of \Cref{sec:governance}. The distinction bears on every concentration
 argument in this paper: personal custody by four named people is a different accountability model
 from custody by a company, and both differ from the anonymous-operator model a reader of a
@@ -225,7 +225,7 @@ contract \srcdoc{fluxos-network-policy/README.md:33--44}; the node-side fetch-an
 verified in \FluxOS{} \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appSecurity/\allowbreak{}imageManager.js}{179--195}.
 (v) \emph{Hash-list outage}: if both dm-verity
 allow-list endpoints are unreachable, the \ArcaneOS{} watchdog treats the node as secure and takes no
-action --- fail-open \srccode{fluxsas/\allowbreak{}src/\allowbreak{}watchdog.h}{566--596}.
+action --- fail-open \srcprivate{\SAS{} watchdog}.
 
 \subsection{Trust boundaries}
 \label{sec:model:trust}
@@ -266,11 +266,11 @@ meets the tier thresholds. Not tier forgery --- the registration must still matc
 collateral amount. \\
 TB4 & Benchmark maintainer allowlist \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{233--240} & consensus &
 Any holder of a currently-valid allowlist key can authorise benchmark signatures fleet-wide. \\
-TB5 & \fluxsas{} attestation service \srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{411--481} & \fluxbench{} and
+TB5 & \fluxsas{} attestation service \srcprivate{\SAS{} API server} & \fluxbench{} and
 \texttt{fdm-nginx} only; \emph{no tenant path} & An attestation demonstrates possession of a value
 present in every copy of the software, not that a machine booted a given image. \\
 TB6 & dm-verity hash allow-list service (two Flux-operated hosts)
-\srccode{fluxsas/\allowbreak{}src/\allowbreak{}watchdog.h}{566--596} & every \ArcaneOS{} node & Whoever controls those names
+\srcprivate{\SAS{} watchdog} & every \ArcaneOS{} node & Whoever controls those names
 defines ``known-good''; if both are unreachable the watchdog does nothing (fail-open). \\
 TB7 & UEFI Platform Key pinned by SHA-256 \srccode{fluxsas/\allowbreak{}src/\allowbreak{}fes/\allowbreak{}fes.cpp}{70--81}; TPM seal against
 PCR~7 only \srccode{fluxsas/\allowbreak{}src/\allowbreak{}fes/\allowbreak{}fes.cpp}{173--186} & the node's own boot path & Whoever controls
@@ -319,7 +319,7 @@ on-chain justification. \\
 
 \decided{the emergency-block path is observed \emph{on-chain}: an emergency block is a block, so
 its production is visible to anyone following the chain and detection does not depend on an off-chain
-alerting system \srcintent{08-answers-round-2.md, round 24}. That is the whole of the monitoring
+alerting system \srcintent{design intake}. That is the whole of the monitoring
 story --- this paper does not claim a rate limiter, an alarm or a watch rota outside the chain,
 because none is established and none is asserted. Observability is not the same as response, and
 \Cref{sec:governance}'s move to 3-of-4 with fresh keys is the control that bounds the path.}
@@ -329,7 +329,7 @@ SHA-256 sums is not established in the repositories read (TB8).}
 repository, so the \qty{6}{\hour}--\qty{12}{\hour} bound in TB9 covers four of the five documents.}
 \decided{the application payment sink is held by the same four individuals as the emergency and
 bridge keys above --- Tadeas Kmenta, Valter Silva, Jeremy Anderson and Daniel Keller
-\srcintent{08-answers-round-2.md, round 25}. The address itself is expected to change on migration to
+\srcintent{design intake}. The address itself is expected to change on migration to
 SSP Enterprise; the custody does not. This is a policy fact rather than a code fact: no artefact read
 for this paper establishes it, and it rests on the author's statement. It is stated because
 \Cref{sec:pnr}'s settlement sends every application payment to that one address, so who holds its key
@@ -363,7 +363,7 @@ adversary with no capital at all.
         default, \texttt{cdn}, \texttt{mesh} and \texttt{app} attestation purposes is derived from
         values compiled identically into every copy of the software; no input depends on the TPM, on
         Secure Boot state, or on any per-machine value
-        \srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{411--481,466--469,503--506}. No node, no hardware and no
+        \srcprivate{\SAS{} API server}. No node, no hardware and no
         collateral are required. This is why \textbf{A5} is stated as it is.
   \item[\textbf{Z2.}] \emph{Link payments to deployments.} All application payments land at fixed transparent
         addresses \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03}, and a
@@ -564,7 +564,7 @@ This is a benchmark-gating bypass, not tier forgery, and \S\ref{sec:consensus} a
 \label{asm:a5-attestation}
 \shipped A \fluxsas{} attestation demonstrates possession of a value present in every copy of the
 software; none of the derivation inputs depends on the TPM, on Secure Boot state, or on any
-per-machine value \srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{411--481,466--469,503--506}. Every
+per-machine value \srcprivate{\SAS{} API server}. Every
 \texttt{/v2/*} route requires an internal client certificate and is bound to loopback, so no
 tenant-facing verification path exists \srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{1042--1053,220--252}.
 \emph{Enables}: measured boot, dm-verity and LUKS as genuine host-local defences against a remote
@@ -592,7 +592,7 @@ not redirect them: an emergency block still fills the deterministic node payout
 
 \emph{Planned change.} The team intends to move this set to $3$-of-$4$ with newly generated keys,
 aligning it with the bridge quorum of \S\ref{sec:bridging} \planned
-\srcintent{evidence/design/08-answers-round-2.md}. No activation is scheduled, and the assumption is
+\srcintent{design intake}. No activation is scheduled, and the assumption is
 unchanged in kind: at $3$-of-$4$ the path still bypasses \PoN{} eligibility and per-node signature
 verification with no time or stall-detection gating, so every property that references A6 continues
 to hold.
@@ -626,7 +626,7 @@ $96{,}479.94\flux$ sits in the two pools
 \emph{Forecloses}: any construction in \S\ref{sec:private-renewal} that requires funding a shielded
 note from transparent value, and any claim that the anonymity set grows. Re-opening the pool would be
 a consensus change; the team has instead decided to retire both pools
-(\S\ref{sec:shielded-retirement}, \srcintent{08-answers-round-2.md, round 10}), so this assumption
+(\S\ref{sec:shielded-retirement}, \srcintent{design intake}), so this assumption
 describes a mechanism on its way out rather than a prerequisite for future work.
 \end{assumption}
 

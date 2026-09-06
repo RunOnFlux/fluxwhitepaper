@@ -12,7 +12,7 @@ actively-developed redesign that is not enforced anywhere yet. This paper calls 
 version \emph{v9} throughout, written in full here and as \specv{9} from this point on; it is
 unrelated to \daemonversion, the version number of the consensus daemon \fluxd, which is
 maintained independently and is never the referent of ``v9'' in this document
-\srcintent{00-scope.md}. The reason this section exists is structural, not archival: three fields
+\srcintent{design intake}. The reason this section exists is structural, not archival: three fields
 \specv{9} adds — \texttt{paymentMemo}, \texttt{referralCode} and \texttt{machineType} — are the
 substrate that \PNR (\S7), the referral program, and the VPS/datacenter tier (\S11) are each stated
 to depend on, and as of this writing none of the three has any consumer code anywhere in \FluxOS.
@@ -298,7 +298,7 @@ evicted. The team's design is a different one: migration to \specv{9} will be
 \textbf{forced, not opt-in}. Every application will be migrated by an application-update message
 carrying a special signature that compels the \specv{9} version; updates and upgrades on older
 specification versions will then be disabled, and once the entire fleet is on \specv{9} the legacy
-code paths will be removed \srcintent{08-answers-round-2.md, v9 migration bullet}. This paper states
+code paths will be removed \srcintent{design intake}. This paper states
 the change rather than silently substituting it: the forced design is operationally cleaner than the
 deprecation window it replaces, because it would remove the 322-application, 26.9\% legacy-version
 tail (\S\ref{sec:migration-baseline}) in a single step, at the moment the forcing message is
@@ -316,7 +316,7 @@ created under, every application is rewritten forward onto the new version.
 
 \planned\ What this would trade against the superseded invariant is consent: nothing in the design
 gives an owner a way to remain on their signed specification, or to decline the rewrite
-\srcintent{08-answers-round-2.md, v9 migration bullet}. Non-eviction would be preserved; opt-out
+\srcintent{design intake}. Non-eviction would be preserved; opt-out
 would not exist.
 
 A key able to rewrite any tenant's application specification without that tenant's own signature
@@ -328,14 +328,14 @@ are intended to bound it: it would be \textbf{single-use}, scoped to the migrati
 standing signing service; \textbf{migration-scoped}, existing only to perform this one version
 transition and nothing else; and \textbf{hardcoded}, expected to be baked-in values rather than a
 live signer that could be invoked again later
-\srcintent{08-answers-round-2.md, round 3 answers}. Those three properties are what would make the
+\srcintent{design intake}. Those three properties are what would make the
 capability acceptable rather than alarming.
 
 \planned\ The scope and the enforcement class are now decided rather than open. The scope is the
 \textbf{version field and the required-field additions only} --- never the container image and never
 the application's functionality --- and the stated purpose is strictly to bring the network into
 alignment on one schema version, nothing more
-\srcintent{08-answers-round-2.md, round 5 answers}. Enforcement is by \textbf{\FluxOS}, not by
+\srcintent{design intake}. Enforcement is by \textbf{\FluxOS}, not by
 \fluxd: every node validates the forced-update message against that scope, which is the same
 enforcement class as specification validation generally --- the \texttt{verify\allowbreak{}App\allowbreak{}Specifications}
 check described above --- checked by every node, but as a \FluxOS{} policy rule rather than a
@@ -391,7 +391,7 @@ Root object, \texttt{additional\allowbreak{}Properties:\allowbreak{}false}, and 
 \begin{remark}[\specv{9} timing: the quarter settled in round 11, the height in round 17]
 \label{rem:v9-timing}
 \specv{9} is in development and is to be \textbf{activated in Q4~2026, with the migration of
-existing applications in the same quarter} \srcintent{08-answers-round-2.md, round 11} (\planned).
+existing applications in the same quarter} \srcintent{design intake} (\planned).
 That places $\hstar$ before $\hpa = \num{3466630}$ (2027-03-12), so the specification change
 lands ahead of \PNR{} activation and the parallel-asset cut rather than with them --- which is the
 right order, because \S\ref{sec:feasibility} places \PNR{}, credits, referrals, the VPS tier and the
@@ -403,7 +403,7 @@ implementation of the \texttt{paymentMemo}\slash\texttt{referralCode}\slash\text
 are declared but inert. At the \SI{30}{\second} target a Q4~2026 activation corresponds to roughly
 $\num{3000000}$--$\num{3260000}$, and the paper states that range as an implication of the stated
 quarter rather than as a number the team has given.
-\settlednote{$\hstar = \num{3050000}$ \srcintent{08-answers-round-2.md, round 17},
+\settlednote{$\hstar = \num{3050000}$ \srcintent{design intake},
 approximately 2026-10-20 at the \SI{30}{\second} target --- inside the settled Q4~2026 window, about
 \num{45} days beyond the 2026-09-05 tip of \num{2921193}, and about \num{145} days before
 $\hpa = \num{3466630}$. That ordering is what \S\ref{sec:feasibility} requires: the \specv{9}
@@ -416,7 +416,7 @@ complete before this height, or the height activates a schema whose economic fie
 
 \settlednote{\texttt{quorum\allowbreak{}Grant\allowbreak{}Activation\allowbreak{}Height} activates \emph{after} \specv{9}, once
 \specv{9} is stable, at a height not fixed now
-\srcintent{08-answers-round-2.md, round 17}. This is a deliberate decoupling rather than an
+\srcintent{design intake}. This is a deliberate decoupling rather than an
 unfinished decision: the mastership/active-standby quorum plane and the \specv{9} schema change have
 unrelated failure modes, so binding them to one height would mean a fault in either forces a rollback
 of both. The cost is a second upgrade event and a second announcement. The height is left unset

@@ -390,7 +390,7 @@ Curl timeouts (FluxOS/SAS plain queries, most call sites) & \texttt{-m 15} (15 s
 Private-IP prefixes checked (count) & 18 (\texttt{10.}, \texttt{172.16.}--\texttt{172.31.}, \texttt{192.168.}) & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{187--189} \\
 \texttt{getbenchmarks}/RPC-reported version & \texttt{"6.3.1"} & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}rpc/\allowbreak{}fluxnode.cpp}{423} \\
 \texttt{CLIENT\_VERSION\_MAJOR.\allowbreak{}MINOR.\allowbreak{}REVISION.\allowbreak{}BUILD} & 6.3.1.50 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}clientversion.h}{18--21} \\
-Benchmarking key rotation activation times (mainnet, 5 keys) & 0, 1618113600, 1647262800, 1706209200, 1743534000 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}chainparams.cpp}{52--71} \\
+Benchmarking key rotation activation times (mainnet, 5 keys) & 0, 1618113600, 1647262800, 1706209200, 1743534000 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{233--238} \\
 App-signing key count (mainnet, no rotation) & 1 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}chainparams.cpp}{73--81} \\
 Testnet/regtest benchmarking key rotation & 2 keys each, second activates 1617508800 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}chainparams.cpp}{119--127,157--165} \\
 OS end-of-life list & Ubuntu 20.04, Debian 11 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{4168--4180} \\

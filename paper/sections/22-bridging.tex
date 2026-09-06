@@ -8,7 +8,7 @@ publicly visible multi-key reserve on the \Flux L1 and lets one contract per for
 exactly that much FLUX there --- never more, because the contract itself refuses. Anyone with a
 \Flux node and a public RPC endpoint per chain would be able to check, at any moment, that the
 tokens in circulation on every chain add up to what is locked at home. The governing constraint is
-the team's own \srcintent{03-parallel-assets.md}: decentralization is the requirement, ``but done
+the team's own \srcintent{design intake}: decentralization is the requirement, ``but done
 right'' --- \emph{a decentralized design that is exploitable is worse than the custodial
 incumbent}. This section takes that literally. It does not attempt to remove every trusted party.
 It makes every failure mode bounded by a contract, observable by anyone, and attributable to named
@@ -17,8 +17,7 @@ change.
 
 \medskip
 \noindent\textbf{What is now decided, and the numbers that follow.} Six quantities that earlier
-drafts of this section carried as open parameters are fixed \srcintent{08-answers-round-2.md, rounds
-5--7, 13}: a \emph{global} supply cap of \num{560000000}\flux{} across all chains, enforced by
+drafts of this section carried as open parameters are fixed \srcintent{design intake}: a \emph{global} supply cap of \num{560000000}\flux{} across all chains, enforced by
 the reserve invariant under honest-minority operation rather than by any contract (\Cref{rem:global-cap}); a mint rate limit of \num{10000000}\flux per
 \SI{24}{\hour} \emph{per chain}, with a matching burn ceiling of \num{10000000}\flux per chain per
 window; a 3-of-4 quorum for mint, release and administration alike, held by the four named
@@ -263,10 +262,10 @@ requirements:
   and no trust in any team-maintained wallet list. The migration carry alone takes a published
   issuer-held set $\mathcal{I}_c$ as an input, checkable against the legacy contract
   (Algorithm~\ref{alg:carry}); steady-state verification takes none
-  \srcintent{08-answers-round-2.md, round 18}.
+  \srcintent{design intake}.
 \item[H7 --- audit before deploy.] Every deployed contract and program has a published independent
   audit of the exact deployed bytecode; migration and sink contracts are in scope
-  \srcintent{03-parallel-assets.md}.
+  \srcintent{design intake}.
 \item[H8 --- migration conserves value.] Each legacy unit is redeemable 1:1 into main-chain FLUX
   \srcroadmap{flux-roadmap-public.md:133}; no legacy unit is redeemed twice; and $R_0 \ge \Lambda$
   holds --- the L1 backing for the whole legacy circulating supply exists --- before any migration
@@ -284,7 +283,7 @@ immutability --- deployed contracts are not upgradeable in place, replacement is
 migration; \textbf{D4} a path to bonded attestation --- pause authority transferable from named
 guardians to the attestation network of \Cref{sec:attested-execution} without redeploying the token;
 \textbf{D5} one codebase --- ETH and BSC deployments are byte-identical source with chain-specific
-constructor parameters only \srcintent{03-parallel-assets.md}.
+constructor parameters only \srcintent{design intake}.
 
 \paragraph{Tensions, named rather than resolved silently.} Raising $k/n$ makes theft need more
 colluders and censorship need fewer refusers; at the decided $(n,k) = (4,3)$ theft needs 3 signers
@@ -302,7 +301,7 @@ the requirement appear satisfied. Fourth, D3 asks that a bug be fixed by deployi
 rather than by upgrading in place --- the price of an audit whose conclusions stay true, and
 \Cref{sec:bridging-incidents} records what an in-place upgrade cost Nomad. \textbf{D3 is not
 satisfied by the decided configuration}: the contracts are upgradable under the same 3-of-4
-\srcintent{08-answers-round-2.md, round 7}, so the construction below specifies immutability while
+\srcintent{design intake}, so the construction below specifies immutability while
 the decision retains an upgrade path. \Cref{rem:upgrade-voids} states the consequence for
 \Cref{prop:worst-case}; it is not a drafting inconsistency to be smoothed over, because the bound
 this section exists to state depends on which of the two is deployed.
@@ -322,7 +321,7 @@ $\overline{M}_c$ and a rate limit $\varrho_c$ that the contract enforces itself.
 (\texttt{decimals} $=8$ on every chain, matching the legacy EVM tokens
 \srccode{flux-eth-bsc/\allowbreak{}flux.sol}{11--13}), so the supply invariant is an integer identity. The decided
 launch set is $\mathcal{C}_0 = \{\mathrm{ETH}, \mathrm{BSC}\}$ with
-$\mathcal{C}_1 = \mathcal{C}_0 \cup \{\mathrm{SOL}\}$ following \srcintent{03-parallel-assets.md};
+$\mathcal{C}_1 = \mathcal{C}_0 \cup \{\mathrm{SOL}\}$ following \srcintent{design intake};
 one EVM codebase would be deployed twice, plus one Solana program later. \planned
 \end{definition}
 
@@ -389,7 +388,7 @@ $B_c \leftarrow B_c + 1$. It is permissionless, has no allowlist, and is never p
 (H5). On Solana the mint's \texttt{freeze\_authority} is set to \texttt{None} at creation,
 irrevocably, for the same reason. The decided configuration adds a burn ceiling
 $\varrho^{\mathrm{burn}}_c = \num{10000000}\flux$ per window
-\srcintent{08-answers-round-2.md, round 7}, metered by a second leaky bucket
+\srcintent{design intake}, metered by a second leaky bucket
 $\mathsf{bucket}^{\mathrm{burn}}_c$ on the same $T_{\mathrm{win}}$. A ceiling on burn is not the same
 kind of object as a ceiling on mint --- mint is the direction that can create unbacked value, burn is
 the direction that lets a holder leave --- so its interaction with H5 has to be stated rather than
@@ -414,11 +413,11 @@ MINT quorum $(n_M,k_M)$ & authorise a mint for a confirmed lock &
 RELEASE quorum $(n_R,k_R)$ & co-sign L1 spends of $\mathsf{R}_{\mathrm{hot}}$ to burners &
   anything on $c$ \\
 GUARDIAN $\mathcal{G}$ (any single member, 1-of-4) & pause mint for $\le \Delta_g$; cancel a
-  queued admin action or upgrade \srcintent{08-answers-round-2.md, round 18} &
+  queued admin action or upgrade \srcintent{design intake} &
   pause burn or transfer; mint; release; change parameters \\
 ADMIN $(n_A,k_A)$, timelock $\Delta_A$ & change $\overline{M}_c$, $\varrho_c$, quorum sets, $\mathcal{G}$;
   set \texttt{migration\allowbreak{}Target} once; \emph{upgrade the contract}
-  \srcintent{08-answers-round-2.md, round 7} & mint; transfer; freeze \\
+  \srcintent{design intake} & mint; transfer; freeze \\
 \bottomrule
 \end{tabular}
 \caption{The four authorities of \Cref{con:bridge}. The role separation is a property of the
@@ -471,13 +470,13 @@ $\varrho_c$ & \num{10000000}\flux \emph{per chain} & leaky bucket inside each co
 $\varrho^{\mathrm{burn}}_c$ & \num{10000000}\flux \emph{per chain} & second bucket on the burn path (\Cref{rem:burn-ceiling}) \\
 $T_{\mathrm{win}}$ & \SI{24}{\hour} & leaky-bucket drain interval for both buckets \\
 $(n_M,k_M) = (n_R,k_R) = (n_A,k_A)$ & $(4,3)$ & one signer set for all three, the four named co-founders \\
-$\mathcal{G}$ & the same four, \textbf{1-of-4} & any single member pauses mint for $\le \Delta_g$ (\Cref{cor:pause}), or cancels a queued admin action or upgrade \srcintent{08-answers-round-2.md, round 18} \\
+$\mathcal{G}$ & the same four, \textbf{1-of-4} & any single member pauses mint for $\le \Delta_g$ (\Cref{cor:pause}), or cancels a queued admin action or upgrade \srcintent{design intake} \\
 limit adjustability & none & $\varrho_c$, $\varrho^{\mathrm{burn}}_c$ fixed at deployment \\
 upgrade path & \textbf{present}, under $(4,3)$, behind $\Delta_A = \qty{48}{\hour}$ & admin quorum may replace contract code after a \qty{48}{\hour} public queue (\Cref{rem:upgrade-voids}, \Cref{rem:timelock-decided}) \\
 premine & $0$ on every $c$ & no constructor mint; $M_c$ begins at zero \\
 \bottomrule
 \end{tabular}
-\caption{Decided bridge parameters \srcintent{08-answers-round-2.md, rounds 5--7}. The quorum figures
+\caption{Decided bridge parameters \srcintent{design intake}. The quorum figures
 supersede the $(n,k)$ recommendations that \Cref{as:admin} previously carried as open. The guardian
 row is no longer marked for confirmation: the pause is decided at 1-of-4, which is what makes
 \Cref{prop:worst-case} a bound rather than a restatement of the cap. The last two rows are in
@@ -491,7 +490,7 @@ correct.}
 A per-address mint limit is not a limit. Addresses on every $c \in \mathcal{C}$ are free to create:
 an EVM address is the hash of a locally generated public key and costs nothing to produce, so an
 adversary subject to a limit of $x$ per address obtains $nx$ by naming $n$ recipients, at the cost of
-$n$ transactions and nothing else \srcintent{08-answers-round-2.md, round 5} \srcinferred. Nothing in
+$n$ transactions and nothing else \srcintent{design intake} \srcinferred. Nothing in
 the Lock memo or the MintAuth digest of \Cref{con:bridge} binds \texttt{recipient} to an identity, and
 no such binding is available on any chain in $\mathcal{C}$ without an identity registry the design
 does not have and does not want. A rate control is only a control when the resource it meters cannot
@@ -589,7 +588,7 @@ $\varphi_{\mathrm{mint}}$ was locked and never minted, so it remains in $\mathsf
 requires no fee key. A lock whose value exceeds the bucket's headroom --- including any single lock
 above $\varrho_c$ --- is neither refused nor refunded: it stays pending and is minted in instalments
 across successive windows, and no admin refund power exists
-\srcintent{08-answers-round-2.md, round 18}. Algorithm~\ref{alg:mint} is written for the whole-lock
+\srcintent{design intake}. Algorithm~\ref{alg:mint} is written for the whole-lock
 case; the instalment form keeps an unminted remainder per $\ell$ in place of the binary
 $\mathsf{used}_c$ and admits $\min(v',\ \varrho_c - \mathsf{bucket}_c,\ \bcap{c} - M_c)$ per call,
 and every bound below is unchanged by it because each instalment passes the same tests.
@@ -619,7 +618,7 @@ $< B_c$. Value paid never exceeds $\sum_c \mathsf{cumBurn}_c$ minus what was alr
 \emph{stall visibly}; no partial payment occurs and no burn is lost, because the claim remains
 on-chain on $c$. A signer that detects an overlapping range abstains, which is the enforcement
 point for the disjointness invariant --- the L1 does not check it. A malformed address forfeits its
-own burn and blocks no other \srcintent{08-answers-round-2.md, round 18}.}
+own burn and blocks no other \srcintent{design intake}.}
 \BlankLine
 $\mathcal{N} \leftarrow$ nonces $n_b$ of burns on $c$ at depth $\ge D_c$, ordered\;
 $\mathsf{released}_c \leftarrow$ union of nonce ranges appearing in \texttt{FLXR1} memos for $c$ on the L1\;
@@ -649,8 +648,8 @@ deferred to a later window but never refused across the sequence of windows.
 
 \proposednote{A burn is never refused: the delaying implementation, recommended by this paper.
 Round 7 decided the \num{10000000}\flux{} ceiling and not which of the two implementations carries
-it \srcintent{08-answers-round-2.md, round 7}; no later round chooses, so the choice is recorded here
-as a recommendation rather than a decision \srcintent{08-answers-round-2.md, round 18}. Under it H5
+it \srcintent{design intake}; no later round chooses, so the choice is recorded here
+as a recommendation rather than a decision \srcintent{design intake}. Under it H5
 holds in the form \emph{no role can prevent a burn from eventually succeeding}, and whether the
 implementation carries an explicit deferral queue or simply declines to rate-limit burns at all is
 not consequential to any property in this section.}
@@ -698,7 +697,7 @@ security parameter, not only an operational one.}
 \paragraph{Administration, guardianship, and the upgrade path the decision retains.} Any single
 $g \in \mathcal{G}$ may call \texttt{pauseMint()}, setting
 $\mathsf{pausedUntil} \leftarrow \max(\mathsf{pausedUntil}, \mathrm{now} + \Delta_g)$; the call is
-attributable to $g$, and the decided rule is 1-of-4 \srcintent{08-answers-round-2.md, round 7}. The
+attributable to $g$, and the decided rule is 1-of-4 \srcintent{design intake}. The
 admin quorum may extend by $\Delta_A$ per signed extension, each on-chain. Burn, transfer and
 \texttt{migrate} are never paused, so a pause that is never lifted is a public, attributable,
 repeatedly-renewed act by named individuals, which is the whole defence against
@@ -708,18 +707,18 @@ again public and attributable. Admin parameter changes are queued on-chain and v
 $\Delta_A$; \emph{tightening} (lowering $\overline{M}_c$ or $\varrho_c$, removing a signer) executes
 immediately, \emph{loosening} waits. Any single $g \in \mathcal{G}$ may also call
 \texttt{cancel($q$)} on a queued admin action or upgrade $q$, removing it from $\mathsf{queue}$
-before it executes \srcintent{08-answers-round-2.md, round 18}; the call is attributable to $g$, as
+before it executes \srcintent{design intake}; the call is attributable to $g$, as
 the pause is.
 
 \textbf{The construction specifies no proxy, no \texttt{upgradeTo} and no \texttt{delegatecall} to
 mutable code (D3); the decided configuration keeps an upgrade path under the same 3-of-4}
-\srcintent{08-answers-round-2.md, round 7}. Under D3, replacement on EVM would be by migration:
+\srcintent{design intake}. Under D3, replacement on EVM would be by migration:
 ADMIN sets \texttt{migration\allowbreak{}Target} once, holders call \texttt{migrate(v)}, which burns on the old
 contract and calls \texttt{mintMigrated} on the new one whose \texttt{predecessor} is fixed at
 construction; the old contract keeps \texttt{burn} live forever, so a holder who never migrates can
 still exit to the L1. The predecessor path is uncapped by $\Lambda_c$ and capped by $\bcap{c}$, and
 the burn inside \texttt{migrate} takes no nonce and emits no \texttt{Burn}, so it enters no release
-range \srcintent{08-answers-round-2.md, round 18}: were it a nonced burn, Algorithm~\ref{alg:release}
+range \srcintent{design intake}: were it a nonced burn, Algorithm~\ref{alg:release}
 would pay a claim whose value had already been reissued on the successor and $\varsigma$ would go
 negative. Under the decided configuration the same replacement is available without
 holder action and without notice, which is convenient for repair and is the attack step of
@@ -727,7 +726,7 @@ holder action and without notice, which is convenient for repair and is the atta
 the timelock $\Delta_A$, and only if $\Delta_A > T_{\mathrm{react}}$.
 
 Guardian membership at launch is decided: the same four co-founders
-\srcintent{08-answers-round-2.md, round 5}, with the single-member pause of \Cref{con:bridge}
+\srcintent{design intake}, with the single-member pause of \Cref{con:bridge}
 retained and now confirmed at source --- \Cref{cor:pause} shows why that retention is load-bearing
 rather than incidental. $(n_A, k_A) = (4,3)$ is likewise decided, so the previously open clauses
 $n_A \le n_R$ and $k_A \ge k_R$ are satisfied trivially and vacuously: they hold because the sets are
@@ -768,7 +767,7 @@ instruction introspection: precisely the code path whose sysvar check was the Wo
 (\Cref{sec:bridging-incidents}), and therefore a named audit focus.
 
 \noindent\textbf{The quorum question is closed.} $(n_M, k_M) = (n_R, k_R) = (4,3)$, one set, the four
-named co-founders \srcintent{08-answers-round-2.md, round 5}. Both sets sit well inside the P2SH
+named co-founders \srcintent{design intake}. Both sets sit well inside the P2SH
 ceiling --- standardness caps the redeem script at 520 bytes, which is 15 compressed keys
 \srcinferred --- so the constraint that bounded $n_R$ from above is not active. The theft/censorship
 trade-off resolves as follows at $(4,3)$: theft needs 3 colluders and censorship needs 2 refusers, so
@@ -978,7 +977,7 @@ $\mathcal{C}_1 = \mathcal{C}_0 \cup \{\mathrm{SOL}\}$ & \SI{24}{\hour} & \num{30
 \end{tabular}
 \caption{The sustained term of \Cref{prop:worst-case} at the decided per-chain limit
 $\varrho^\star = \num{10000000}\flux$ per \SI{24}{\hour}
-\srcintent{08-answers-round-2.md, round 7}. Headroom at $t_0$ adds at most a further
+\srcintent{design intake}. Headroom at $t_0$ adds at most a further
 $|\mathcal{C}|\,\varrho^\star$. These figures hold under hypotheses (P) and (U) and not otherwise.
 \planned}
 \label{tab:worst-case}
@@ -989,7 +988,7 @@ $|\mathcal{C}|\,\varrho^\star$. These figures hold under hypotheses (P) and (U) 
 \Cref{prop:worst-case} is a statement about $T_{\mathrm{react}}$, so it would be vacuous if the
 adversary also held the pause. The adversary does not. The decided rule is that \texttt{pauseMint()} is a
 \textbf{single-member action of $\mathcal{G}$ at $|\mathcal{G}| = 4$} --- 1-of-4, with the bounded
-window $\Delta_g$ \srcintent{08-answers-round-2.md, round 7}. An adversary holding three of the four
+window $\Delta_g$ \srcintent{design intake}. An adversary holding three of the four
 keys therefore does not control the pause: one guardian remains able to act, and
 $T_{\mathrm{react}}$ is bounded above by that member's detection-and-response time. Hypothesis (P)
 of \Cref{prop:worst-case} is discharged, and the worst-case bound holds rather than collapsing to
@@ -1039,7 +1038,7 @@ launch (\Cref{sec:bridging-assumption}); it is not a reason to leave the case un
 \begin{remark}[Upgradability voids the rate limit unless the upgrade is slower than the reaction]
 \label{rem:upgrade-voids}
 The limits are fixed at deployment and not adjustable --- and the contracts are upgradable under the
-same 3-of-4 \srcintent{08-answers-round-2.md, round 7}. An adversary holding three keys is not
+same 3-of-4 \srcintent{design intake}. An adversary holding three keys is not
 obliged to mint under a limit it can delete: \textbf{step one of the attack is to upgrade the
 contract and remove the limit}, after which the bound of \Cref{prop:worst-case} constrains code that
 is no longer running. As specified today the rate limit therefore bounds nothing under exactly the
@@ -1061,7 +1060,7 @@ takes effect; the 1-of-4 pause can fire during the delay; the limit is still the
 the whole reaction window; and the rate limit binds again. The mechanism is the one the construction
 already specifies for loosening parameter changes, applied to the code as well as to the constants.
 Cancellation of a queued upgrade or admin change is likewise a single-member guardian action
-\srcintent{08-answers-round-2.md, round 18}; without it the pause would defer the upgrade's effect
+\srcintent{design intake}; without it the pause would defer the upgrade's effect
 only until $\Delta_g$ lapses, the queued upgrade would execute at $t_0 + \Delta_A$ regardless, and
 the bound of \Cref{prop:worst-case} would end there with $\sum_c \bcap{c}$ as the only ceiling
 after it.
@@ -1071,7 +1070,7 @@ the load-bearing open item in the bridge design; the decision follows. \planned
 \begin{remark}[$\Delta_A$ decided: \qty{48}{\hour}]
 \label{rem:timelock-decided}
 The upgrade timelock is set at $\Delta_A = \qty{48}{\hour}$, with upgrades remaining $3$-of-$4$
-\srcintent{evidence/design/08-answers-round-2.md}. Unanimity was considered and rejected for a
+\srcintent{design intake}. Unanimity was considered and rejected for a
 reason worth recording, because it is the opposite of the one that first suggests itself: $4$-of-$4$
 would indeed prevent an adversary holding three keys from upgrading, but it has no fault tolerance
 at all --- a single lost, destroyed or unavailable key would make the contract permanently
@@ -1084,7 +1083,7 @@ team's reasoning for keeping it, and for keeping the quorum at 3-of-4, is that a
 safety net while the system is being verified to work without bugs, and that ``it's easier to upgrade
 contract rather than releasing a new one and doing migration''; as the network evolves the intent is
 to move to non-upgradable contracts and automate what the quorum does today
-\srcintent{08-answers-round-2.md, round 11} (\vision). The paper records this because it changes what
+\srcintent{design intake} (\vision). The paper records this because it changes what
 the trust assumption \emph{is}: not a permanent property of the design, but an explicitly temporary
 one whose removal is intended and undated.
 
@@ -1101,10 +1100,10 @@ administered rather than trust-minimized, which is how \S\ref{sec:bridging-assum
 \paragraph{The renunciation trigger: stated in shape, proposed here in checkable form.} Two
 preconditions for locking immutability are settled: a \textbf{third-party security audit}, and a
 \textbf{proven operating record across edge scenarios --- chain reorganizations named explicitly}
-\srcintent{08-answers-round-2.md, round 12} (\planned). Separately, the team states that code will
+\srcintent{design intake} (\planned). Separately, the team states that code will
 primarily be written and audited using state-of-the-art AI models, with the third-party audit as an
 additional and distinct requirement rather than a substitute
-\srcintent{08-answers-round-2.md, round 12}. The paper records that as the stated development
+\srcintent{design intake}. The paper records that as the stated development
 practice; it is a claim about process, and this document takes no position on the assurance it
 provides, which is why the separate third-party requirement is the load-bearing one here.
 
@@ -1146,7 +1145,7 @@ treat silence as proof.
 
 \proposednote{The six renunciation criteria above are this paper's construction. What is settled
 is their \emph{shape}: a third-party security audit plus a proven operating record across edge
-scenarios including chain reorganizations \srcintent{08-answers-round-2.md, round 12}. The
+scenarios including chain reorganizations \srcintent{design intake}. The
 quantities --- twelve months, \num{10000000}\flux{} of cumulative volume, zero defect-fixing upgrades
 --- are proposed so that the stated shape becomes checkable by a third party rather than asserted;
 they can be changed without changing the shape. One element is a design point rather than a number and
@@ -1270,7 +1269,7 @@ valid and $\mathsf{A}$ asserts $\varsigma < 0$ or a false policy flag. It would 
 \emph{fail closed on silence}: if no valid attestation is submitted within $T_{\mathrm{silence}}$,
 the guardian pauses mint for $\Delta_g$. That direction is deliberate. The deployed \SAS watchdog
 fails \emph{open} on hash-service outage --- if both hash endpoints are unreachable it treats the
-node as secure and does nothing \srccode{fluxsas/\allowbreak{}src/\allowbreak{}watchdog.h}{566--596} --- and under the team
+node as secure and does nothing \srcprivate{\SAS{} watchdog} --- and under the team
 constraint an attester outage should stop issuance rather than continue it. Burn is unaffected in
 either case, so the degraded bridge is exit-only, which is the correct degradation.
 \settlednote{$T_{\mathrm{att}} = \num{120}$ blocks, $T_{\mathrm{silence}} = \SI{6}{\hour}$, fail-closed adopted (\Cref{tab:22-recommended}). $T_{\mathrm{att}}$ (natural domain: one attestation per L1 block, \num{2880} per day, down
@@ -1340,7 +1339,7 @@ is what makes \Cref{prop:worst-case}'s cap term inactive.
 \label{rem:global-cap}
 This paper read \num{560000000}\flux{} as a per-chain contract constant $\bcap{c}$, because that is
 the only reading a per-chain construction can enforce by itself. That reading is wrong: the figure is
-a \textbf{global cap across all chains} \srcintent{08-answers-round-2.md, round 13} (\planned).
+a \textbf{global cap across all chains} \srcintent{design intake} (\planned).
 The correction matters, because it relocates the enforcement rather than the number.
 
 \textbf{No contract can enforce a global cap.} A contract on chain $c$ can read its own
@@ -1357,13 +1356,13 @@ chains is dominated by value locked on the L1, so the global total is bounded by
 exceed it however many chains exist. This is the correct and sufficient mechanism, it is already
 specified, and it is exactly the mint-and-burn discipline the team describes --- ``if we mint on some
 chain, another chain is burning it or locking somewhere''
-\srcintent{08-answers-round-2.md, round 8}. The global cap is a property of the reserve, not of the
+\srcintent{design intake}. The global cap is a property of the reserve, not of the
 contracts. That holds under honest-minority operation, assumption~(ii) of the theorem; under the
 quorum compromise \Cref{prop:worst-case} models, the only contract-enforced aggregate is
 $\sum_c \bcap{c}$ --- \num{500000000}\flux{} at launch, \num{750000000}\flux{} with Solana --- and
 $\bcap{c}$ is not lowered for that, because the guardian's cancel over queued upgrades
 (\Cref{rem:upgrade-voids}) removes the path by which the aggregate was reachable
-\srcintent{08-answers-round-2.md, round 18}.
+\srcintent{design intake}.
 
 \textbf{Recommendation: set $\bcap{c}$ far lower, so it is a real backstop rather than a decoration.}
 A per-chain constant is genuinely useful as defence-in-depth --- it bounds the damage from a mint-path
@@ -1373,7 +1372,7 @@ it only does that work if it can bind. The largest measured per-chain liability 
 \num{250000000}\flux{} leaves roughly \SI{60}{\percent} headroom over the largest realistic
 requirement while capping single-chain damage at under half the global supply. That is this paper's
 recommendation; \num{560000000} on each chain is not a cap, it is the absence of one.
-\textbf{Settled at \num{250000000}\flux{}} \srcintent{08-answers-round-2.md, round 14}
+\textbf{Settled at \num{250000000}\flux{}} \srcintent{design intake}
 (\planned): the per-chain constant binds at a level that bounds single-chain damage below half the
 global supply, while leaving roughly \SI{60}{\percent} headroom over the largest measured per-chain
 liability.
@@ -1384,12 +1383,12 @@ would inherit a defect that voids its central security claim, and \Cref{sec:atte
 states the same finding from the other side. The \fluxsas attestation signing seed for every purpose
 is derived by HKDF over salt and domain values compiled identically into every binary; none of the
 inputs depends on the TPM, on Secure Boot state, or on any per-machine value
-\srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{411--481,466--469,503--506}. A signature from that key therefore
+\srcprivate{\SAS{} API server}. A signature from that key therefore
 demonstrates that the signer holds a value shipped in every copy of the software. It does not
 demonstrate that a particular machine observed a particular chain state. \textbf{A key that everyone
 holds cannot be slashed, and a signature it produces cannot be attributed to a bond.} The
 node-identity key does mix machine-derived values, but the key protecting its random component is
-itself a baked-in constant \srccode{fluxsas/\allowbreak{}src/\allowbreak{}disk\_encryption.h}{200--228}. What
+itself a baked-in constant \srcprivate{\SAS{} disk encryption}. What
 \Cref{sec:attested-execution} calls Requirement~0 --- per-node attester keys, generated on the node,
 whose public half is committed on the L1 in the bonded-tier registration transaction so that a
 signature is attributable to a specific bond outpoint --- must be met before any of
@@ -1408,7 +1407,7 @@ network exists to replace. This is the load-bearing hole in the attestation link
 filled, the ``bonded'' tier is a \emph{registered} tier: attributable but not slashable, and its
 attestations should be weighted in $\mathcal{G}$ accordingly.
 \decided{there is no slashing, here or anywhere in \Flux{}: no mechanism destroys or forfeits a
-holder's \flux{} \srcintent{08-answers-round-2.md, round 23}. That closes the construction question
+holder's \flux{} \srcintent{design intake}. That closes the construction question
 by removing the mechanism rather than by supplying one, and the consequence has to be carried rather
 than absorbed. \textbf{An attester bond that cannot be forfeited is a deposit, not a stake}, so
 \eqref{eq:bond-condition} cannot rest on it and the cryptoeconomic form of the security argument is
@@ -1527,7 +1526,7 @@ signature, and contract-level cap and rate limit, which CCTP does not need.
 At launch the MINT, RELEASE and ADMIN authorities of \Cref{tab:bridge-roles} are held by \emph{one}
 set: $n_M = n_R = n_A = 4$ and $k_M = k_R = k_A = 3$, the four keys held by the four named
 co-founders --- Tadeas Kmenta, Daniel Keller, Jeremy Anderson, Valter Silva
-\srcintent{08-answers-round-2.md, round 5} --- with $\mathcal{G}$ the same four individuals but at a
+\srcintent{design intake} --- with $\mathcal{G}$ the same four individuals but at a
 threshold of \textbf{one} (\Cref{tab:bridge-decided}). The assumption is that fewer than three of
 those four keys are compromised or collude. It is one assumption, not four independent ones. What
 supports it:
@@ -1573,7 +1572,7 @@ the configuration that has been decided is the collapsed one everywhere except t
 
 \paragraph{Why this is defensible, on the team's own constraint --- and what would make it not.} The
 governing constraint of this section is that \emph{a decentralized design that is exploitable is
-worse than the custodial incumbent} \srcintent{03-parallel-assets.md}. Taken seriously, it settles
+worse than the custodial incumbent} \srcintent{design intake}. Taken seriously, it settles
 the launch question. A more distributed signer set would have to be assembled from parties who can be
 held to their signatures; the mechanism for holding them --- a bond that can be forfeited --- does
 not exist on this chain (\Cref{op:slashing}), and the attestation keys that would identify them are
@@ -1589,7 +1588,7 @@ anything. \textbf{The accurate description is a custodial bridge with contract-e
 public verification, moving toward autonomy} --- not a decentralized bridge, and not a separation of
 powers. The intent on record is explicit about the direction and about the fallback: full autonomy
 afterwards, and ``if the autonomous design is not ready in time, ship 3-of-4 and take a second fork
-for the autonomous bridge'' \srcintent{08-answers-round-2.md}. Two things would make the position
+for the autonomous bridge'' \srcintent{design intake}. Two things would make the position
 indefensible rather than defensible, and both are checkable. \textbf{If the upgrade path ships
 without a timelock satisfying $\Delta_A > T_{\mathrm{react}}$, the bound is the cap rather than
 \num{20000000}\flux, and the argument above does not survive the substitution}
@@ -1621,14 +1620,14 @@ general: it is gated on the same slashing problem that leaves $\beta_{\mathrm{at
 because any replacement that removes the quorum must put something forfeitable in its place. What
 \emph{is} settled is the intent and the exit condition: the quorum is an explicitly temporary
 bring-up mechanism, and immutability is the stated destination, reachable through the criteria above
-\srcintent{08-answers-round-2.md, rounds 11--12}.}
+\srcintent{design intake}.}
 
 \subsection{Migration and consolidation}
 \label{sec:bridging-migration}
 
 \Cref{sec:parallel-assets} inventories ten chains carrying FLUX today. All ten legacy contracts
 would be retired, including the legacy Ethereum, BSC and Solana tokens, because the survivors are
-\emph{relaunched} rather than kept \srcintent{03-parallel-assets.md}; three new deployments would
+\emph{relaunched} rather than kept \srcintent{design intake}; three new deployments would
 follow, ETH and BSC at launch and Solana later. \planned
 
 \begin{remark}[Two migration paths, and ``surviving'' is not the same set as ``carried'']
@@ -1637,7 +1636,7 @@ The distinction matters more than the phrasing suggests, and conflating the two 
 mistake a reader could make here. \textbf{Only Ethereum and BSC are snapshot-and-distributed}: their
 balances are captured at $\hsnap$ and reissued $1{:}1$ into the new contracts, coordinated
 with exchange partners and ecosystem integrators, and their holders take no action at all
-\srcintent{evidence/design/08-answers-round-2.md}. \textbf{Every other chain redeems through the
+\srcintent{design intake}. \textbf{Every other chain redeems through the
 incumbent bridge} to the main chain during the six-month window, with unclaimed balances passing to
 the Foundation at close.
 
@@ -1684,7 +1683,7 @@ shortfall, the migration cannot open at 1:1 until it is covered, and the paper m
 
 \paragraph{Two migration mechanisms, not one, and the difference decides who is exposed.} The
 decided plan uses \emph{different} mechanisms for the surviving and the retiring chains
-\srcintent{08-answers-round-2.md, round 7}, and conflating them is what produced the
+\srcintent{design intake}, and conflating them is what produced the
 two-orders-of-magnitude error in earlier drafts of this subsection and of
 \Cref{sec:parallel-assets}. \textbf{Surviving chains are carried by snapshot; retiring chains are
 redeemed by the holder.} The first requires no holder action and therefore no holder is at risk of
@@ -1701,7 +1700,7 @@ computation the team's own crawler already performs on four of the five EVM chai
 Algorithm~\ref{alg:carry}, which consumes the same $\Lambda_c$ migration allowance that
 \texttt{mintMigrated} does, so bracket~(1) of \Cref{thm:reserve-dominance} and the conservation
 argument are unchanged. What changes is only who acts. The exercise is coordinated in advance with
-exchange partners and ecosystem integrators \srcintent{08-answers-round-2.md, round 7}, which is not
+exchange partners and ecosystem integrators \srcintent{design intake}, which is not
 a courtesy: a custodian's users hold no address of their own on the legacy contract, so a credit to
 the custodian's address is the only carry available for them and the custodian's internal ledger is
 what makes it reach a user.
@@ -1711,7 +1710,7 @@ what makes it reach a user.
 \label{alg:carry}
 \KwIn{The published snapshot height $\hsnap$; the published issuer-held address set
 $\mathcal{I}_c \subseteq \mathcal{A}_c$, whose balances are excluded from $\Lambda_c$
-(\Cref{tab:issuer-liability}) \srcintent{08-answers-round-2.md, round 18}; the balance map
+(\Cref{tab:issuer-liability}) \srcintent{design intake}; the balance map
 $\mathsf{bal}: \mathcal{A}_c \to \mathbb{Z}_{>0}$ reconstructed by \texttt{Transfer}-log replay of
 the legacy contract at $\hsnap$, over the address set $\mathcal{A}_c$; the migration
 allowance $\Lambda_c$; the new contract with $M_c = 0$, public mint paused.}
@@ -1745,7 +1744,7 @@ by an AMM pair, a lending market or a third-party bridge cannot be carried by cr
 contract's address --- the new token is a different address and the position does not follow it. The
 settled treatment is to read the position and credit the actual holder: ``from LP, staking we can see
 from the LP positions who is the actual holder and that we will distribute to the actual holder like
-we did in the past'' \srcintent{08-answers-round-2.md, round 9} (\planned). This is a stronger
+we did in the past'' \srcintent{design intake} (\planned). This is a stronger
 commitment than any of the three options previously listed, and the team reports precedent for
 having done it before. Two obligations follow and the paper states them: the resolution is
 \emph{per-protocol} work --- an AMM pair, a lending market and a bridge each expose beneficial
@@ -1755,14 +1754,13 @@ cannot see. \decided{the contract-held positions are not measured in this paper,
 rather than a limit. Balances held in liquidity-pool and staking contracts on Ethereum and BSC are
 public on-chain, readable by the same holder-enumeration method already used for the parallel-asset
 snapshots of \Cref{sec:parallel-assets}, and the team has performed that measurement before
-\srcintent{08-answers-round-2.md, round 24}. What matters for the migration argument is that the
+\srcintent{design intake}. What matters for the migration argument is that the
 quantity is \emph{obtainable}: a holder-address snapshot alone will miss these positions, and the
 carry of \Cref{sec:bridging-migration} must therefore resolve them per protocol before
 $h_{\mathrm{snap}}$ --- work this paper specifies but does not perform, because running it belongs to
 the migration rather than to the survey.}
 
-\textbf{(ii) Announcement: $\hsnap$ is announced in advance} \srcintent{08-answers-round-2.md,
-round 9} (\planned). This is the right choice and the paper does not hedge it: it lets holders
+\textbf{(ii) Announcement: $\hsnap$ is announced in advance} \srcintent{design intake} (\planned). This is the right choice and the paper does not hedge it: it lets holders
 arrange their balances, and it is the only option compatible with publishing a contract-held
 resolution list beforehand. It does admit the griefing vector previously noted --- an adversary may
 fragment a balance across many addresses to inflate the carry's gas cost --- and that vector has no
@@ -1806,7 +1804,7 @@ unspendable and binds the disposal to a \texttt{fluxAddr}; Solana has a self-cus
 \settlednote{Moot: no disposal contract is deployed on any chain (\Cref{rem:no-legacysink}), so no sink construction is required for Kadena, Tron or Algorand. Retained as a pointer because \S\ref{sec:22:recommended} records what the three constructions would be if a sink is ever wanted.}
 
 \paragraph{The decided migration terms.} Four terms are settled
-\srcintent{08-answers-round-2.md, rounds 5 and 7}, and they replace the window and disposition
+\srcintent{design intake}, and they replace the window and disposition
 parameters this subsection previously carried as open. \planned
 
 \begin{enumerate}
@@ -1821,7 +1819,7 @@ parameters this subsection previously carried as open. \planned
 \item \textbf{The redemption route is one-directional.} During the window the existing bridge permits
       migrating \emph{to} the main chain and claiming \emph{on} the main chain, and nothing else:
       holders can move to the main chain and nowhere else
-      \srcintent{08-answers-round-2.md, round 7}.
+      \srcintent{design intake}.
 \item \textbf{Unclaimed balances.} At window close, \textbf{unclaimed balances pass to the Flux
       Foundation to fund development.}
 \end{enumerate}
@@ -1883,7 +1881,7 @@ chains that survive and are carried across without holder action. \textbf{The fr
 within six months is unknown, and this paper does not estimate it}: there is no holder-count or
 dormancy measurement for any of the ten legacy assets in the evidence corpus, and a number produced
 without one would be a guess placed next to a real measurement.
-\srcintent{08-answers-round-2.md, round 7}
+\srcintent{design intake}
 
 \paragraph{Three consequences of routing redemption through the incumbent, one of which is a real
 mitigation.} First, the incumbent's custody model is not retired at $\hpa$ but at window close six
@@ -1892,7 +1890,7 @@ lock-and-mint path and \emph{not} to the redemption path, whose exposure remains
 the 32 hot keys with no bound and no on-chain attribution (\Cref{prop:dominance}). The section's
 dominance claim is therefore a claim about the steady state after window close, and about the new
 path from $\hpa$; it is not a claim about the window. \textbf{Second, and this materially narrows
-the first: the route is one-directional} \srcintent{08-answers-round-2.md, round 7}. The incumbent's
+the first: the route is one-directional} \srcintent{design intake}. The incumbent's
 residual role during the window is an \emph{exit to the main chain}, not general two-way traffic, so
 the swap engine's chain-pair matrix, its several disagreeing confirmation tables and its
 finished-before-sent state machine (\Cref{sec:bridging-incumbent}) are not all in use for it. The
@@ -1910,7 +1908,7 @@ the legacy ERC-20 lacks, since it has no \texttt{burn}
 \srccode{flux-eth-bsc/flux.sol}{6--13}. Its purpose was to prevent a unit being redeemed for L1 FLUX
 and then sold on to a buyer who does not know the claim has already been made.
 
-\textbf{It will not be deployed} \srcintent{08-answers-round-2.md, round 14} (\planned), and the
+\textbf{It will not be deployed} \srcintent{design intake} (\planned), and the
 reasoning is a cost comparison the decision to route redemption through the incumbent makes decisive.
 Building, auditing and deploying a disposal contract on eight retiring chains --- including the three
 non-EVM constructions that have no common shape (\S\ref{sec:22:recommended}) --- is substantial work
@@ -1936,12 +1934,12 @@ roadmap's own precedent for a parallel-asset change is announcement at least \SI
 $\hsnap$ would be published at announcement, i.e.\ no later than
 $\hpa - \num{259200}$, together with each chain's issuer-held set $\mathcal{I}_c$ and the per-chain
 dead addresses to which the Foundation transfers its own holdings, since both are needed before
-$\hsnap$ \srcintent{08-answers-round-2.md, round 18}. Holders would be reached through per-asset redemption statistics
+$\hsnap$ \srcintent{design intake}. Holders would be reached through per-asset redemption statistics
 published from the snapshot, relabelled explorer token pages, exchange notices, wallet banners, and
 the incumbent \Fusion endpoints answering with migration instructions for the whole window. The
 single most important public act is that the Foundation immobilises its own
 legacy holdings first, by transferring them to a published per-chain dead address
-\srcintent{08-answers-round-2.md, round 18} --- the bulk of five EVM contracts' \num{440000000}-unit pre-mint each,
+\srcintent{design intake} --- the bulk of five EVM contracts' \num{440000000}-unit pre-mint each,
 \num{2.2e9} units in total \srcinferred --- because after it, a legacy contract's remaining
 \texttt{totalSupply} is public holdings only, the two disagreeing reserve-wallet lists stop
 mattering, and the residual that passes to the Foundation at close is a number about third-party
@@ -1951,17 +1949,17 @@ not ask for), and whether \texttt{permit}/gasless migration is offered.}
 \proposednote{Direct notice by zero-value calldata to holder addresses above a threshold
 (approximately \num{21000} gas per holder) is this paper's proposal, with the threshold and whether
 to send the notices at all unchosen; who pays for the gasless \texttt{permit} path is likewise not
-recorded as decided \srcintent{08-answers-round-2.md, round 18}.}
+recorded as decided \srcintent{design intake}.}
 
 \paragraph{Base, explicitly.} Base carries a deployed FLUX contract today
 \srccode{flux-supply-tracker/\allowbreak{}index.html}{346}, added after the 2023 holder-snapshot tooling and
 absent from it. The public roadmap names Base a survivor twice
 \srcroadmap{flux-roadmap-public.md:97,131}; the settled decision recorded for this paper names ETH
-and BSC \srcintent{03-parallel-assets.md}. Base is not BSC --- it is an Ethereum L2, and they differ
+and BSC \srcintent{design intake}. Base is not BSC --- it is an Ethereum L2, and they differ
 in finality, bridging architecture, audit surface and holder base. Three statements follow, and the
 paper makes all three. First, under the settled decision Base is retired at $\hpa$ and its holders
 redeem through the route of the preceding paragraphs. Second, \textbf{the decision is final and no later
-re-addition is contemplated} \srcintent{08-answers-round-2.md, round 5} --- this closes a question
+re-addition is contemplated} \srcintent{design intake} --- this closes a question
 earlier drafts left open. The engineering observation that made it worth leaving open remains true
 and is now only an observation: because the canonical contract is one EVM codebase, a later Base
 deployment would carry near-zero marginal audit surface, so retirement is a decision about
@@ -1993,12 +1991,12 @@ hold the new address. \planned
       per-chain limit $\varrho_c$ each contract enforces.
 \item \textbf{Carry the snapshot} on ETH and BSC (Algorithm~\ref{alg:carry}), with exchange partners
       and ecosystem integrators coordinated in advance
-      \srcintent{08-answers-round-2.md, round 7}. A custodian must know before $\hsnap$
+      \srcintent{design intake}. A custodian must know before $\hsnap$
       which of its addresses will be credited and must have decided how the credit reaches its users;
       contract-held balances are the open item of the note above. Transfers enable only when the
       carry is complete.
 \item \textbf{Foundation immobilises its legacy reserves} on the retiring chains, by transfer to
-      the published per-chain dead addresses \srcintent{08-answers-round-2.md, round 18}.
+      the published per-chain dead addresses \srcintent{design intake}.
 \item \textbf{Open} holder-initiated migration on the retiring assets and public lock-to-mint on ETH
       and BSC.
 \item \textbf{Solana}: audit A2 --- the bridge program \emph{and} the SSP multisig program, the
@@ -2014,7 +2012,7 @@ not before; steps 1 and 2 must complete earlier, and step 2 is not complete: $\L
 for all ten legacy assets, and $R_0$ is not yet established. \textbf{Whether public mint opens under the named quorum or waits for a bonded
 attester feed is settled by the same decision:} the launch configuration is 3-of-4 with autonomy to
 follow, and the fallback on record is to ship 3-of-4 and take a second fork
-\srcintent{08-answers-round-2.md}, so public mint opens under named signers and the attestation link
+\srcintent{design intake}, so public mint opens under named signers and the attestation link
 of \Cref{sec:bridging-attestation} arrives afterwards. The interval during which the pause authority
 is four named individuals rather than a bonded set is therefore not an accident of sequencing; it is
 the design until the second fork, and \Cref{cor:pause} is what bounds it.
@@ -2036,12 +2034,12 @@ statistics --- which is what an explorer or an aggregator uses to mark the legac
 The construction above leaves nineteen parameters open. Seventeen are recommended here; two are left
 open because they are genuinely undetermined rather than merely unchosen, and the section says which
 and why. Each was proposed by this paper and \textbf{confirmed by the author}
-\srcintent{08-answers-round-2.md, round 11}, the $T_{\mathrm{react}}$ target in round 18.
+\srcintent{design intake}, the $T_{\mathrm{react}}$ target in round 18.
 
 \begin{table}[H]
 \centering\footnotesize
 \caption{Bridge parameters. Proposed by this paper and \textbf{confirmed by the author}
-\srcintent{08-answers-round-2.md, round 11}, the $T_{\mathrm{react}}$ target in round 18; the two
+\srcintent{design intake}, the $T_{\mathrm{react}}$ target in round 18; the two
 marked \emph{open} remain so. \planned,
 \srcinferred{} for the derivations except where cited.}
 \label{tab:22-recommended}
@@ -2074,7 +2072,7 @@ fail-closed on silence & \textbf{yes} & a bridge that mints while blind is the f
 against \\
 $T_{\mathrm{react}}$ (launch operating target) & \textbf{\SI{24}{\hour}} & the value at which
 \Cref{tab:worst-case} and \Cref{prop:dominance} are evaluated; a published operational target, not a
-contract constant \srcintent{08-answers-round-2.md, round 18} \\
+contract constant \srcintent{design intake} \\
 migration fee & \textbf{0}, gasless via \texttt{permit} & holders did not ask for this consolidation \\
 exchange sequencing & \textbf{before the public window} & venues need lead time; stranded custodial
 users are the larger harm \\
@@ -2241,7 +2239,7 @@ copy the exploit. \emph{An in-place upgrade regressed a security invariant.} &
 \textbf{This row is answered only by the timelock.} The construction specifies no upgradeability (D3), with
 replacement only by holder-initiated migration to a separately audited contract; the decided
 configuration keeps an upgrade path under the same 3-of-4
-\srcintent{08-answers-round-2.md, round 7}. Under D3 the Nomad mechanism is unavailable; under the
+\srcintent{design intake}. Under D3 the Nomad mechanism is unavailable; under the
 decision it is available to three keys, and the \qty{48}{\hour} timelock of \Cref{rem:timelock-decided} is what
 makes it slow and public instead. \\
 \addlinespace

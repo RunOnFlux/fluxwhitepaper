@@ -29,7 +29,7 @@ were published as an operator guide \citep{zelbenchguide}.
 exception. Medium returns HTTP 403 to scripted retrieval, so only \citet{kmentaflux2020} carries an
 independently confirmed timestamp (2020-03-18T03:17:28Z, read from the \texttt{datePublished}
 metadata of an Internet Archive capture of 2020-11-06); the remaining dates are those of the
-compiled index this paper was given. Both articles under the author's own byline do carry confirmed
+index compiled for this survey. Both articles under the author's own byline do carry confirmed
 archival fixity --- the Wayback availability API reported status-200 captures for each on
 2026-09-06 --- so the \emph{content} is anchored even where the publication date is not. None of the
 arguments in this paper depends on those dates in any case: the 2018 and 2019 anchors above rest on
@@ -51,6 +51,26 @@ the destination directly: ``a cloud that serves software agents as first-class c
 account, no card, no human in the loop'' \vision \srcroadmap{flux-roadmap-public.md:7}. Whether that
 demand materializes is outside this paper's scope; whether the architecture that follows from betting
 on it is coherent, and how much of it is actually built, is the whole of it.
+
+Declining to forecast is not the same as declining to say why the bet is reasonable, and a reader
+entitled to skip Part~IV on the grounds that its premise is unargued deserves the argument. Three
+things make it worth taking seriously. \emph{First, the direction is already observable rather than
+speculative}: software that calls APIs, provisions resources and completes multi-step tasks without a
+human approving each step is a shipping product category, not a projection, and every such call is
+one a card-and-account model was not designed to price. \emph{Second, the bet does not require
+agents to dominate.} It requires only that the \emph{marginal} new customer is increasingly
+machine-initiated, because the three assumptions being replaced --- an account someone opens, a card
+someone consents to, a contract someone signs --- fail at the first such customer, not at the
+majority. A provider that cannot serve one autonomous buyer cannot serve any. \emph{Third, the
+failure mode is bounded}: every mechanism Part~IV specifies --- delegated authority with a budget,
+payment without a custodian, deployment without an account --- is independently useful to a human
+tenant who wants to bound what a script may spend or deploy without a hosting relationship. If the
+demand does not arrive, the architecture is over-built for its market rather than wrong about its
+mechanism.
+
+That is the case, and it is deliberately not stronger than the evidence. \Cref{sec:evaluation} names
+what would falsify it, and \Cref{sec:conclusion} states plainly that if agents are not the customer,
+much of the target architecture solves a problem the network does not have.
 
 There is a second, narrower observation about \emph{what} such software would run, and it turns out to
 have architectural consequences rather than only commercial ones. Much of the work an autonomous agent
@@ -103,7 +123,7 @@ existing block-production rotation, one small increment per block, so that opera
 track what tenants actually pay rather than a fixed issuance schedule alone. \PNR is specified to
 implementation depth in \S\ref{sec:pnr} — the consensus rule, the pool's per-block update, and two
 fairness proofs — but nothing in it exists in any repository surveyed for this paper
-\planned \srcintent{evidence/design/02-pnr.md}. It is a design, stated precisely enough to build, not
+\planned \srcintent{design intake}. It is a design, stated precisely enough to build, not
 a description of running code.
 
 \paragraph{The substrate hardened by attested execution.}
@@ -130,7 +150,7 @@ today \shipped (\S\ref{sec:shielded-value}). The shielded pools presently hold
 consensus: transparent-to-shielded transfers have been rejected since height \num{835554}
 \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{1398--1408}, so every shielded unit on the chain today predates
 the measured tip by over two million blocks. \textbf{Both pools are to be retired}
-\srcintent{08-answers-round-2.md, round 10} (\planned). The measurement above is most of the
+\srcintent{design intake} (\planned). The measurement above is most of the
 argument: a mechanism holding \SI{0.0225}{\percent} of supply, unable to grow, and requiring a Rust
 proving stack in the consensus path is a poor trade against a stated goal of less code and a more
 thorough audit (\S\ref{sec:shielded-retirement}). The decisive argument is narrower and is worth
@@ -195,7 +215,7 @@ can enforce a rate limit or a cumulative cap \planned (\S\ref{sec:agent-identity
 
 The paper makes no price claim, sets no target, and uses no investment framing anywhere; it confines
 itself to issuance, supply, operator income and demand
-\srcintent{evidence/design/00-scope.md}. It does not assert that the agent-demand premise stated in
+\srcintent{design intake}. It does not assert that the agent-demand premise stated in
 \S\ref{sec:intro-problem} is correct — only that the architecture described in the rest of the paper
 follows from betting that it is. And it does not claim that the work remaining to reach that
 architecture is uniformly straightforward. \S\ref{sec:feasibility} classifies every planned mechanism
@@ -248,13 +268,13 @@ invention and reports, in \S\ref{sec:feasibility}, that it is not uniformly so.
 Three different activities produced the claims in this paper, and keeping them visibly separate is
 the single most important discipline it follows. What was \emph{read} is a corpus of \Flux
 repositories, including private ones that the team has agreed may be cited freely by file and line in
-this public document \srcintent{evidence/design/00-scope.md}; every \shipped claim about behaviour
+this public document \srcintent{design intake}; every \shipped claim about behaviour
 traces to a specific file and line range in that corpus. What was \emph{measured} is a set of named public
 endpoints — chiefly \texttt{api.\allowbreak{}runonflux.\allowbreak{}io}'s node, application and blockchain-info routes — queried
 on 2026-09-03 at chain height \num{2917115}, with every figure reproducible by running the
 accompanying scripts against the same live API. What was \emph{designed} is different in kind from
 both: mechanisms specified in this paper's own design-intake documents
-(\srcintent{evidence/design/*.md}) that do not exist in any repository and are not measurements of
+(\srcintent{design intake}) that do not exist in any repository and are not measurements of
 anything running, but are this paper's own construction, stated to a level of precision that a reader
 could implement and that a reviewer could attack. A reader who cannot tell, at any given sentence,
 which of these three produced it has found a defect in this paper, not a subtlety to be inferred.

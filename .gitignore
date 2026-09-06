@@ -13,3 +13,6 @@ paper/*.synctex.gz
 paper/main.pdf
 .DS_Store
 __pycache__/
+
+# Internal-only tracking documents must never land here.
+SECURITY-INTERNAL.md

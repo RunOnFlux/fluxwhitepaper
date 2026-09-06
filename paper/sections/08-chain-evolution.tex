@@ -104,7 +104,7 @@ pruning and \PoN\ compatible without further engineering \shipped\
 The pruning-depth policy and the archival-redundancy target were carried as open. They are settled by
 a decision that resolves both at once and relocates the problem: \textbf{archive nodes are
 applications running on \FluxCloud}. The team deploys them as tenant workloads and sells access to
-RPC and other node APIs as a product \srcintent{08-answers-round-2.md, round 16} (\planned).
+RPC and other node APIs as a product \srcintent{design intake} (\planned).
 
 Two consequences, and the second is the one worth stating carefully.
 
@@ -243,12 +243,12 @@ finding, and is not the part of the system this scope decision needs to address 
 deliberately bounded to consensus, transparent transactions, and the keys securing them, with the
 shielded layer explicitly excluded and deferred as the field matures, on the grounds that privacy is
 optional on \Flux\ and the transparent layer is the one every user and every consensus rule depends on
-\srcintent{05-privacy-pq.md} \vision. This is presented as a considered position, not a gap, and it
+\srcintent{design intake} \vision. This is presented as a considered position, not a gap, and it
 carries a consequence the paper states plainly because a reviewer would otherwise find it: Groth16, the
 proving system underlying the shielded pool described in Section~20, rests on a pairing assumption and
 is not post-quantum secure. An unqualified ``quantum-ready \Flux'' claim made alongside a live shielded
 pool built on Groth16 would therefore be an error; the bounded scope stated here is exactly what avoids
-making it \srcintent{05-privacy-pq.md}.
+making it \srcintent{design intake}.
 
 \textbf{The retirement decision simplifies this considerably.} With both shielded pools retired
 (\S\ref{sec:shielded-retirement}), Groth16 leaves the consensus path altogether, and with it the one
@@ -264,7 +264,7 @@ remove the shielded layer's inherited trusted setup, which is a real, independen
 improvement discussed in Section~20 --- but it would not make the shielded pool post-quantum secure,
 since Halo2 rests on discrete-log hardness rather than a quantum-hard assumption. Eliminating a trusted
 setup and achieving post-quantum security are different properties, and this section, Section~14, and
-Section~20 must not conflate them \srcintent{05-privacy-pq.md}.
+Section~20 must not conflate them \srcintent{design intake}.
 
 \paragraph{The migration problem.} Signature migration on a UTXO chain is not an ordinary protocol
 upgrade, because the protocol cannot move funds it does not hold the key to.
@@ -405,7 +405,7 @@ keep being paid. The set with exposed keys \emph{is} the set transacting regular
 \begin{remark}[Pre-staged commitment: the move the mandatory registration makes available]
 \label{rem:pq-prestage}
 The recommendation of \Cref{rem:pq-disposition} is eligibility-forced migration, and the team has
-adopted it \srcintent{08-answers-round-2.md, round 15} (\planned). The frontier version of it exploits
+adopted it \srcintent{design intake} (\planned). The frontier version of it exploits
 a timing asymmetry that Bitcoin cannot use, and costs almost nothing to start now.
 
 Extend the \FluxNode{} START and CONFIRM transactions with a \textbf{post-quantum key commitment}: a
@@ -445,7 +445,7 @@ registration channel. For that class \Flux{} is in exactly Bitcoin's position an
 whatever BIP-361's rescue work establishes rather than invent a parallel scheme.
 \proposednote{The pre-staged post-quantum key commitment of \Cref{rem:pq-prestage} is this
 paper's construction. What is settled is the disposition it extends --- eligibility-forced migration
-for \FluxNode{} collateral \srcintent{08-answers-round-2.md, round 15}. The commitment is separable
+for \FluxNode{} collateral \srcintent{design intake}. The commitment is separable
 from it: eligibility-forced migration works without pre-staging, and pre-staging simply makes the
 eventual cutover a flag rather than a migration. Its value of $\mathsf{alg\_id}$ is gated on NIST
 primitive selection and is out of scope here; the height at which the commitment becomes mandatory
@@ -455,8 +455,7 @@ voluntarily before that height are equally useful.}
 
 \begin{remark}[The adopted disposition: per class, using eligibility rather than confiscation]
 \label{rem:pq-disposition}
-\textbf{The team has adopted the per-class disposition below} \srcintent{08-answers-round-2.md,
-round 15} (\planned). It assigns a disposition per output class rather than choosing one of the three
+\textbf{The team has adopted the per-class disposition below} \srcintent{design intake} (\planned). It assigns a disposition per output class rather than choosing one of the three
 globally, because the classes differ in exactly the property the dispositions turn on --- whether the
 public key is already known.
 
@@ -490,7 +489,7 @@ It is computable from the chain by scanning spent scriptSigs and is a prerequisi
 total exposed fraction rather than the collateral component alone.}
 
 \settlednote{Eligibility-forced migration for \FluxNode{} collateral, per class as above
-\srcintent{08-answers-round-2.md, round 15}. The finding it rests on ---
+\srcintent{design intake}. The finding it rests on ---
 \Cref{rem:pq-collateral-exposed}, that collateral public keys are on-chain by design --- is verified
 in source. Open: the height at which the confirmation requirement applies, the post-quantum output
 type, and the pre-staged commitment of \Cref{rem:pq-prestage}. The primitive itself is gated on NIST

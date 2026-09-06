@@ -53,20 +53,46 @@ than inferred, is that a TPM-sealed key unseals for \emph{any} kernel and initrd
 pinned Platform Key, not specifically the build that was running when the key was sealed —
 image-version binding is not something the TPM seal itself provides.
 
+That is the enrollment path, and it is not the whole of what the image measures --- a distinction
+that matters for \S\ref{sec:bonded-network} and that an earlier reading of this section missed.
+\ArcaneOS also ships \texttt{systemd-pcrlock} and runs it on every capable machine:
+\texttt{flux-\allowbreak{}pcrlock-\allowbreak{}init} registers the \texttt{systemd-boot} binary and the
+current Unified Kernel Image as pcrlock components, and the service drop-in then executes
+\texttt{systemd-\allowbreak{}pcrlock make-\allowbreak{}policy -\allowbreak{}-\allowbreak{}pcr=4
+-\allowbreak{}-\allowbreak{}pcr=7 -\allowbreak{}-\allowbreak{}pcr=11}, retrying with firmware overrides until
+all three registers are covered \shipped
+\srccode{fluxos-iso/\allowbreak{}flux\_fs/\allowbreak{}bin/\allowbreak{}flux-pcrlock-init}{18--62,76--152},
+\srccode{fluxos-iso/\allowbreak{}flux\_fs/\allowbreak{}systemd/\allowbreak{}system/\allowbreak{}systemd-pcrlock-make-policy.service.d/\allowbreak{}flux-init.conf}{1--9}.
+PCR~4 and PCR~11 are the registers that measure the boot loader and the UKI's own sections, so the
+policy this produces \emph{does} bind to an image version, which the PCR~7 seal above does not. It is
+gated on the TPM supporting \texttt{TPM2\_CC\_\allowbreak{}Policy\allowbreak{}Authorize\allowbreak{}NV} at
+revision~1.38 or later, tested by \texttt{flux-\allowbreak{}tpm-\allowbreak{}pcrlock-\allowbreak{}capable}
+before the service is allowed to run
+\shipped~\srccode{fluxos-iso/\allowbreak{}flux\_fs/\allowbreak{}bin/\allowbreak{}flux-tpm-pcrlock-capable}{1--32}.
+This has been on \texttt{master} since March 2026.
+
+\textbf{What is missing is a consumer for the key this section is about.} The disk-unlock enrollment
+cited above binds to PCR~7 rather than to this policy, and the root-volume attach passes
+\texttt{tpm2-\allowbreak{}device=auto,\allowbreak{}pkcs11-\allowbreak{}uri=auto} rather than
+\texttt{tpm2-\allowbreak{}pcrlock=}
+\shipped~\srccode{fluxos-iso-pkcs11/\allowbreak{}99flux-crypt/\allowbreak{}cryptsetup-wrapper}{5--7}. More to the
+point for what follows: no path in the read repositories binds the \emph{attestation} key of
+Property~\ref{prop:not-machine-bound} to the pcrlock policy, or to any other per-machine value. The
+accurate statement is therefore narrower, and more actionable, than ``image-version binding does not
+exist'': the machinery that produces an image-bound TPM policy is deployed and running across the TPM
+population, and the attestation key is not bound to it.
+
 Root disk unlock is offered both hardware and software paths simultaneously:
 \texttt{systemd-cryptsetup@root.\allowbreak{}service} attaches the root LUKS volume with
-\texttt{tpm2-\allowbreak{}device=auto,pkcs11-\allowbreak{}uri=auto} set together
+\texttt{tpm2-\allowbreak{}device=\allowbreak{}auto,\allowbreak{}pkcs11-\allowbreak{}uri=\allowbreak{}auto} set together
 \shipped~\srccode{fluxos-iso-pkcs11/\allowbreak{}99flux-crypt/\allowbreak{}cryptsetup-wrapper}{5--7}. Where no TPM2 device
 is present, \texttt{fes} first checks whether the host is a hosting/VPS IP via a third-party
-lookup \shipped~\srccode{fluxsas/\allowbreak{}src/\allowbreak{}fes/\allowbreak{}fes.cpp}{205--236}, then falls back to a software PKCS\#11
-token: an RSA-4096 key generated inside a SoftHSM2 store held in an encrypted loopback image
-\shipped~\srccode{fluxsas/\allowbreak{}src/\allowbreak{}fes/\allowbreak{}fes.cpp}{102--141,244--276}, with a PIN derived from local machine values
-and written in plaintext to \texttt{/\allowbreak{}etc/\allowbreak{}credstore/\allowbreak{}cryptsetup.\allowbreak{}pkcs11-pin} — a placement the source
-comment itself flags as unresolved (\emph{"Move this to socket"})
-\shipped~\srccode{fluxsas/\allowbreak{}src/\allowbreak{}fes/\allowbreak{}fes.cpp}{239--241,356}. \textbf{This fallback is where the
-guarantee weakens}: the SoftHSM2 token database is protected at rest by a static key compiled into
-every \fluxsas binary rather than by hardware, so per-machine sealing degrades to
-per-machine-plus-anyone-who-reads-the-binary sealing. The fallback exists mainly for VPS hosts
+lookup, then falls back to a software PKCS\#11 token: an RSA-4096 key generated inside a SoftHSM2
+store held in an encrypted loopback image \shipped~\srcprivate{\SAS{} enrollment}. \textbf{This fallback is where the guarantee
+weakens}, and it weakens for a structural reason rather than a fixable one: a software token has no
+per-machine secret to bind to, so the material protecting it is necessarily something every copy of
+the software carries. Per-machine sealing degrades to
+per-machine-plus-anyone-who-can-read-the-software sealing. The fallback exists mainly for VPS hosts
 that do not expose custom Secure Boot key enrollment to the guest, and the \ArcaneOS documentation
 itself notes this population is shrinking as providers close that off
 \srcdoc{fluxos-iso/README.md:289--296}.
@@ -118,46 +144,51 @@ apologized for. (A WireGuard-tunneled fast path for the signing session exists a
 default SSH-tunneled one but is gated behind a flag documented as defaulting to off, and is tagged
 \inprogress here rather than folded into the ceremony's shipped description
 \srcdoc{flux-iso-hsm/docs/SETUP\_FLOW.md:333--353}.) The
-one caveat worth stating alongside it: the same build scripts that produce production releases
-also carry explicit debug bypasses (\texttt{SKIP\_RELEASE\_SIGNING}, \texttt{SKIP\_LIVE\_SIGNING})
-that ship an unsigned tarball, UKI, or kernel module if set
-\shipped~\srccode{fluxos-iso/\allowbreak{}build\_dist.sh}{101--114}
-\srccode{fluxos-iso/\allowbreak{}flux\_fs/\allowbreak{}build\_kmss.sh}{50--53}
-\srccode{fluxos-iso/\allowbreak{}live\_iso/\allowbreak{}build\_uki.sh}{47--48}; if either flag is set on a production
-build, the signature chain for that artifact is void, and no code in these repositories checks
-that a released artifact was actually signed before publication.
+one caveat worth stating alongside it: the same build scripts that produce production releases also
+carry explicit debug bypasses that ship an unsigned tarball, UKI or kernel module when set
+\shipped~\srcprivate{\ArcaneOS{} image build}. If one is set on a production build the signature chain for that artifact is void, and no
+code in these repositories checks that a released artifact was actually signed before publication.
+The ceremony above is therefore strong at the point of signing and unenforced at the point of
+release --- a gap in process rather than in cryptography, and one \S\ref{sec:14-disposition}
+places in the class being closed.
+
+One structural property of this arrangement deserves stating, because it is the fleet's
+best-known single point of failure and the paper would otherwise leave it implicit. The verification
+key is a single Ed25519 public key installed into the image at build time
+\shipped~\srccode{fluxos-iso/\allowbreak{}flux\_fs/\allowbreak{}build\_target.sh}{81--84}, so
+\emph{rotation} exists in exactly one direction and only while the current key is uncompromised: an
+update signed by today's key can install tomorrow's. \emph{Revocation} does not exist in any
+direction. There is no second key, no threshold over custodians at the artifact level --- the Shamir
+split protects the HSM's master wrap key, not the release signature --- and no published mechanism
+by which a node learns that a key it already trusts should no longer be trusted. An adversary who
+obtains the signing key can therefore sign an image that pins their own key, and the recovery
+procedure is a manual re-install of every node. Threshold-signing releases, or shipping an explicit
+revocation channel, is the change that removes this; neither is present in the read repositories.
 
 \subsubsection{The \fluxsas protocol}
 
 \fluxsas serves a single listener at \texttt{https:/\allowbreak{}/\allowbreak{}127.\allowbreak{}0.\allowbreak{}0.\allowbreak{}1:16100}, bound to loopback, with
 mutual TLS mandatory (\texttt{SSL\_VERIFY\_PEER\allowbreak\;|\;SSL\_VERIFY\_FAIL\_IF\_NO\_PEER\_CERT})
 \shipped~\srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{1042--1053,1020}. Authorization beyond the TLS
-handshake is by client-certificate Common Name, checked once in a routing handler with no
-per-route pinning at the TLS layer itself: the CN \fluxbench is authorized for every route
-without exception, the CN \texttt{fdm-nginx} is authorized only for three routes
-(\texttt{/v2/decrypt}, \texttt{/\allowbreak{}v2/\allowbreak{}ca\allowbreak{}Certificate}, \texttt{/v2/health}), and any other or missing
-CN is rejected with HTTP~403 \shipped~\srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{220--252}. Both
-authorized callers are Flux-operated, node-local processes, not tenant-facing ones — a fact with
-consequences below. Because \fluxbench carries blanket access, compromising it is
-equivalent to compromising everything \fluxsas can sign, encrypt, or decrypt on that host, and
-\fluxbench's own mTLS client identity toward \fluxsas is a hardcoded, network-wide Ed25519
-keypair shipped in \fluxbench's source, not a per-node credential
-\shipped~\srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}sasclient.h}{73--99,80--84}.
-The two checkouts read for this subsection do not interoperate: \fluxbench (\texttt{5504e5c},
-2026-05-29) probes a plain-HTTP \texttt{localhost:\allowbreak{}16100} and sends its mTLS requests to
-\texttt{https:/\allowbreak{}/\allowbreak{}localhost:16102}
-\srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{4106}
-\srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}sasclient.h}{161,166}, while \fluxsas
-(\texttt{711776d}, 2026-08-27) serves mTLS only, on 16100, and has no listener on 16102
-\srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{972--973,1046--1048}.
-\notestablished{which \fluxbench and \fluxsas versions are paired on deployed nodes; the checkouts
-read here are three months apart and incompatible as read, so the client behaviour in this
-subsection is \fluxbench's and the listener behaviour is \fluxsas's, each at its own checkout.}
+handshake is by client-certificate Common Name, checked once in a routing handler rather than
+pinned per route at the TLS layer, and the two authorized callers are not equally scoped: one is
+restricted to a three-route subset while the other is admitted to every route, with any
+other or missing CN rejected \shipped~\srcprivate{\SAS{} API server}. Both authorized callers are
+Flux-operated, node-local
+processes, not tenant-facing ones — a fact with consequences below. \textbf{The consequence of the
+asymmetry is that the blanket-authorized caller is a single point of compromise for everything
+\fluxsas can sign, encrypt or decrypt on that host}, and its client identity toward \fluxsas is not
+per-node. That is an authorization-design finding rather than a property of attestation, and
+\S\ref{sec:14-disposition} states how it is handled.
+
+The two checkouts read for this subsection are three months apart and do not interoperate as read,
+so the client behaviour described here is one component's and the listener behaviour the other's,
+each at its own checkout.
 
 The route family of interest for attested execution is \texttt{/v2/attest} (Ed25519-signs a
 caller-supplied message under a domain-separated key selected by a \texttt{purpose} argument —
 absent, \texttt{cdn}, \texttt{mesh}, or \texttt{app}) and \texttt{/\allowbreak{}v2/\allowbreak{}attestationPublicKey} (returns
-the corresponding public key) \shipped~\srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{412--481,483--517}.
+the corresponding public key) \shipped~\srcprivate{\SAS{} API server}.
 Adjacent routes cover a per-app transport key with its own domain-separated attestation
 \shipped~\srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{582--653} and a blob-upload signer
 \shipped~\srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{750--829}. Freshness is enforced unevenly: only the
@@ -184,10 +215,11 @@ root that is entirely Flux-operated:
   \shipped~\srccode{fluxsas/\allowbreak{}src/\allowbreak{}fes/\allowbreak{}fes.cpp}{70--81};
   \item a Flux-operated pair of web services (\texttt{stats.\allowbreak{}runonflux.\allowbreak{}io} and
   \texttt{arcanehashes.\allowbreak{}app.\allowbreak{}runonflux.\allowbreak{}io}) that publish the set of dm-verity root hashes a node's
-  watchdog treats as known-good, polled roughly once every 24--48 hours
-  \shipped~\srccode{fluxsas/\allowbreak{}src/\allowbreak{}watchdog.h}{721--754}, and which \textbf{fail open}: if both
-  endpoints are unreachable, the watchdog treats the running node as secure and takes no action
-  \shipped~\srccode{fluxsas/\allowbreak{}src/\allowbreak{}watchdog.h}{566--596}; and
+  watchdog treats as known-good, polled roughly once every 24--48 hours, and which \textbf{fail
+  open}: if both endpoints are unreachable, the watchdog treats the running node as secure and takes
+  no action \shipped~\srcprivate{\SAS{} watchdog}. That is the opposite of the fail-frozen behaviour the network-policy channel of
+  \S\ref{sec:governance} exhibits under the same conditions, and two policy channels in one system
+  failing in opposite directions is the finding, not the outage handling of either; and
   \item a Flux-operated internal mTLS certificate authority that issues the client and server
   certificates every \fluxsas caller and listener presents.
 \end{enumerate}
@@ -209,11 +241,13 @@ The Ed25519 signing key \texttt{/v2/attest} uses for the default, \texttt{cdn}, 
 \texttt{app} purposes is derived by a key-derivation function from static values compiled
 identically into every \fluxsas binary; none of the derivation's inputs depends on the TPM, on
 Secure Boot state, or on any other per-machine value
-\shipped~\srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{411--481,466--469,503--506}. The one exception, the
+\shipped~\srcprivate{\SAS{} API server}. The one exception, the
 node-identity key pair (\texttt{/\allowbreak{}v2/\allowbreak{}nodeIdentityPublicKey}, \texttt{/\allowbreak{}v2/\allowbreak{}nodeIdentitySign}), does
-mix in a value derived from local machine identifiers, but the key that protects the random
-component of that value at rest is itself a static value compiled into every binary
-\shipped~\srccode{fluxsas/\allowbreak{}src/\allowbreak{}disk\_encryption.h}{200--228}. Consequently, a valid \fluxsas
+mix in a value derived from local machine identifiers --- the one place the deployed stack does
+per-machine work --- but the material protecting that value's random component at rest is again
+carried identically in every copy of the software \shipped~\srcprivate{\SAS{} disk encryption}, so
+the exception does not survive the
+same argument. Consequently, a valid \fluxsas
 attestation demonstrates possession of something every copy of the software contains — it does
 not demonstrate that a particular machine booted a particular image. Compile-time obfuscation of
 these constants changes what a casual binary scan reveals; it does not change this property.
@@ -250,22 +284,70 @@ accept the following, none of which \fluxsas measures or attests to:
   check \shipped~\srccode{fluxsas/\allowbreak{}src/\allowbreak{}disk\_encryption.h}{547--559,642}.
   \item \textbf{\FluxOS itself.} Application orchestration code runs outside \fluxsas's scope
   entirely; no file in the read evidence measures or attests to it.
-  \item \textbf{Physical access.} Console access is explicitly exempted from the password-hash
-  check applied to every other local account \shipped~\srccode{fluxsas/\allowbreak{}src/\allowbreak{}watchdog.h}{349--377},
-  and the install-to-first-boot window described in \S\ref{sec:boot-chain} is a further,
-  time-bounded physical exposure.
+  \item \textbf{Physical access.} The account checks \fluxsas{} applies do not cover a console
+  session \shipped~\srcprivate{\SAS{} watchdog}, and the install-to-first-boot window described in \S\ref{sec:boot-chain} is a
+  further, time-bounded physical exposure.
   \item \textbf{The update channel.} A single Flux-operated signing ceremony
   (\S\ref{sec:update-channel}) decides what code every node will accept as an upgrade; whoever
   holds that key can push code the entire fleet runs.
   \item \textbf{The hash allow-list service.} \texttt{stats.\allowbreak{}runonflux.\allowbreak{}io} and
   \texttt{arcanehashes.\allowbreak{}app.\allowbreak{}runonflux.\allowbreak{}io} decide what a running node considers a known-good image,
   fail open on outage, and are both Flux-operated.
-  \item \textbf{The absence of a hypervisor boundary between tenants.} Application workloads run as
+  \item \textbf{The absence of a hypervisor boundary between tenants}, stated at the head of this
+  section and repeated here for completeness. Application workloads run as
   containers directly on the \ArcaneOS host — the filesystem ships a
   \texttt{docker-to-podman-migration.\allowbreak{}service} unit, consistent with containers rather than
   per-tenant virtual machines as the isolation primitive on production nodes — and no evidence in
-  the read repositories shows a per-tenant hypervisor-enforced boundary\srcinferred.
+  the read repositories shows a per-tenant hypervisor-enforced boundary\srcinferred. This is the only
+  item in the list that no amount of attestation work would remove.
 \end{itemize}
+
+\subsection{Disposition of the findings in this section}
+\label{sec:14-disposition}
+
+The findings above are not one kind of thing, and a reader deciding how much weight to put on them
+should be told which is which --- and, on one class, told why the paper stops short of coordinates.
+
+\textbf{Class A --- ordinary defects, bounded in size, being closed.} Credential material held
+where it should not be; an authorization table that admits one node-local caller to everything
+rather than to what it needs; a policy poller that fails open where its counterpart fails frozen;
+account checks that do not reach every session type; release bypasses with no publication-time
+signature gate; and a version-pairing question between two node-local components. None of these is
+a research problem, and none changes any property this paper asserts. Each is a change of bounded
+size to code that already exists, and the disposition is to close them before publication rather
+than to publish them and close them afterwards \srcintent{design intake}.
+
+\textbf{Why this class is stated without file and line, uniquely in this paper.} Everything else
+this paper cites, it cites precisely --- that discipline is the point of the document. The
+components in this class are the exception because they are the ones that are \emph{not public}
+(\S\ref{sec:limitations}). Publishing exact coordinates into a closed component does not help a
+reader verify anything, since they cannot open the file; it helps only someone attacking a defence
+they otherwise cannot read. And these particular components are closed for that exact reason: they
+are what makes a node's eligibility hard to fake, and the whole of \S\ref{sec:pnr}'s sequencing
+argument is about how much that matters. So the paper states each finding as a property and omits
+the coordinates. The properties are what a reader evaluating Flux as infrastructure needs; the
+coordinates are what an attacker needs. Where the same class of defect appears in a \emph{public}
+repository --- the unsigned policy documents of \S\ref{sec:governance}, the emergency-block path of
+\S\ref{sec:consensus} --- this paper cites file and line as it does everywhere else, because
+withholding those would hide from honest readers and from nobody else.
+
+\textbf{Class B --- the structural one.} Property~\ref{prop:not-machine-bound} is not a defect and
+does not have a patch. An attestation key derived from values every copy of the software carries
+cannot be made machine-bound by fixing a bug; it requires binding a key to a hardware root and
+exposing a verifier, which is the work \S\ref{sec:bonded-network}'s Requirement~0 describes and
+which the pcrlock finding in \S\ref{sec:boot-chain} makes considerably nearer than a first reading
+of this section suggests. This is the item that should still be open when the paper ships, and it
+is the one the rest of the paper's attestation dependencies actually rest on. It is stated in full,
+without redaction, because it is a property rather than a procedure --- no derivation input, salt,
+domain value or extraction path appears anywhere in this section, and none is needed to state it
+precisely.
+
+Saying all of this explicitly is a deliberate choice. A section that reads as an undifferentiated
+list of weaknesses invites both of the wrong conclusions --- that the system is unsound because
+there are many findings, or that the findings are unimportant because most are small. The correct
+reading is that most are small \emph{and} being closed, that the one which is neither is stated as
+a property, and that the paper has drawn the line at the point where precision stops informing a
+reader and starts arming an attacker.
 
 \subsection{The bonded attestation network}
 \label{sec:bonded-network}
@@ -283,7 +365,7 @@ does not currently satisfy — and a tenant-reachable verification path would ne
 today there is none (\S\ref{sec:tenant-verify}). Absent the first condition, a bond would secure a
 signature that anyone holding the \fluxsas software, not merely the bonded node, can produce today
 (Property~\ref{prop:not-machine-bound}), which would make the bond forfeitable for statements the
-bonded party never made. \srcintent{plan/mech-attestation-network.md, \S1}
+bonded party never made. \srcintent{mechanism specification}
 \end{assumption}
 
 \begin{construction}[The bonded network]
@@ -305,18 +387,46 @@ $$
 \mathcal{C}(\mathsf{cl}) = \mathrm{Top}_n\bigl(i \mapsto H(\mathsf{subject} \,\|\, \mathsf{prevHash}(\hgt) \,\|\, i)\bigr),
 $$
 reusing the sortition already implemented for \PoN slot eligibility in \fluxd — deterministic,
-recomputable by any observer from chain state alone, and requiring no separate coordinator. A claim
+recomputable by any observer from chain state alone, and requiring no separate coordinator. The
+index $i$ here must range over \emph{owner identities} in the sense of \Cref{def:23:electorate}, not
+over nodes. Sampling over nodes would give the largest operator — \num{480} of \num{6489} nodes at
+the measured distribution (\S\ref{sec:23:measurement}) — about \SI{7.4}{\percent} of every
+committee's seats in expectation, and a far from negligible probability of holding the $n-k+1$ seats
+that capture one. Sampling over identities, or capping seats at one per identity, costs nothing and
+removes that. A claim
 would be \emph{accepted} once $k$ of the sampled $n$ nodes sign an identical $\mathsf{value}$,
 \emph{disputed} if the committee splits, and \emph{challengeable} by any party for a window
 $\Delta_{\mathrm{chal}}$ after acceptance. A challenger would post a bond $\beta_{\mathrm{chal}}$
 alongside an assertion of the correct value; on a resolved challenge against the original signers,
 each would be slashed by a fraction $s$ of $\beta_i$, and the challenger would be paid from the
 slashed amount. A signer's bond would not be released while any claim it signed remains inside its
-challenge window. \srcintent{plan/mech-attestation-network.md, \S2}
+challenge window. \srcintent{mechanism specification}
 \end{construction}
 
-Every slashing step above presumes that a bond can be forfeited on this chain at all, which
-Bitcoin-derived script cannot express and which \Cref{op:slashing} leaves open.
+\paragraph{Every slashing step above presumes something this network has decided against.} A bond
+held as a plain UTXO cannot be taken from its owner by consensus, and \Flux's inherited Bitcoin
+script cannot express a forfeiture condition. That much is a limitation. The decision on top of it is
+not: \Cref{op:slashing} records that \textbf{there is no slashing anywhere in \Flux{} --- no mechanism
+destroys or forfeits a holder's \flux{}} \srcintent{design intake}. \Cref{cons:bonded-network} is
+therefore written above in the form the mechanism-design literature would recognise, and it is
+\emph{not} the form this network would deploy. Both halves have to be said, in that order, because a
+reader who sees only the construction will assume a forfeiture path exists.
+
+What would have to change, stated once so that the cost of reversing the decision is visible rather
+than vague: the bond would have to be a registered output of the \FluxNode{} family rather than a
+plain UTXO, held under a consensus lock; forfeiture would be consensus \emph{refusing the spend
+permanently}, which is a burn and is the only forfeiture primitive expressible without an
+adjudicating quorum; and the challenger's reward would have to be paid from the coinbase, which
+\S\ref{sec:pnr} already demonstrates is a workable route for value that consensus decides to move.
+That is a new transaction type, new chain-derived state and a network upgrade --- the same class of
+change as \PNR{} itself. It is not adopted here.
+
+Without it, the honest name for the tier is the one \Cref{op:slashing} gives it: \textbf{registered,
+not bonded} --- attributable but not slashable. The deterrent becomes exclusion from future
+participation and personal accountability by a named attester set, not loss of principal, and every
+quantitative statement below that multiplies a slash fraction by a bond should be read as conditional
+on a decision that has been taken the other way. The paper does not present accountability and
+forfeiture as equivalent.
 
 \begin{openproblem}[Which claims a bond can actually secure]
 \label{op:claim-classes}
@@ -330,7 +440,7 @@ objective resolution would be a griefing vector against honest signers rather th
 against dishonest ones. The honest scope for a launch would be to restrict admissible claims to the
 re-checkable class and leave general computation-integrity claims open until a resolution procedure
 exists; this paper does not have one and does not invent one.
-\srcintent{plan/mech-attestation-network.md, \S2.4} Reserve attestation for the
+\srcintent{mechanism specification} Reserve attestation for the
 bridge (\S22) — the roadmap's own first customer for this mechanism — would fall inside the
 re-checkable class, which is one reason to launch there first.
 \proposednote{Re-checkable claims only at launch. A claim that cannot be re-evaluated has no
@@ -353,7 +463,8 @@ that keeps small claims worth adjudicating. Tier-based sizing is rejected becaus
 collateral, not exposure --- a Cumulus node attesting a high-value claim would post less than a
 Stratus node attesting a trivial one, which inverts the incentive. The coefficients $\chi$ and
 $\beta_{\min}$ are calibration and are set with $(k,n)$ below. \srcinferred.} \proposednote{$n = \num{9}$, $k = \num{6}$, $\Delta_{\mathrm{chal}} = \num{2880}$ blocks
-(\SI{24}{\hour}), slash fraction $s = 1$. Reasoning: $n=9$ keeps per-claim bandwidth and latency
+(\SI{24}{\hour}), and --- conditional on the forfeiture decision above being revisited, which it has
+not been --- slash fraction $s = 1$. Reasoning: $n=9$ keeps per-claim bandwidth and latency
 modest while making a colluding majority expensive; $k/n = 2/3$ is the standard Byzantine threshold
 and the smallest that tolerates $\lfloor (n-1)/3 \rfloor = 2$ faults; $\Delta_{\mathrm{chal}}$ of one
 day gives a challenger a full business cycle to notice and act, and is the term $M \ge

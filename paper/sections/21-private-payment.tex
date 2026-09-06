@@ -19,7 +19,7 @@ genuinely open is confined to one optional path.
 \begin{remark}[Status of this section after the retirement decision]
 \label{rem:pp-status}
 \textbf{Flux is retiring both shielded pools} (\Cref{sec:shielded-retirement},
-\srcintent{08-answers-round-2.md, round 10}). Every \emph{construction} in this section is therefore
+\srcintent{design intake}). Every \emph{construction} in this section is therefore
 inapplicable to the target architecture: there will be no pool to pay into, no Sapling output to
 build a payment from, no anonymity set to grow, and no proving system to select. The section is
 retained, unmodified in its technical content, for three reasons, and a reader should hold all three
@@ -408,7 +408,7 @@ Two consequences deserve to be stated plainly rather than buried. First, the roa
 were \textbf{never wallet-integration tasks}: re-opening $\taddr \to \zaddr$ is a consensus change.
 That distinction outlives the decision that followed it, because it is what made the roadmap's
 sequencing wrong rather than merely optimistic. \textbf{Reopening is now cancelled}: both pools are
-to be retired instead \srcintent{08-answers-round-2.md, round 10} (\planned,
+to be retired instead \srcintent{design intake} (\planned,
 \S\ref{sec:shielded-retirement}). Second, capacity was never the constraint and membership was: at
 the list-price revenue of the entire measured population --- \num{3817.62}\flux{} per
 \num{30.56}-day period under \Cref{def:price} as corrected, of which \num{1784.97}\flux{}
@@ -434,7 +434,7 @@ Foundation share therefore rests on one address, \texttt{196GJWyLxzAw\ldots}, ho
 \texttt{FluxWordPress} and \texttt{FluxRosettaServer} alongside \texttt{BitcoinWhitepaper},
 \texttt{Aave}, \texttt{Electrum}, \texttt{EthereumNodeLight}, \texttt{Firod} and the 26 folding
 deployments --- and the author confirms it as the team ZelID
-\srcintent{08-answers-round-2.md, round 21}. The configuration itself names that address only as a
+\srcintent{design intake}. The configuration itself names that address only as a
 former extension-permission holder, so the identification rests on that confirmation rather than on
 any declaration in code.} A pool
 used for hosting by a handful of pre-2021 holders identifies them as the only possible payers, which
@@ -469,7 +469,7 @@ trivially correct would be the worst of the available choices.
 \proposednote{Live for the drain-only window and moot after it (\Cref{rem:pp-status}, \Cref{rem:q1q2-resolved}). Q2. ZIP-209 turnstile enforcement, compiled in and dormant with unmodified upstream-Zcash
 checkpoint constants (\srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{322--327}, \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.h}{200}).
 Domain: \{on with Flux-computed checkpoints; off\}. Recommended: on, for the duration of the window;
-round 11 confirmed the window's heights, not this switch \srcintent{08-answers-round-2.md, round 18}.
+round 11 confirmed the window's heights, not this switch \srcintent{design intake}.
 Trade-off --- on: a soundness failure in the
 inherited 2018 parameters is bounded to the pool's declared value, and \S5's supply-verifiability
 claim becomes true; off: a hosting payment could be printed from a forged proof undetectably. \S20
@@ -1287,7 +1287,7 @@ decisions register. ``Affects'' names the construction.}
 \midrule
 Q1 & A, C & withdrawn: no reopening (\Cref{rem:q1q2-resolved}) & pool unreachable until activation versus turnstile-bound soundness at reopening \\
 Q2 & A, C & answered: on, for the drain window (\Cref{rem:q1q2-resolved}) & bounded soundness failure versus none \\
-Q3 & A & settled: $H(m_\app)$ in \texttt{OP\_RETURN} \srcintent{08-answers-round-2.md, round 2} & binding $H(m_\app)$ is what nodes must act on; blinding belongs to shape B \\
+Q3 & A & settled: $H(m_\app)$ in \texttt{OP\_RETURN} \srcintent{design intake} & binding $H(m_\app)$ is what nodes must act on; blinding belongs to shape B \\
 Q4 & A & moot by retirement: transparent only (\S7, \Cref{rem:o7-moot}) & exclusion makes this section vacuous; hidden amount is impossible (Prop.~\ref{prop:pp-amount}) \\
 Q5 & A & amount hiding for non-\PNR{} classes: none / an exempt class & an exempt class restores AH for enterprise workloads at the cost of revenue outside \S7's split \\
 Q6 & A, B & denomination grid, Table~\ref{tab:pp-denom} & median class versus overpayment \\
@@ -1316,7 +1316,7 @@ value in this section was chosen by this drafter, and that remains deliberate --
 changed, and the change is worth stating rather than leaving implicit.
 
 \Cref{sec:shielded-retirement} records the option the team has since taken: retiring both shielded
-pools outright, which the measurements there favour \srcintent{08-answers-round-2.md, round 10}.
+pools outright, which the measurements there favour \srcintent{design intake}.
 \textbf{With that option taken, this entire section is moot} --- not deferred, but inapplicable,
 because there is no pool to pay into, no proving system to choose, no denomination grid to design
 and no turnstile question beyond the drain window. Q1's ``reopening is decided, only the height is

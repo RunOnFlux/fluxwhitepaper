@@ -16,9 +16,9 @@ strength of three consistent statements: ``Optional at the protocol level, never
 transparent layer stays permanently'' \srcroadmap{flux-roadmap-public.md:171}; the non-goals list
 ruling out ``Making privacy mandatory'' for the same reason
 \srcroadmap{flux-roadmap-public.md:206}; and the design intake's ``Both payment types stay,
-permanently'' \srcintent{05-privacy-pq.md}. Those statements are accurately reported and were
+permanently'' \srcintent{design intake}. Those statements are accurately reported and were
 accurate when made. They have been superseded: the team has decided to \textbf{retire both shielded
-pools} \srcintent{08-answers-round-2.md, round 10} (\planned). The transparent layer stays; the
+pools} \srcintent{design intake} (\planned). The transparent layer stays; the
 shielded layer does not.
 
 This section is therefore written in two registers, and the reader should know which is which. Every
@@ -349,7 +349,7 @@ wallet-integration tasks — pick a construction, ship it in Zelcore and SSP, de
 enforced in \texttt{Contextual\allowbreak{}Check\allowbreak{}Transaction}, not a wallet setting, so no wallet change can place
 new value in the pool while that rule stands. \textbf{Reopening the pool to new entrants would itself be a
 consensus change, and it is not going to happen}: the pools are to be retired instead
-(\S\ref{sec:shielded-retirement}, \srcintent{08-answers-round-2.md, round 10}). An earlier round of
+(\S\ref{sec:shielded-retirement}, \srcintent{design intake}). An earlier round of
 the intake had confirmed reopening as part of a privacy update, and this paper carried it as a
 sequenced dependency ahead of wallet integration; that is superseded. The consensus change now in
 prospect is the opposite one --- invalidating shielded spends after a sunset height --- and
@@ -499,7 +499,7 @@ Given that, the team's stated position is to bound the post-quantum migration de
 than claim more than the deployed cryptography supports. What is to become post-quantum is
 consensus, transparent transactions, and the keys securing them; the shielded layer is explicitly
 placed out of scope for now, with post-quantum privacy construction to follow later as the field
-matures \srcintent{05-privacy-pq.md} (\vision; after the retirement decision of
+matures \srcintent{design intake} (\vision; after the retirement decision of
 \S\ref{sec:shielded-retirement}, any such construction is a future option, not a scheduled item).
 This scope decision is presented in the design intake
 as coherent and defensible rather than as an admitted gap, on the reasoning that privacy is already
@@ -538,7 +538,7 @@ Halo2-class proving system removes the inherited trusted setup described in
 \S\ref{sec:trusted-setup} entirely, and that directly serves the stated decentralization requirement
 — a chain whose privacy layer's soundness depends on a multi-party ceremony run once, by a fixed set
 of participants, in 2018, is not decentralized in the same sense the rest of the design intake asks
-for \srcintent{05-privacy-pq.md} (\vision). That argument stands on its own regardless of the
+for \srcintent{design intake} (\vision). That argument stands on its own regardless of the
 post-quantum question, and the paper states it as such rather than bundling it with a PQ claim it
 does not support (\S\ref{sec:pq-scope}).
 
@@ -553,11 +553,11 @@ supplying a date the source does not give.
 \subsection{Retiring the pools: the decision, and the measurements behind it}
 \label{sec:shielded-retirement}
 
-\textbf{Both shielded pools are to be retired} \srcintent{08-answers-round-2.md, round 10}
+\textbf{Both shielded pools are to be retired} \srcintent{design intake}
 (\planned). The team raised the possibility alongside reopening and migrating --- destroying the
 existing pool outright to simplify the chain, reduce maintained code and obtain a more thorough audit
 of what remains, with a stated preference for C++ over Rust
-\srcintent{08-answers-round-2.md, round 9} --- and, presented with the analysis below, took it.
+\srcintent{design intake} --- and, presented with the analysis below, took it.
 
 This subsection records the measurement that motivated the decision, the constraint that made it
 sharper than it first appears, and the schedule. The argument is retained in full rather than
@@ -680,10 +680,10 @@ recommendation and are confirmed by the author (Remark~\ref{rem:shield-schedule-
 \begin{remark}[Schedule confirmed]
 \label{rem:shield-schedule-confirmed}
 The heights above were proposed by this paper and are \textbf{confirmed by the author}
-\srcintent{08-answers-round-2.md, round 11}: announcement at $\hpa = \num{3466630}$ and sunset at
+\srcintent{design intake}: announcement at $\hpa = \num{3466630}$ and sunset at
 $\hshield = \num{4517830}$. Activating ZIP-209 turnstile enforcement with Flux-correct constants for
 the window remains this paper's recommendation, not a confirmed decision: round 11 confirmed the
-numbers, and a switch is not a number \srcintent{08-answers-round-2.md, round 18}. The retirement
+numbers, and a switch is not a number \srcintent{design intake}. The retirement
 decision and its heights are settled, and \S\ref{sec:private-payment}'s construction questions are
 consequently not live (\Cref{rem:pp-conditional}).
 \end{remark}
@@ -696,7 +696,7 @@ unopposed.
 \textbf{Flux will have no chain-level privacy.} Not reduced privacy --- none. Every transfer, every
 balance and every payment for a deployment will be publicly linkable for anyone willing to do the
 analysis, exactly as on Bitcoin. The design intake asked for privacy-preserving settlement rails
-\srcintent{05-privacy-pq.md}; after retirement the honest description is that Flux settles
+\srcintent{design intake}; after retirement the honest description is that Flux settles
 transparently and treats payment privacy as an unsolved problem rather than a delivered feature.
 \Cref{sec:pq-scope} and \S\ref{sec:private-payment} are the two places this paper previously
 claimed otherwise, and both are now corrected.
