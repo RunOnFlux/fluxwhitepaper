@@ -301,7 +301,8 @@ rather than presenting both under a single ``managed database'' label.
   \node[ev] (l1)  at (18,37) {}; \node[lbl, below=0.5mm of l1] {local\\write};
   \node[ev] (a1)  at (18,37) {}; \node[lbl, above=0.5mm of a1] {\textbf{ack}};
   \node[ev] (b1)  at (46,37) {}; \node[lbl, below=0.5mm of b1] {broadcast\\emitted\\(unawaited)};
-  \node[lbl, anchor=west] at (74,37.2) {follower receipt: not awaited, not bounded};
+  %% y=37.2 put this on the axis itself; the rule struck through the text.
+  \node[lbl, anchor=west] at (74,39.6) {follower receipt: not awaited, not bounded};
 
   % ---- timeline 2: flux-pg-cluster, async
   \fill[loss] (18,18) rectangle (58,24);

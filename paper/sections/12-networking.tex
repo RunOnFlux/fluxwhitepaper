@@ -92,10 +92,11 @@ finds the IP:port that \FluxOS placed it on. \shipped
       node[lbl, below, pos=0.5] {\texttt{flux-\allowbreak{}apps-\allowbreak{}dns-\allowbreak{}manager}: elected master IP as a direct
         \texttt{A} record\\[-1pt](game applications; bypasses HAProxy)} (app.south);
 
-    \node[lbl, above=1mm of ha] {TLS termination, Host-header ACL,\\[-1pt]per-server health check};
-    \node[lbl, below=13mm of dns, anchor=north] {};
-    \node[draw, dashed, rounded corners=2pt, inner sep=3mm, fit=(dns)(ha),
-          label={[lbl, yshift=1mm]above:{Foundation-operated}}] {};
+    %% Named and included in the fit: as a bare label above `ha' it printed on top of
+    %% the dashed box's own "Foundation-operated" label, which sits at the same height.
+    \node[lbl, above=1.5mm of ha] (tls) {TLS termination, Host-header ACL,\\[-1pt]per-server health check};
+    \node[draw, dashed, rounded corners=2pt, inner sep=3mm, fit=(dns)(ha)(tls),
+          label={[lbl, yshift=1.5mm]above:{Foundation-operated}}] {};
   \end{tikzpicture}
   \caption{The reachability path from client to a running application, and the game-application
   shortcut that bypasses \FDM's HAProxy entirely. Both intermediate hops are Foundation-operated

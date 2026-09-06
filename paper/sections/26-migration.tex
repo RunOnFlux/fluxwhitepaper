@@ -109,7 +109,11 @@ record that the two events are now simultaneous rather than sequential (\S\ref{s
 \draw[st] (att4.east) -- (attn.west);
 \draw[st] (priv.east) -- (chpr.west);
 \draw[st] (pnr.east) -- (act.west);
-\draw[inf] (rpc.east) -- node[above, pos=.5] {inferred} (prun.west);
+%% The straight rpc->prun line crossed x=3.6 at y=3.36, i.e. through the middle of
+%% `brd', and carried its label there. Routed instead along the clear corridor at
+%% y=4.1 between `opro' (4.6) and `brd' (3.4), with the label on the vertical leg.
+\draw[inf] (rpc.east) -- (5.4,4.1) -- (5.4,2.5) -- (prun.west);
+\node[anchor=west, text=black!60] at (5.5,3.4) {inferred};
 \draw[unc] (attn.north) .. controls +(0,1.6) and +(-1.2,-1.2) .. (act.south west);
 \node[text=red!60!black, anchor=west] at (9.0,3.15) {no roadmap source};
 \end{tikzpicture}
