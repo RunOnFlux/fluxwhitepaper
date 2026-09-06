@@ -1,0 +1,1996 @@
+\section{Governance: decentralization, operator protection, and the content-reporting quorum}
+\label{sec:23-governance}\label{sec:governance}
+
+Every network that executes other people's software eventually has to answer a question that
+storage networks can defer and payment networks can ignore: who may stop a workload from running,
+and by what procedure. Flux answers it twice. There is an answer that is deployed — a small set of
+JSON documents in a GitHub repository that every node fetches on a timer and enforces without
+argument — and there is an answer that is designed but not built: a collateral-weighted vote,
+conducted entirely in chain transactions, in which a node operator reports an application and an
+absolute fraction of total voting weight decides whether it is banned. This section states the
+deployed answer as a mechanism rather than as an implementation detail, specifies the designed one
+at the depth a reimplementer would need, proves what can be proved about it, and then reports the
+measurement that decides its worth.
+
+The single claim the section carries is this: \textbf{collateral weighting makes the quorum
+Sybil-resistant by construction and, at the distribution measured on 2026-09-03, not
+censorship-resistant.} Four owner identities hold enough collateral-weighted voting power to evict any
+application by themselves --- three, once addresses linked by a shared node key or a shared collateral
+funding transaction are merged. That is a serious finding about
+the proposal. It is also, and simultaneously, an improvement on what is deployed, where the
+corresponding number is one, the decision carries no signature, and no node can verify that it was
+ever made. Both statements are true and the section makes both.
+
+A second property of the specified design is worth stating in the same breath, because it is what
+makes the first one auditable: \textbf{nothing is tallied off-chain.} The report is a transaction,
+each vote is a transaction, the count is a function \fluxd{} evaluates from those transactions, and
+the ban is a memo in a coinbase. Every step is a chain fact that any node can recompute from block
+data alone, with no tallier, no publisher key and no API in the trust path.
+
+\begin{remark}[Local notation]
+This section uses, beyond \texttt{notation.tex}: $\vtotal^{\!\star}$ for the trailing-maximum total
+weight, $\kappa(\vthresh)$ for the size of the smallest colluding set that reaches threshold
+$\vthresh$, $Y_r$ for a report's tally, $\mathrm{own}_j$ for a node's \emph{owner} (collateral) key
+and $\mathrm{pk}_j$ for its VPS message-signing key --- these are different keys and only the first
+is an identity here (\Cref{def:23:electorate}) --- $X_i$ for an identity's proposal capacity, $s_i$
+for a node's share of the \PNR pool, $m$ and $T$ for the identity-chamber count and tenure, and
+$\Delta_{\mathrm{vote}}, \Delta_{\mathrm{exec}}, \Delta_{W}$ for windows measured in blocks. All are
+proposed additions to the notation file; none overloads an existing symbol. Note in particular that
+$\kappa$ denotes a \emph{collusion-set size} throughout and never a key. The report bond $\bond$
+declared in \texttt{notation.tex} is \emph{not} used: the specified design has no bond, and prices
+reporting by collateral instead (\Cref{def:23:capacity}).
+\end{remark}
+
+% =====================================================================
+\subsection{Governance as it operates today}
+\label{sec:23:today}
+
+Flux already has content governance. It is not a quorum, it is not on-chain, and it is not
+described in the public roadmap. It is a publisher.
+
+\begin{definition}[Deployed network-policy channel, \shipped]
+\label{def:23:policy-channel}
+The channel is the tuple $\bigl(\mathcal{D}, \mathcal{O}_{\mathrm{pub}}, \mathrm{fetch},
+\mathrm{enforce}\bigr)$ where:
+\begin{itemize}
+  \item $\mathcal{D}$ is the document set $\{$\texttt{blockedrepositories.\allowbreak{}json},
+    \texttt{vettedrepositories.\allowbreak{}json}, \texttt{enterprisenodes.\allowbreak{}json},
+    \texttt{tamperingblockednodes.\allowbreak{}json}, \texttt{iplocation.\allowbreak{}bin.\allowbreak{}gz}$\}$, served as unsigned
+    documents over plain HTTPS from a GitHub repository
+    \srccode{fluxos-network-policy/\allowbreak{}README.md}{1--9};
+  \item $\mathcal{O}_{\mathrm{pub}}$ is the publisher set: the owners of the \texttt{RunOnFlux}
+    GitHub organisation, of whom the repository states ``everyone who has it is an admin'', with
+    branch protection forbidding direct pushes to \texttt{main} but \emph{deliberately} no
+    second-reviewer requirement — the stated reasoning being that a rule requiring a second person
+    ``gets bypassed at 3am'' \srccode{fluxos-network-policy/\allowbreak{}.github/\allowbreak{}CODEOWNERS}{1--15}
+    \srccode{fluxos-network-policy/\allowbreak{}README.md}{297--311};
+  \item $\mathrm{fetch}$ is a per-node scheduled retrieval — \SI{6}{\hour} for
+    \texttt{blockedrepositories.\allowbreak{}json} and \texttt{enterprisenodes.\allowbreak{}json}, \SI{12}{\hour} for
+    \texttt{tamperingblockednodes.\allowbreak{}json} \srccode{fluxos-network-policy/\allowbreak{}README.md}{30--32}, and ---
+    on the \specv{9} branch only --- a daily conditional fetch for the geolocation table
+    \srcbranch{MorningLightMountain713/\allowbreak{}flux}{feat/fluxos-v9}{ZelBack/config/default.js:779--784} — followed by shape validation
+    (\texttt{isStringArray}, \texttt{isNodeOwnerMap}; row/country/org/region floors for the
+    geolocation artifact) \srccode{fluxos-network-policy/\allowbreak{}scripts/\allowbreak{}validate.js}{22--60};
+  \item $\mathrm{enforce}$ is the per-node compliance sweep: \FluxOS{} fetches
+    \texttt{helpers/\allowbreak{}blockedrepositories.\allowbreak{}json} from the raw-content URL of \texttt{RunOnFlux/flux},
+    caches it \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appSecurity/\allowbreak{}imageManager.js}{179--195}, and every
+    \texttt{image\allowbreak{}Compliance\allowbreak{}Interval\allowbreak{}Ms} $=$ \SI{1}{\hour}
+    \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{319}
+    \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{529--531} removes every locally installed
+    application whose image, owner address or specification hash matches, spacing removals
+    \SI{3}{\minute} apart
+    \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appSecurity/\allowbreak{}imageManager.js}{644--676}. A parallel
+    \texttt{vettedrepositories.\allowbreak{}json} exempts listed applications from blocked ports and blocked
+    repositories \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appSecurity/\allowbreak{}imageManager.js}{202--236,395--410}.
+\end{itemize}
+The node-local state machine is fail-frozen. A fetch that fails or fails shape validation leaves
+the previous copy in force indefinitely and across restarts; an empty document (\texttt{[]}) is
+honoured as ``nothing is blocked'' and is explicitly distinguished from an unreachable one; a node
+that has never fetched successfully declines to answer rather than guessing
+\srccode{fluxos-network-policy/\allowbreak{}README.md}{33--44}.
+\end{definition}
+
+\begin{algorithm}[H]
+\caption{Deployed policy fetch-and-enforce loop, per node (\shipped)}
+\KwIn{document set $\mathcal{D}$; publisher URL; per-document fetch interval; local application set $A_{\mathrm{loc}}$}
+\KwOut{$A_{\mathrm{loc}}$ with policy-matching applications removed}
+\tcc{Invariant: a node never enforces a document it has not itself shape-validated, and never
+downgrades to ``nothing blocked'' because of a transport failure.}
+\tcc{Failure mode: fetch failure freezes the last valid copy indefinitely (stale enforcement, and
+stale geolocation for placement); never-fetched nodes decline to answer. There is no signature to
+check, so a MITM or a compromised publisher account is indistinguishable from a legitimate update.}
+\ForEach{$d \in \mathcal{D}$ due for refresh}{
+  $x \leftarrow$ \texttt{HTTPS GET}$(d)$\;
+  \lIf{transport error}{keep cached $d$; \textbf{continue}}
+  \lIf{$\neg\,\mathrm{shapeValid}(x)$}{reject $x$; keep cached $d$; \textbf{continue}}
+  cache $x$ as the current copy of $d$\;
+}
+\ForEach{application $\app \in A_{\mathrm{loc}}$ (hourly sweep)}{
+  \If{image, owner address or specification hash of $\app$ matches \texttt{blockedrepositories}
+      \textbf{and} $\app$ is not in \texttt{vettedrepositories}}{
+    remove $\app$ locally; wait \SI{3}{\minute} before considering the next removal\;
+  }
+}
+\end{algorithm}
+
+A change to any of these documents takes effect on every node at its next scheduled fetch — no
+staged rollout, no canary, no version negotiation \srccode{fluxos-network-policy/\allowbreak{}README.md}{3--5}.
+What such a change can do is broad and precise: block any container image or namespace, any
+application owner address, or any application hash network-wide; grant or revoke which owner
+addresses may install on which enterprise node; mark a node's collateral transaction hash as DOSed
+for tampering; exempt an owner, hash or repository from user-level blocks; and, through the monthly
+baseline pull request, change which organisations and regions are treated as residential rather
+than hosting for placement and enforcement purposes
+\srccode{fluxos-network-policy/\allowbreak{}README.md}{99--196,320--326}. The documents are unsigned; the
+repository states the position plainly — ``their authenticity rests on GitHub and on who can merge
+to this repo'' — and records signed documents with a rollback-resistant sequence number as the
+intended next step rather than a finished one \srccode{fluxos-network-policy/\allowbreak{}README.md}{320--326}.
+
+A second lever sits in the reachability plane. The Foundation-operated \FDM{} fleet carries a
+configuration-level wildcard blacklist and whitelist by application name, plus an
+\texttt{ownersApps} restriction that can confine an entire \FDM{} instance to one owner's
+applications \srccode{flux-domain-manager/\allowbreak{}config/\allowbreak{}appsConfig.js}{2--6}
+\srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}application/\allowbreak{}subset.js}{25--47}, and a hardcoded
+\texttt{forbidden-\allowbreak{}backend} hostname list shipped to every \FDM{} instance in the HAProxy template
+\srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}haproxyTemplate.js}{499--512}. This lever is exercised:
+the commit history contains ``forbid domains'' and three ``ban phishing website'' changes. A third
+sits at consensus level: a hardcoded 2-of-4 key set can produce blocks outside normal consensus,
+with no time gating and no stall detection, despite a source comment saying gating was planned
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}emergencyblock.cpp}{24--30,183--190}
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}emergencyblock.h}{40--44}; the deployed threshold is
+\texttt{n\allowbreak{}Emergency\allowbreak{}Min\allowbreak{}Signatures} $=2$ against a four-key set
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{253,522}, and the team states 3-of-4 with a newly generated key
+set as the intended configuration, aligning consensus emergency-key governance with the bridge's
+3-of-4 quorum (\S22), with no activation scheduled
+\srcintent{evidence/design/08-answers-round-2.md, round 5 answers} (\planned). That key set is not a
+content lever, but it is a governance lever, and a section on who
+can do what to this network must list it. Under the mechanism specified below it acquires a second
+significance, because that mechanism's enforcement rides in the coinbase
+(\Cref{sec:23:enforcement}).
+
+\begin{assumption}[Trust boundaries invoked here]
+\label{ass:23:today}
+As fixed in the system-model section: node operators are mutually distrusting and independently
+operated; the \FluxOS{} message layer is a gossip mesh with per-peer bad-message accounting
+(five malformed or badly signed messages in ten minutes closes the connection)
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}fluxCommunication.js}{597--618}; \fluxd's deterministic node set
+is consensus state; and the policy channel, the \FDM{} fleet and the application-discovery API are
+Flux-Foundation-operated. Nothing in \Cref{def:23:policy-channel} is consensus state, and no
+transition of it is verifiable by a node against the chain.
+\end{assumption}
+
+\begin{property}[The collusion measure of the deployed mechanism, \shipped]
+\label{prop:23:kappa-today}
+For the channel of \Cref{def:23:policy-channel}: the number of parties whose agreement is required
+to remove an arbitrary application from every node is $\kappa_{\mathrm{deployed}} = 1$; the
+authentication on the decision is $\varnothing$ (TLS to a code-hosting provider, no document
+signature); the record available to a node for verifying that the decision was authorised is
+$\varnothing$; and the latency from decision to fleet-wide effect is bounded by the fetch interval
+plus the sweep interval, i.e.\ within \SI{7}{\hour} for the repository blocklist and \SI{13}{\hour}
+for the tampering list.
+\end{property}
+
+\begin{proof}[Proof sketch]
+A single organisation owner opens and merges a pull request adding an image, owner address or
+application hash to \texttt{blockedrepositories.\allowbreak{}json}; CI checks shape only and no second reviewer
+is required \srccode{fluxos-network-policy/\allowbreak{}README.md}{297--308}. Every node fetches on its own
+schedule and enforces the new document without any authentication step, because none exists
+\srccode{fluxos-network-policy/\allowbreak{}README.md}{320--326}. The bound on latency follows from the
+\SI{6}{\hour}/\SI{12}{\hour} fetch intervals and the \SI{1}{\hour} sweep. That the record is not
+node-verifiable follows from the absence of a signature: a node observing the document cannot
+distinguish a legitimate merge from a substituted document.
+\end{proof}
+
+This is the baseline against which the quorum must be judged, and it is the strongest argument for
+building the quorum at all. The proposed mechanism, with every defect catalogued below, would
+require four parties rather than one --- three under the strongest linkage computable from public
+data --- would leave a permanent chain record naming exactly which keys produced the eviction, and
+would freeze its electorate at a chain height. It would be a large
+decentralization improvement over what is deployed. It would still not be censorship-resistant.
+The section says both, in that order, because presenting the quorum as a solution to a problem the
+network does not have would be the more comfortable and the less honest framing.
+
+% =====================================================================
+\subsection{The roadmap principle, and the tension the quorum creates}
+\label{sec:23:c5}
+
+The public roadmap does not contain a content-eviction vote. What it contains is a principle
+pointing the other way:
+
+\begin{quote}
+``The principle: defence as protection from harm, not veto over content. \textbf{Behaviour, not
+content.}'' \srcroadmap{flux-roadmap-public.md:94}
+\end{quote}
+
+Under the heading of operator protection the roadmap lists an application oracle, resource
+guardrails, an optional egress profile, and an evidence pack — operator-side defences that let a
+node refuse or contain a workload. It does not list a network vote that removes an application from
+every node. The mechanism specified below is therefore not an elaboration of a published
+commitment; it is a design-intake item \srcintent{evidence/design/04-moderation.md} that must be
+reconciled with a published principle, and this paper does the reconciling in the open rather than
+letting a reader find the gap.
+
+The reconciliation has one hinge, and it is an open parameter: the category taxonomy. If the
+reportable categories are behavioural — harm to third parties, harm to operators, harm to the
+network's own infrastructure — then the quorum is an enforcement path for the roadmap's own
+principle and the two documents agree. If the categories are about what an application says or
+serves, the quorum is a content veto and the two documents contradict each other. Nothing in the
+mechanism forces either reading; the taxonomy does, and while its enumeration is still undecided,
+its scope has since been ruled on (\Cref{rem:content-veto}).
+
+\begin{remark}[The scope is a network-level content veto --- settled, and it supersedes the roadmap]
+\label{rem:content-veto}
+This paper asked directly whether the report taxonomy should be restricted to behavioural categories
+--- harm to third parties, to operators, to the network --- so as to reconcile the quorum with the
+roadmap's published ``behaviour, not content'' principle, noting that any content-referring category
+turns the quorum into a network-level content veto. The answer is that it is a network-level veto
+\srcintent{08-answers-round-2.md, round 9} (\planned).
+
+The paper records this as a deliberate decision and states its consequences without softening them,
+because they are the consequences that matter to anyone evaluating Flux as infrastructure.
+
+\begin{enumerate}
+  \item \textbf{It supersedes a published position.} The roadmap's ``behaviour, not content'' framing
+  \srcroadmap{flux-roadmap-public.md} described a narrower mechanism than the one now intended. Where
+  this paper previously reasoned from that principle --- including in
+  \Cref{sec:23:priorart}'s comparison with IPFS, Filecoin and Arweave --- the comparison still
+  holds on the facts but no longer on the stated intent: Flux is choosing a stronger power than those
+  systems exercise, deliberately.
+  \item \textbf{It makes concentration the load-bearing property.} A behavioural taxonomy limits the
+  damage a captured quorum can do, because the categories themselves resist misuse. A content veto
+  has no such internal limit: what the quorum may remove is bounded only by what the quorum will
+  vote for. The measurement in \Cref{sec:23:measurement} --- four owner identities reaching the
+  \SI{25}{\percent} threshold, three of them under the strongest linkage computable from public data
+  --- therefore stops being a background statistic and becomes the mechanism's principal risk.
+  \item \textbf{It does not change the deterrence analysis.} Removal plus forfeiture of a prepaid
+  balance still has essentially no deterrent value against a determined deployer who redeploys under
+  a new name; the author confirms there is no reinstatement and that redeployment as a fresh
+  application is expected \srcintent{08-answers-round-2.md, round 5}.
+\end{enumerate}
+
+What remains genuinely open is not the scope but the enumeration: which categories exist, so that a
+report is a well-formed object with a fixed domain rather than free text. That is a specification
+task, not a policy question, and \Cref{sec:23:mechanism} states the requirement it must satisfy.
+\end{remark}
+
+There is a second, quieter tension. The mechanism's enforcement is removal, and its financial
+consequence for the deployer is forfeiture of an unused prepaid balance whose floor is
+\num{0.01}\flux\ (\Cref{sec:23:enforcement}). The purpose is to stop harm, not to fine, and under
+either scope that is the right design. It also means the mechanism has essentially no
+deterrent value against a determined deployer, who redeploys under a new name for the price of one
+transaction. The paper states this as a property of the design rather than as a criticism of it,
+because it follows directly from the principle the design is trying to honour.
+
+% =====================================================================
+\subsection{The content-reporting quorum, specified}
+\label{sec:23:mechanism}
+
+Everything in this subsection is \planned. No part of it exists in any repository surveyed for this
+paper; the settled inputs are the design intake \srcintent{evidence/design/04-moderation.md}, the
+on-chain construction supplied by the team
+\srcintent{evidence/design/08-answers-round-2.md} and the measured node set
+\srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}. Settled and not re-litigated here:
+collateral weighting at one unit per \num{1000}\flux; votes signed with node owner keys;
+$\vthresh = 0.25$ as an \emph{absolute} fraction of total weight; abstention counts as ``no'';
+enforcement is cancellation and removal with forfeiture of the tenant's prepaid balance; node
+collateral is never slashed.
+
+Settled additionally, and this is the part that decides the section's verifiability requirement:
+the report is an on-chain transaction shaped after the deployed \FluxNode{} start and confirm
+types, carrying the application hash to be banned and indexed so that any node can find it; a
+\SI{24}{\hour} window (\num{2880} blocks at \SI{30}{\second} spacing) opens on its confirmation;
+each vote is a second special transaction; \fluxd{} counts the quorum internally from those
+transactions; on the threshold being reached the block template changes and the \PoN{} producer
+carries a ban memo in the coinbase, at most one per block; \FluxOS{} observes the ban and purges
+the application; vote transactions are fee-less; an unmet report expires and the application may be
+re-reported immediately; and a key may hold at most as many concurrently open proposals as it
+operates nodes \srcintent{evidence/design/08-answers-round-2.md}.
+
+One consequence of that shape should be stated before the construction rather than after it. This
+design puts moderation into \emph{consensus}. It needs two new transaction types, a new coinbase
+rule and new chain-derived state in \fluxd, which is a network upgrade; the message-layer
+alternative it replaces needed only a \FluxOS{} release. The consensus route buys exact
+determinism and independent verifiability (\Cref{thm:23:verifiable}) and pays for them in
+deployment cost, and this network's own history of what a consensus change costs --- the \PoN{}
+activation required a temporary deep-reorg allowance and a cluster of emergency checkpoints
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{8983--8988} \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{277--283} --- is the
+right reference class for estimating it.
+
+\subsubsection{Electorate and weight}
+
+\begin{definition}[Electorate, identity, weight, reference total, \planned]
+\label{def:23:electorate}
+Let $N(\hgt)$ be the deterministic confirmed \FluxNode{} set at height $\hgt$, which is consensus
+state in \fluxd. Each node $j \in N(\hgt)$ carries a tier $t_j \in \tiers$, collateral
+$\coll{t_j} \in \{\num{1000},\ \num{12500},\ \num{40000}\}\flux$, and \emph{two distinct keys}: the
+owner key $\mathrm{own}_j$, which is the collateral public key and from which the record's
+\texttt{payment\_address} is derived
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}rpc/\allowbreak{}fluxnode.cpp}{1512--1520}, and the node key $\mathrm{pk}_j$, which
+\fluxd{} documents as ``\texttt{Pubkey used for VPS signature verification}''
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{154} and which signs \PoN{} blocks and \FluxOS{} P2P
+envelopes. Because the settled rule is that votes are signed with node \emph{owner} keys, an
+\emph{identity} here is an owner key and never a node key; the identity set is
+$I(\hgt) = \{\mathrm{own}_j : j \in N(\hgt)\}$, publicly proxied by \texttt{payment\_address}, which
+is the observable the measurement of \Cref{sec:23:measurement} uses. Define
+$\vweight{\cdot} : I(\hgt) \to \mathbb{R}_{\ge 0}$ and $\vtotal : \mathbb{N} \to \mathbb{R}_{>0}$ by
+\[
+\vweight{i}(\hgt) \;\defeq\; \sum_{j \in N(\hgt):\ \mathrm{own}_j = i}
+  \frac{\coll{t_j}}{\num{1000}\flux},
+\qquad
+\vtotal(\hgt) \;\defeq\; \sum_{i \in I(\hgt)} \vweight{i}(\hgt)
+  \;=\; \sum_{t \in \tiers} \ncount{t}(\hgt)\,\frac{\coll{t}}{\num{1000}\flux}.
+\]
+Per node the weights are $\tC \mapsto 1$, $\tN \mapsto 12.5$, $\tS \mapsto 40$. The
+\emph{reference total} is a trailing maximum,
+\[
+\vtotal^{\!\star}(\hgt_0) \;\defeq\; \max_{\hgt \in [\hgt_0 - \Delta_W,\ \hgt_0]} \vtotal(\hgt),
+\qquad \Delta_W \in \mathbb{N}\ \text{open}.
+\]
+All weights in a report are evaluated at the height $\hgt_0$ at which the report transaction
+confirms and never re-evaluated: a node confirmed after $\hgt_0$ would carry weight $0$ in that
+report.
+\end{definition}
+
+Two design points deserve their reasons. The \emph{electorate freeze} exists because collateral
+maturity is 100 blocks (\SI{50}{\minute} at \SI{30}{\second} spacing)
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{20}; without the freeze a report
+could be answered by nodes created in response to it. The \emph{trailing maximum} exists because
+the reporter chooses $\hgt_0$: node confirmations expire after 640 blocks (\SI{5.3}{\hour}), so an
+incident that leaves a large share of weight temporarily unconfirmed would lower $\vtotal(\hgt_0)$
+and raise every remaining share. Taking a maximum rather than a mean is the safe direction — it can
+only make eviction harder.
+
+\settlednote{$\Delta_W = \num{20160}$ blocks, as a trailing maximum (\Cref{tab:23-recommended}). $\Delta_W$, the trailing window for $\vtotal^{\!\star}$. Domain: $[0,\ \num{20160}]$
+blocks. Trade-off: $\Delta_W = 0$ reduces to the plain total and admits the electorate-timing attack
+of \Cref{sec:23:attacks}; large values leave $\vtotal^{\!\star}$ stale after a genuine fleet
+contraction, which raises the bar to evict and is therefore safe but costs liveness.}
+
+At the measurement height \num{2917115}: $\ncount{\tC} = \num{3247}$, $\ncount{\tN} = \num{1615}$,
+$\ncount{\tS} = \num{1627}$, so $\vtotal = \num{3247} + \num{20187.5} + \num{65080} = \num{88514.5}$
+units, i.e.\ \num{88514500}\flux\ of locked collateral, with tier shares
+\SI{3.67}{\percent} / \SI{22.81}{\percent} / \SI{73.52}{\percent}
+\srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}.
+
+\subsubsection{Three transaction types}
+
+\begin{definition}[Report transaction, \planned]
+\label{def:23:report}
+A report is a \fluxd{} transaction of a new \FluxNode-family type $\mathsf{MOD\_REPORT}$, carrying
+\[
+r \;=\; \bigl(\mathsf{app\_hash},\ \mathsf{category},\ \mathsf{evidence},\ \mathrm{own}_r\bigr),
+\qquad
+\sigma_r \;=\; \mathrm{Sign}_{\mathrm{own}_r}\bigl(H(r)\bigr),
+\]
+where $\mathsf{app\_hash} \in \{0,1\}^{256}$ is the application hash to be banned, $\mathsf{category}$
+is drawn from the taxonomy left open above, $\mathsf{evidence}$ is a content hash of supporting
+material, and $\mathrm{own}_r \in I(\hgt_0)$ is the reporter's owner key. The report identifier is
+$H(r)$; the transaction is indexed by $\mathsf{app\_hash}$ and by $H(r)$, so that any node can
+enumerate the open reports on an application from its own chain state. It carries no fee and no
+bond, and it is valid only if no report on the same $\mathsf{app\_hash}$ is open at its confirmation
+height (\Cref{def:23:decision}) and $\mathsf{app\_hash}$ is not already in the ban set
+(\Cref{def:23:ban}) \srcintent{evidence/design/08-answers-round-2.md, round 18}. Its confirmation
+height defines $\hgt_0$ and opens the window
+$[\hgt_0,\ \hgt_0 + \Delta_{\mathrm{vote}}]$ with $\Delta_{\mathrm{vote}} = \num{2880}$ blocks,
+\SI{24}{\hour} at \SI{30}{\second} spacing.
+\end{definition}
+
+The transaction shape is not new: \fluxd{} already carries two special \FluxNode{} types --- the
+start transaction, signed by the collateral key
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}activefluxnode.cpp}{253--288}, and the confirm transaction, signed by
+the node key and then benchmark-signed \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}activefluxnode.cpp}{290--332,59--68} ---
+carried at transaction versions 5 and 6
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}activefluxnode.cpp}{409--427}. The report and vote types would be a
+third and fourth member of that family.
+
+Two boundaries of what a chain can check follow immediately, and both are properties of the design
+rather than defects in it. First, \fluxd{} holds no application registry: the \FluxOS{} global
+specification set is not consensus state. Consensus can therefore validate a report's \emph{form}
+(type, signature, capacity) and never its \emph{referent}; a report naming a hash that corresponds
+to no deployed application is perfectly valid on-chain and simply unenforceable off it. Second,
+$\reporters$ --- reporter eligibility, an open parameter in every earlier draft of this mechanism ---
+is settled by the anti-spam rule below rather than chosen: a key that operates no nodes has
+capacity $0$, so $\reporters = I(\hgt_0)$ falls out of \Cref{def:23:capacity}.
+
+\settlednote{$(\mathsf{app\_name}, \mathsf{owner})$ (\Cref{tab:23-recommended}). What $\mathsf{app\_hash}$ hashes, which is also the enforcement scope. Domain:
+$\{$the permanent-message hash of one specification version; a hash of the application identity
+$(\mathsf{app\_name}, \mathsf{owner})$; $+$ all applications of the same owner; $+$ image$\}$.
+Trade-off: if the ban key is a specification-version hash, an application updated during the
+\SI{24}{\hour} window acquires a new hash and the ban, when it lands, names a version no longer
+deployed --- the escape that keying on name-and-owner was chosen to close, and the invariant
+``an update during the window is neither an escape nor a second claim'' holds only under the
+identity reading. Owner scope is evaded by registering a new address at zero cost while widening
+the blast radius of a mistaken ban; image scope is what the deployed blocklist does and is defeated
+by re-tagging. The team's specification says ``the application hash'' and does not disambiguate.}
+
+\begin{definition}[Vote transaction, \planned]
+\label{def:23:vote}
+A vote is a \fluxd{} transaction of type $\mathsf{MOD\_VOTE}$ carrying
+\[
+v \;=\; \bigl(H(r),\ \hgt_0,\ \mathsf{app\_hash},\ i,\ \mathsf{decision}\bigr),
+\qquad
+\sigma_v \;=\; \mathrm{Sign}_{i}\bigl(H(v)\bigr),
+\]
+with $i \in I(\hgt_0)$ and $\mathsf{decision} \in \{\mathsf{evict}, \mathsf{keep}\}$. It carries no
+fee. It is valid iff its signer is in the frozen electorate $I(\hgt_0)$, its confirmation height
+$\hgt_v$ satisfies $\hgt_0 \le \hgt_v \le \hgt_0 + \Delta_{\mathrm{vote}}$, and no earlier vote
+from $i$ on $H(r)$ is already in the chain. Votes are therefore \emph{irrevocable within a report}:
+the first confirmed vote from an identity is the only one that counts, and a later one is invalid
+rather than overriding.
+\end{definition}
+
+What is signed binds the vote to one report and one electorate, so it cannot be replayed against a
+later report on the same application (different $\hgt_0$) or against a re-registration. Two things
+change relative to the message-layer construction this replaces, and both are improvements. The
+window is measured on \emph{confirmation} height, which is a canonical clock rather than a
+self-declared envelope timestamp, so two honest nodes cannot disagree about whether a vote arrived
+in time --- at the cost that a vote broadcast near the boundary and confirmed after it is simply
+void, which the \SI{24}{\hour} window makes an edge case rather than a hazard. And irrevocability
+is now a consequence of chain order rather than a rule imposed to make an off-chain certificate
+checkable. Under the settled rule $\mathsf{keep}$ votes are never counted.
+
+\settlednote{Evict-only, with a per-identity mempool quota as the relay policy (\Cref{tab:23-recommended}). Whether the vote type carries a $\mathsf{decision}$ field at all, and the relay policy for
+fee-less transactions. Domains: $\mathsf{decision} \in \{$evict-only; evict/keep with keep recorded
+and uncounted$\}$; relay policy $\in \{$admit up to the capacity bound; per-identity mempool
+quota; \ldots$\}$. Trade-off: under abstention-as-no a $\mathsf{keep}$ vote changes no outcome and
+costs block space, so recording one buys only a public record and an input to a possible
+early-termination rule; and because these transactions pay no fee there is no price signal to order
+a mempool by, so admission must be bounded by the capacity rule and by one-vote-per-identity
+instead. A node that drops fee-less transactions under pressure delays a vote but cannot invalidate
+it, since 2{,}880 slots remain in the window.}
+
+\begin{definition}[Tally, decision rule, expiry, \planned]
+\label{def:23:decision}
+Let $V_r(\hgt) \subseteq I(\hgt_0)$ be the set of identities whose valid $\mathsf{evict}$ vote on
+$r$ is \emph{confirmed at or before} height $\hgt$, and let
+$Y_r : \mathbb{N} \to \mathbb{R}_{\ge 0}$, $Y_r(\hgt) \defeq \sum_{i \in V_r(\hgt)}
+\vweight{i}(\hgt_0)$. Every validator evaluates $Y_r$ from block data; there is no tallier. The
+report is \emph{carried} iff
+\[
+\mathsf{carried}(r) \iff \exists\, \hgt_c \in [\hgt_0,\ \hgt_0 + \Delta_{\mathrm{vote}}]
+:\quad Y_r(\hgt_c) \;\ge\; \vthresh \cdot \vtotal^{\!\star}(\hgt_0),
+\qquad \vthresh = 0.25 ,
+\]
+and $\hgt_c$ denotes the least such height, the \emph{crossing height}. If no such $\hgt_c$ exists,
+the report \emph{expires} at $\hgt_0 + \Delta_{\mathrm{vote}}$: it is removed from the open set, its
+reporter's capacity is released, and $\mathsf{app\_hash}$ becomes immediately reportable again by
+any identity with free capacity. There is no cooldown.
+\end{definition}
+
+\begin{definition}[Proposal capacity, the anti-spam rule, \planned]
+\label{def:23:capacity}
+For $i \in I(\hgt)$ define the capacity $X_i : \mathbb{N} \to \mathbb{N}$,
+$X_i(\hgt) \defeq \lvert\{\,j \in N(\hgt) : \mathrm{own}_j = i\,\}\rvert$, the number of confirmed
+nodes the identity operates, counted without regard to tier. A report transaction from $i$ is valid
+only if the number of $i$'s reports that are open at $\hgt_0$ --- neither expired nor banned --- is
+strictly less than $X_i(\hgt_0)$.
+\end{definition}
+
+This rule is the whole of the anti-spam design, and it deserves precision rather than praise.
+It introduces no new economic primitive: there is no bond, no custody script, no adjudicator that
+must learn the outcome to release funds, and therefore none of the open parameters --- size,
+custody, destination of a forfeiture --- that a bond drags in. It prices reporting in exactly the
+resource that already prices voting, and it inherits the quorum's Sybil resistance without a
+separate argument, as follows.
+
+\begin{proposition}[The capacity rule is Sybil-neutral, \planned]
+\label{prop:23:capacity}
+Let a party $p$ control the node set $N_p \subseteq N(\hgt)$ and partition it arbitrarily among the
+owner keys it controls, writing $I_p \defeq \{\mathrm{own}_j : j \in N_p\} \subseteq I(\hgt)$ for
+that key set. Then $p$'s total concurrent proposal capacity is
+$\sum_{i \in I_p} X_i(\hgt) = \lvert N_p \rvert$, independent of the partition. Increasing it
+requires confirming an additional node, hence locking at least $\coll{\tC} = \num{1000}\flux$.
+\end{proposition}
+
+\begin{proof}
+Each confirmed node has exactly one owner key, so the sets $\{j : \mathrm{own}_j = i\}$ for
+$i \in I_p$ partition $N_p$ and their cardinalities sum to $\lvert N_p \rvert$. Re-keying or
+re-addressing moves nodes between blocks of the partition and changes no cardinality sum. A node
+enters $N(\hgt)$ only through a start transaction against a matured collateral UTXO of a valid tier
+amount \srccode{fluxd/\allowbreak{}src/\allowbreak{}coins.cpp}{630--686}, the smallest of which is $\coll{\tC}$.
+\end{proof}
+
+\begin{corollary}[Network capacity and sustained report rate, \planned]
+\label{cor:23:capacity}
+$\sum_{i \in I(\hgt)} X_i(\hgt) = \lvert N(\hgt) \rvert$. At the measured height the network admits
+at most \num{6489} concurrently open reports, and --- because capacity is released on expiry and a
+report occupies its slot for at most $\Delta_{\mathrm{vote}}$ blocks --- at most \num{6489} reports
+per \SI{24}{\hour} in the steady state.
+\end{corollary}
+
+The corollary that matters for this section's argument is the unflattering one. Capacity is
+distributed as \emph{node counts}, so it is concentrated in the same way and for the same reason
+voting power is: the largest node key operates \num{480} of \num{6489} nodes
+(\SI{7.40}{\percent} of all capacity; \num{479} under the owner-identity model), and the Gini of node counts is \num{0.716} against
+\num{0.839} for weight \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}. The rule
+bounds spam by collateral, which is right; it does not distribute the ability to report any more
+evenly than the collateral is distributed, and the concentration measurement of
+\Cref{sec:23:measurement} already quantifies exactly how unevenly that is.
+
+It also fixes the price of sustained nuisance, which is worth computing because the number is small.
+Keeping one application under a permanently renewed report costs one node --- \num{1000}\flux\ of
+\emph{locked, fully recoverable} collateral, not a fee. Keeping every one of the \num{1195}
+applications in the deployed registry
+\srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03} under permanent report
+therefore costs \num{1195000}\flux\ of locked collateral, which is \SI{5.4}{\percent} of the
+\num{22128625}\flux\ the eviction threshold itself requires. What that buys is not eviction ---
+abstention is ``no'' --- but operator attention and voter fatigue, and the second of those degrades
+the liveness the mechanism already has least of.
+
+\begin{theorem}[Public verifiability: nothing is tallied off-chain, \planned]
+\label{thm:23:verifiable}
+There is a function $\mathrm{Ban}$ from finite chain prefixes to subsets of $\{0,1\}^{256}$,
+computable by any node from block data alone, such that under
+\Cref{def:23:report,def:23:vote,def:23:decision,def:23:ban} an honest node's enforcement set at
+height $\hgt$ equals $\mathrm{Ban}$ applied to its canonical chain at $\hgt - \Delta_{\mathrm{exec}}$.
+In particular, two honest nodes holding the same canonical chain hold the same enforcement set
+exactly, and no message outside the chain is an input.
+\end{theorem}
+
+\begin{proof}
+Each of the four objects is a field of a block. Reports and votes are transactions, so
+$V_r(\hgt)$ is the set of signers of the valid $\mathsf{MOD\_VOTE}$ transactions in blocks
+$[\hgt_0, \hgt]$ and is a function of the prefix. $N(\cdot)$ is consensus state, so
+$\vweight{\cdot}(\hgt_0)$ and $\vtotal^{\!\star}(\hgt_0)$ are functions of the prefix; hence so is
+$Y_r$, being a finite sum of them, and so is the predicate $Y_r(\hgt_c) \ge
+\vthresh\vtotal^{\!\star}(\hgt_0)$. Ban memos are coinbase fields, and their validity condition
+(\Cref{def:23:ban}) is that predicate. $\mathrm{Ban}$ is therefore the set of $\mathsf{app\_hash}$
+values carried by valid ban memos in the prefix, and enforcement is its image after the
+confirmation delay.
+\end{proof}
+
+This is the property the section's own verifiability requirement asked for and the property the
+message-layer construction could not supply. There, a node holding the chain but not the gossiped
+certificate body could not evaluate the predicate at all, so determinism held only ``up to gossip
+delay'' and a partitioned node's enforcement set was a function of what it had received. Here the
+qualifier disappears. It is also the property the deployed channel of
+\Cref{def:23:policy-channel} lacks completely: there the record available to a node for verifying
+that a removal was authorised is $\varnothing$.
+
+\subsubsection{Enforcement}
+\label{sec:23:enforcement}
+
+\begin{definition}[Ban memo, \planned]
+\label{def:23:ban}
+A \emph{ban memo} is a field $\mathsf{BAN}\,\|\,H(r)\,\|\,\mathsf{app\_hash}$ carried in the
+coinbase transaction of a \PoN{} block at height $\hgt_b$. A block is valid only if it carries
+\textbf{at most one} ban memo, and a ban memo is valid only if the report $H(r)$ was carried at
+some crossing height $\hgt_c \le \hgt_b - 1$ within its own window, and no valid ban memo for
+$H(r)$ appears at any earlier height. The \emph{first eligible height} for a carried report is
+therefore $\hgt_c + 1$. Inclusion is \textbf{consensus-required, not discretionary}: every block at
+a height at which at least one carried report remains unbanned is invalid unless it carries the
+memo for the first such report in the settled order --- least crossing height, then least $H(r)$
+\srcintent{evidence/design/08-answers-round-2.md, round 5 and round 18 answers}
+(\Cref{prop:23:inclusion-required}). A valid ban memo adds $\mathsf{app\_hash}$ to the ban set,
+closes the report, and releases the reporter's capacity.
+\end{definition}
+
+\begin{property}[Bounded enforcement throughput and bounded coinbase, \planned]
+\label{prop:23:throughput}
+At most one application is banned per block, hence at most $\num{2880}$ per \SI{24}{\hour} at
+\SI{30}{\second} spacing, and the coinbase grows by at most one fixed-size memo per block
+regardless of how many reports are open. This is the same constraint \Cref{sec:07-pnr} respects
+when it routes the application-revenue split through the coinbase outputs that already exist rather
+than adding new ones.
+\end{property}
+
+\begin{property}[The ban set is monotone, \planned]
+\label{prop:23:monotone}
+No transition specified above removes an entry from the ban set. It is non-decreasing in height,
+growing by at most one \SI{32}{\byte} entry per block, and a ban is a chain fact that survives
+every future block. \Cref{op:23:reinstatement} is the consequence.
+\end{property}
+
+\begin{definition}[Enforcement transition, \planned]
+\label{def:23:enforcement}
+At every height $\hgt \ge \hgt_b + \Delta_{\mathrm{exec}}$, every \FluxOS{} node that observes a
+valid ban memo would: (i) resolve $\mathsf{app\_hash}$ against its global application registry;
+(ii) mark the application \texttt{BANNED} and issue the cancel message; (iii) remove any local
+instance, reusing the removal path that already exists for the blocklist sweep
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appSecurity/\allowbreak{}imageManager.js}{644--676}; (iv) refuse to install,
+redeploy or soft-redeploy it; (v) stop broadcasting its location. The deployer's prepaid balance
+would not be refunded. A memo whose hash resolves to nothing is a no-op.
+\end{definition}
+
+Note that the non-refund clause is presently vacuous under deployed code — there is no refund
+path at all, and an underpaid registration is silently dropped \srcdoc{\_fluxos.md~\S3.3} — so the
+clause acquires content only if the credits and renewal work gives refunds a meaning.
+
+\begin{property}[Ban-memo inclusion is consensus-required, \planned]
+\label{prop:23:inclusion-required}
+This closes what an earlier draft of this mechanism carried as the single unresolved question about
+the enforcement path. The team's decision is that inclusion is obligatory rather than left to
+producer discretion: at every height at which a carried report remains unbanned, a producer must
+carry the ban memo for the first such report in the settled order, and \Cref{def:23:ban} states the
+corresponding validity rule
+\srcintent{evidence/design/08-answers-round-2.md, round 5 and round 18 answers}. What it buys is stated plainly:
+enforcement latency after the crossing height is bounded by one block for a report with no other
+carried report queued ahead of it, not by how long a reluctant or colluding set of producers is
+willing to withhold it. Which \emph{one} report's memo a block
+must carry, when more than one crosses in the same slot, is the ordering question
+immediately below, and the obligation binds over that order.
+\end{property}
+
+\settlednote{Least crossing height, then least $H(r)$; the memo is carried in the coinbase (\Cref{tab:23-recommended}). Ordering when several reports are carried at the same height, and the carriage of the memo
+in the coinbase. Domains: ordering $\in \{$least $H(r)$; least $\hgt_0$; least crossing height then
+least $H(r)$; producer's choice$\}$; carriage $\in \{$a zero-value \texttt{OP\_RETURN} output; a
+field in the coinbase \texttt{scriptSig}$\}$. Trade-off: with one memo per block a queue forms
+whenever two reports cross in the same slot, and the settled obligatory-inclusion rule cannot be
+enforced without a deterministic order over that queue; on carriage, an extra coinbase \emph{output}
+interacts with the two independent checks that already scan coinbase outputs --- the dev-fund
+minimum \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{1231--1249} and the tier-payout check
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.cpp}{837--875} --- while a \texttt{scriptSig} field does not.}
+
+The lower bound on the penalty follows from the deployed pricing table. The forfeited amount is the
+unused fraction of the deployment price, floored at \texttt{minPrice} $=$ \num{0.01}\flux\ per
+month-equivalent and pro-rated to the validator's height-gated minimum term --- \num{5000} blocks,
+then \num{100} from height \num{1630040}, then \num{1} from height \num{1964447}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{852--862},
+while the live endpoint still reports \num{5000}
+\srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} (conflict C33) --- against a
+post-\PoN{} default of \num{88000}, then re-ceiled to two decimals. A minimally provisioned
+application would therefore forfeit \num{0.01}\flux\ under either minimum.
+
+\begin{property}[Delay is fixed at one slot under the settled rule, \planned]
+\label{prop:23:inclusion}
+Under \Cref{prop:23:inclusion-required}, enforcement latency after a report crosses threshold does
+not depend on which node produces the next block: the block at the first eligible height is invalid
+without the memo, so $\delta = 1$ whenever no other carried report is queued ahead of it (one memo
+per block, \Cref{def:23:ban}). This replaces what a discretionary rule would have
+cost. Assuming \PoN{} slot eligibility is uniform over confirmed nodes and tier-independent
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon.cpp}{400--433} and that successive slots' producers are drawn
+independently, a discretionary rule under which a fraction $f$ of confirmed nodes decline to include
+a due memo would have produced a geometric delay --- expected $1/(1-f)$ slots,
+$\Pr[\text{delay} > k] = f^{\,k}$ --- diverging only as $f \to 1$. At the measured distribution's
+largest identity, $f = 0.074$, that would have been \num{1.08} slots in expectation, about
+\SI{32}{\second}; at $f = 0.5$, two slots. The counterfactual shows the discretionary rule would not
+have been a practical censorship vector at the measured distribution either, which makes the settled
+rule the more conservative choice rather than a strictly necessary one --- it removes the dependence
+on $f$ entirely instead of merely making it small.
+\end{property}
+
+The vote-transaction censorship question is separate and is unaffected by
+\Cref{prop:23:inclusion-required}: a vote needs only one non-declining producer across the whole
+\num{2880}-slot window to be included, so under the same independence assumption a coalition holding
+fraction $f$ of nodes excludes a given vote from the entire window with probability
+$f^{\num{2880}}$, negligible for every $f < 1$. That the \emph{window}, not any single slot, is what
+protects a vote is a different, and looser, guarantee than the exact one-slot bound the ban memo now
+has by consensus rule.
+
+One constraint this subsection exports to consensus, in the same class as the constraint
+\Cref{sec:07-pnr} carries on the fee pool. The 2-of-4 emergency key set can produce a block outside
+normal \PoN{} eligibility \srccode{fluxd/\allowbreak{}src/\allowbreak{}emergencyblock.cpp}{24--30,183--190}, and that block carries a
+coinbase. \textbf{The ban-memo validity rule of \Cref{def:23:ban} must therefore bind on the
+emergency path as well}, or those keys acquire the ability to ban an application with no report,
+no votes and no threshold --- a capability materially larger than the one the emergency path exists
+to provide.
+
+\begin{remark}[Emergency blocks are subject to the coinbase rules --- verified]
+\label{rem:emergency-coinbase}
+This was carried as an open verification, because a ban memo carried in the coinbase is only as
+sound as the weakest block-production path, and the emergency path bypasses eligibility entirely
+(\S\ref{sec:consensus}). It is now checked against source and the answer is favourable:
+\texttt{Is\allowbreak{}Emergency\allowbreak{}Block} is consulted in six places in consensus code, all of them header
+validation --- to permit a larger block signature and to skip the proof-of-node check in
+\texttt{Check\allowbreak{}Block\allowbreak{}Header} \srccode{fluxd/src/main.cpp}{5333,5339}, in the equivalent header path
+\srccode{fluxd/src/main.cpp}{2778}, when reloading headers from disk
+\srccode{fluxd/src/txdb.cpp}{557}, and in the \PoN{} header checks that skip the proof of node and
+validate the emergency signatures and activation gate \srccode{fluxd/src/pon/pon.cpp}{205,236--250}.
+It appears \emph{nowhere} in \texttt{ConnectBlock},
+\texttt{Contextual\allowbreak{}Check\allowbreak{}Block} or \texttt{Contextual\allowbreak{}Check\allowbreak{}Transaction} \shipped.
+
+\textbf{So the emergency bypass is narrow and does not reach the coinbase.} An emergency block skips
+the proof of node and the ordinary signature-size limit, and is otherwise validated by every rule a
+normal block is: BIP-30 duplicate-transaction rejection
+\srccode{fluxd/src/main.cpp}{3868--3875}, the deterministic FluxNode payout check
+\srccode{fluxd/src/main.cpp}{3877--3880}, and the full contextual transaction checks. A ban memo
+specified as a coinbase constraint is therefore enforced on emergency blocks too, and the constraint
+in \Cref{sec:23:mechanism} can be stated as a claim about deployed behaviour rather than as a
+requirement awaiting confirmation.
+\end{remark}
+
+\subsubsection{Placement, and what fee-lessness costs}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}p{3.1cm}p{4.0cm}p{7.4cm}@{}}
+\toprule
+object & location & reason \\
+\midrule
+report & \textbf{chain}, indexed & canonical $\hgt_0$; freezes the electorate; discoverable by any node \\
+votes & \textbf{chain}, fee-less & one transaction per identity per report; confirmation height is the canonical clock \\
+tally $Y_r$ & \textbf{chain-derived}, in \fluxd{} & a pure function of the block sequence; recomputed, never journaled \\
+decision & \textbf{chain-derived} & the predicate of \Cref{def:23:decision}, evaluated by every validator \\
+ban & \textbf{chain}, coinbase memo & one per block; canonical $\hgt_b$, hence a canonical enforcement height \\
+enforcement & \FluxOS{}, at $\hgt_b + \Delta_{\mathrm{exec}}$ & where removal already happens \\
+\bottomrule
+\end{tabular}
+\caption{Placement of each object in the specified mechanism (\planned). Nothing in the decision
+path leaves the chain, which is the difference between this design and the message-layer
+construction it replaces.}
+\end{table}
+
+An earlier draft of this mechanism rejected on-chain voting for two reasons: it would cost a
+fee-bearing transaction per voter, and it would require every voting key to hold spendable \flux,
+which is a key-hygiene hazard the network does not currently have. \textbf{The fee-less rule
+retires both objections.} An operator with no spendable balance at the key that carries their
+collateral can still vote, so no operator is disenfranchised by their own treasury arrangements ---
+which is not a small point for a mechanism whose safety argument already depends on the dispersed
+majority being able to participate at all.
+
+\begin{remark}[Fee-lessness is structural, not a premise --- verified]
+\label{rem:feeless-verified}
+The fee-less rule was carried as resting on the team's stated premise that \FluxNode{} start and
+confirm transactions pay no fee. It is stronger than a premise: it is enforced by consensus.
+\texttt{Check\allowbreak{}Transaction} rejects any \FluxNode{} transaction whose \texttt{vin}, \texttt{vout},
+\texttt{vJoinSplit}, \texttt{v\allowbreak{}Shielded\allowbreak{}Output} or \texttt{vShieldedSpend} is non-empty, with reject
+reason \texttt{bad-\allowbreak{}txns-\allowbreak{}fluxnode-\allowbreak{}tx-\allowbreak{}not-\allowbreak{}empty} \shipped
+\srccode{fluxd/src/main.cpp}{1751--1755}. A transaction with no inputs and no outputs
+\emph{cannot} pay a fee, since a fee is the difference between them.
+
+So a vote following the start-transaction shape (\Cref{tab:23-recommended}) inherits fee-lessness by
+construction rather than by policy, and cannot be made fee-bearing without changing the transaction
+shape itself. That is why the relay policy needs a non-fee scarcity term --- the per-identity mempool
+quota recommended in \Cref{tab:23-recommended} --- and why no fee-based anti-spam mechanism is
+available here even in principle.
+\end{remark}
+
+What fee-lessness costs is the price signal that would otherwise bound volume, so the bound must
+come from the capacity rule instead, and it is worth seeing the worst case. With every capacity
+slot used --- \num{6489} concurrently open reports by \Cref{cor:23:capacity} --- and every one of
+the \num{869} owner identities voting on every report, the window carries
+$\num{6489} \times \num{869} = \num{5638941}$ vote transactions, about \num{1958} per block. At an
+assumed \SI{250}{\byte} per vote transaction that is \SI{0.49}{\mega\byte} per block against a
+\SI{2}{\mega\byte} block-size limit \srccode{fluxd/\allowbreak{}src/\allowbreak{}consensus/\allowbreak{}consensus.h}{23}, or
+\SI{1.41}{\giga\byte} of the \SI{5.76}{\giga\byte} a day of blocks can carry --- roughly a quarter
+of the chain's entire capacity, contributed by transactions that pay nothing \srcinferred. The
+transaction format is not specified, so the \SI{250}{\byte} figure is an assumption and the
+conclusion is a shape rather than a number: \emph{the concurrent-proposal cap is load-bearing for
+block space, not merely for operator attention}, and it should be chosen with that in mind.
+
+\subsubsection{State machine and node-side procedure}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}p{2.0cm}p{5.6cm}p{1.9cm}p{4.6cm}@{}}
+\toprule
+from & guard & to & effect \\
+\midrule
+\textsc{submitted} & report tx confirms at $\hgt_0$; $\sigma_r$ verifies;
+  $\mathrm{own}_r \in I(\hgt_0)$; open reports of $\mathrm{own}_r < X_{\mathrm{own}_r}(\hgt_0)$;
+  no \textsc{open} report on $\mathsf{app\_hash}$; $\mathsf{app\_hash} \notin \mathcal{B}$
+  & \textsc{open} & electorate frozen at $\hgt_0$; one capacity slot consumed \\
+\textsc{submitted} & any guard fails & \textsc{invalid} & the transaction is rejected; nothing
+  is spent, since there is no fee and no bond \\
+\textsc{open} & $Y_r(\hgt_c) \ge \vthresh\vtotal^{\!\star}(\hgt_0)$, $\hgt_c \le \hgt_0 +
+  \Delta_{\mathrm{vote}}$ & \textsc{carried} & first eligible ban height is $\hgt_c + 1$ \\
+\textsc{open} & $\hgt > \hgt_0 + \Delta_{\mathrm{vote}}$, threshold not reached & \textsc{expired}
+  & capacity released; $\mathsf{app\_hash}$ immediately re-reportable; no cooldown \\
+\textsc{carried} & the first block at $\hgt_b \ge \hgt_c + 1$ at which the report is first in the
+  settled order carries its ban memo, consensus-required (at most one per block) & \textsc{banned}
+  & $\mathsf{app\_hash}$ enters the ban set; capacity released \\
+\textsc{banned} & $\hgt \ge \hgt_b + \Delta_{\mathrm{exec}}$ & \textsc{enforced} &
+  \Cref{def:23:enforcement} \\
+\textsc{enforced} & --- & --- & no transition exists (\Cref{op:23:reinstatement}) \\
+\bottomrule
+\end{tabular}
+\caption{Report lifecycle (\planned). Every guard is a predicate over the canonical chain, so every
+transition is evaluated identically by every validator; there is no state that a node can be
+missing.}
+\end{table}
+
+\begin{algorithm}[H]
+\caption{Consensus-side validation and tally, per block (\planned, \fluxd)}
+\KwIn{block $B$ at height $\hgt$; the confirmed node set $N(\cdot)$ and its per-block undo data
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnodecachedb.cpp}{14--17}; the open-report table $\mathcal{O}$ and
+ban set $\mathcal{B}$ as recomputed from the chain prefix}
+\KwOut{accept or reject $B$; updated $\mathcal{O}$ and $\mathcal{B}$}
+\tcc{Invariant: $\mathcal{O}$ and $\mathcal{B}$ are pure functions of the chain prefix ending at
+$B$. Nothing is written that a resyncing node could not recompute, and no input comes from outside
+the chain — which is what makes a separate moderation database unnecessary, and, per the fee-pool
+recommendation of \Cref{sec:07-pnr}, undesirable.}
+\tcc{Failure mode: consensus validates form and authorisation, never the referent — a report naming
+a hash with no application behind it is valid here and a no-op in \FluxOS. Fee-less transactions
+carry no price signal, so mempool admission must be bounded by capacity, not by fee. On a reorg,
+$\mathcal{O}$ and $\mathcal{B}$ are recomputed with the chain and need no repair path.}
+\ForEach{transaction $\mathrm{tx} \in B$}{
+  \If{$\mathrm{tx}$ is $\mathsf{MOD\_REPORT}$}{
+    \lIf{$\sigma_r$ invalid \textbf{or} $\mathrm{own}_r \notin I(\hgt)$ \textbf{or}
+      $\lvert\{\text{open reports of } \mathrm{own}_r\}\rvert \ge X_{\mathrm{own}_r}(\hgt)$
+      \textbf{or} an open report exists on $\mathsf{app\_hash}$
+      \textbf{or} $\mathsf{app\_hash} \in \mathcal{B}$}{\textbf{reject} $B$}
+    insert $H(r)$ into $\mathcal{O}$ with $\hgt_0 \leftarrow \hgt$;\quad
+      $Y_r \leftarrow 0$;\quad $V_r \leftarrow \varnothing$\;
+  }
+  \If{$\mathrm{tx}$ is $\mathsf{MOD\_VOTE}$ on $H(r)$ by $i$}{
+    \lIf{$H(r) \notin \mathcal{O}$ \textbf{or} $\sigma_v$ invalid \textbf{or} $i \notin I(\hgt_0)$
+      \textbf{or} $\hgt > \hgt_0 + \Delta_{\mathrm{vote}}$ \textbf{or} $i \in V_r$}{\textbf{reject} $B$}
+    $V_r \leftarrow V_r \cup \{i\}$;\quad
+      \lIf{$\mathsf{decision} = \mathsf{evict}$}{$Y_r \leftarrow Y_r + \vweight{i}(\hgt_0)$}
+  }
+}
+\ForEach{$H(r) \in \mathcal{O}$ with $\hgt > \hgt_0 + \Delta_{\mathrm{vote}}$ and
+  $Y_r < \vthresh\,\vtotal^{\!\star}(\hgt_0)$}{
+  delete $H(r)$ from $\mathcal{O}$ (\textsc{expired}); release one capacity slot of
+    $\mathrm{own}_r$\;
+}
+\lIf{some $H(r) \in \mathcal{O}$ is carried with crossing height ${} \le \hgt - 1$ \textbf{and} the
+  coinbase of $B$ carries no ban memo for the first such report in the settled order (least crossing
+  height, then least $H(r)$)}{\textbf{reject} $B$}
+\If{the coinbase of $B$ carries a ban memo for $H(r)$}{
+  \lIf{$B$ carries more than one memo \textbf{or} $H(r) \notin \mathcal{O}$ \textbf{or}
+    $Y_r < \vthresh\,\vtotal^{\!\star}(\hgt_0)$ \textbf{or} the crossing height is not
+    ${} \le \hgt - 1$ \textbf{or} $\mathsf{app\_hash} \in \mathcal{B}$}{\textbf{reject} $B$}
+  $\mathcal{B} \leftarrow \mathcal{B} \cup \{\mathsf{app\_hash}\}$; delete $H(r)$ from
+    $\mathcal{O}$; release the capacity slot\;
+}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{Ban observation and purge, per node (\planned, \FluxOS)}
+\KwIn{canonical chain; confirmation delay $\Delta_{\mathrm{exec}}$; local application set
+$A_{\mathrm{loc}}$; the global specification registry}
+\KwOut{registry state and $A_{\mathrm{loc}}$ for every banned $\mathsf{app\_hash}$}
+\tcc{Invariant (exact determinism): enforcement is a function of the canonical chain alone, so two
+honest nodes on the same chain reach the same enforcement set — not merely up to gossip delay, as
+in the message-layer construction this replaces.}
+\tcc{Failure mode (fail-safe, with one asymmetry): a memo whose hash resolves to no registry entry
+is a no-op, and a node that has not yet reached $\hgt_b + \Delta_{\mathrm{exec}}$ leaves the
+application up. The asymmetry is that purging is not locally reversible: a reorg deeper than
+$\Delta_{\mathrm{exec}}$ that removes the ban block leaves an application deleted that the chain no
+longer bans, and it must be redeployed. This is why $\Delta_{\mathrm{exec}}$ is a reorg parameter
+and not a policy one.}
+\ForEach{valid ban memo observed at height $\hgt_b$}{
+  \lIf{$\hgt < \hgt_b + \Delta_{\mathrm{exec}}$}{\textbf{wait}}
+  \lIf{$\mathsf{app\_hash}$ resolves to no registry entry}{record and \textbf{continue} (no-op)}
+  mark the application \texttt{BANNED}; issue the cancel message\;
+  \lIf{an instance is installed locally}{remove it by the deployed removal path; refuse subsequent
+    install, redeploy and soft-redeploy; stop location broadcasts}
+}
+\end{algorithm}
+
+The voting window is settled at $\Delta_{\mathrm{vote}} = \num{2880}$ blocks
+\srcintent{evidence/design/08-answers-round-2.md}, and the reason given is worth recording because
+it cuts against turnout: removal often needs to be fast, and a \SI{24}{\hour} window is the shortest
+one that still lets an operator who checks daily participate. Everything \Cref{sec:23:safety} says
+about liveness is said against that number.
+
+\settlednote{$\Delta_{\mathrm{exec}} = \num{120}$ blocks (\Cref{tab:23-recommended}). $\Delta_{\mathrm{exec}}$, the delay between the ban block $\hgt_b$ and enforcement.
+Domain: $[0,\ \num{2880}]$ blocks. Trade-off: it must exceed plausible reorg depth --- \PoN{} fork
+choice is a block-count race because every block carries fixed $2^{40}$ chainwork
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}pow.cpp}{284--290}, and the deployed reorg bound outside the activation window is
+40 blocks \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.h}{74} --- because a purge is not locally reversible, while every
+block of delay is a block of harm uptime. It is also the mechanism's only post-decision safety
+margin, the analogue of a governance timelock (\Cref{sec:23:related}). Note that
+$\Delta_{\mathrm{exec}} = 0$ is a defensible choice only if a purged application returning after a
+reorg is acceptable.}
+
+\begin{assumption}[Model assumptions for the specified mechanism]
+\label{ass:23:mechanism}
+As fixed in the system-model section, and specialised here. (A1) \fluxd's deterministic node set at
+any height is consensus state and is agreed by all honest nodes. (A2) Owner keys are controlled by
+the parties the mechanism intends to enfranchise; the consequence of this failing is treated in
+\Cref{sec:23:measurement}. (A3) A transaction broadcast during the window is included by some
+producer before the window closes --- which \Cref{prop:23:inclusion} shows requires only that not
+every producer censors it, over \num{2880} slots. (A4) A chain reorg deeper than
+$\Delta_{\mathrm{exec}}$ does not occur. (A5) Signature forgery is infeasible. No assumption is made
+about turnout; that is the point of \Cref{thm:23:turnout}. Note what is \emph{not} assumed, and was
+assumed by the construction this replaces: no property of the \FluxOS{} gossip mesh is needed
+anywhere in the decision path.
+\end{assumption}
+
+The mechanism's invariants follow directly and are stated without separate proof: $Y_r$ is
+non-negative and non-decreasing within the window; weights and the reference total are functions of
+$\hgt_0$ alone; one vote per identity per report, enforced by chain order; a vote verifies against
+exactly one $(H(r), \hgt_0)$; each report resolves exactly once, into \textsc{expired} or
+\textsc{banned}, and releases exactly one capacity slot when it does; a node that cannot resolve a
+ban hash does not remove anything; the ban set is monotone (\Cref{prop:23:monotone}); the coinbase
+grows by at most one memo per block; and no transition reads or writes a collateral UTXO, the node
+set, or a node's payment rank. That last one is the settled promise that node collateral is never
+slashed, and it is what removes the most obvious griefing concern — and, as \Cref{sec:23:dilution}
+shows, what makes voting close to costless. One invariant of the earlier draft does \emph{not}
+survive unconditionally: that an update during the window is neither an escape nor a second claim
+holds only under the identity reading of $\mathsf{app\_hash}$ --- which is now the settled one,
+$(\mathsf{app\_name}, \mathsf{owner})$ (\Cref{tab:23-recommended}), so the invariant does hold on the
+settled configuration. It is stated conditionally because it is a property of that choice rather than
+of the mechanism.
+
+\begin{property}[No reinstatement: a ban is final, \planned]
+\label{op:23:reinstatement}
+The specified design contains no transition that removes an application from the ban set and no
+transition that returns a forfeited prepaid balance, and this is a settled position rather than a
+gap: the team's decision is that a ban is final, and the remedy is redeployment as a \textbf{new}
+application \srcintent{evidence/design/08-answers-round-2.md, round 5 answers}. Both absences are
+irreversible by construction, which is what makes the decision coherent rather than merely
+convenient: the forfeiture is a non-event for a pool that was credited at payment time
+(\Cref{prop:23:neutral}), and the ban is a chain fact carried in a coinbase that no later block
+retracts (\Cref{prop:23:monotone}). If a quorum is wrong --- honestly wrong on mistaken evidence, or
+dishonestly wrong under \Cref{thm:23:collusion} --- redeployment under a new name is the entire
+remedy, and it preserves none of the old instance's reachability, since \FDM{} and \PDNS{} names are
+keyed per application name. A construction that reversed a ban would in any case have to satisfy the
+requirements an earlier draft of this section raised --- a chain object, so
+\Cref{thm:23:verifiable} is not lost for the reversal direction; not a symmetric quorum over the
+same electorate, or the coalition that can ban can also block reinstatement
+(\Cref{sec:23:remedies}); and an interaction with the forfeiture, since reinstating an application
+whose term was consumed reinstates it into nothing --- which is a substantial part of why the
+team's simpler position is defensible rather than merely a shortcut.
+
+One residual is worth stating precisely rather than absorbing into the decision silently. If
+$\mathsf{app\_hash}$ resolves to the application's \emph{content} --- a specification or image hash
+--- rather than to its $(\mathsf{app\_name}, \mathsf{owner})$ \emph{identity}, a redeployment that is
+otherwise identical carries the same hash and is therefore immediately re-bannable: the hash is
+already in the ban set, with no fresh report and no fresh vote required. Whether that is the
+intended reading or an accident of the keying choice is exactly the enforcement-scope question left
+open earlier in this section (``What $\mathsf{app\_hash}$ hashes, which is also the enforcement
+scope,'' \Cref{sec:23:mechanism}); this paper cross-references it here rather than deciding it
+twice, since what a ban targets and what redeployment resets are the same question asked from
+opposite ends.
+\end{property}
+
+% =====================================================================
+\subsection{Safety and liveness, separated}
+\label{sec:23:safety}
+
+\begin{definition}[Safety and liveness for this mechanism]
+\label{def:23:safety-liveness}
+\emph{Safety} (against wrongful eviction): an application is not banned unless a set of identities
+of combined weight at least $\vthresh\vtotal^{\!\star}(\hgt_0)$ has confirmed $\mathsf{evict}$ votes
+on one report. \emph{Liveness}: an application that a set of identities of combined weight at least
+$\vthresh\vtotal^{\!\star}$ wishes to remove is removed within
+$\Delta_{\mathrm{vote}} + \Delta_{\mathrm{exec}} + \delta$ blocks, where $\delta$ is the number of
+slots between the crossing height and the block that carries the memo. Under the settled,
+consensus-required inclusion rule $\delta$ is one plus the number of unbanned carried reports ahead
+of it in the settled order, so $\delta = 1$ whenever no other carried report is queued ahead of
+it (\Cref{prop:23:inclusion-required,prop:23:inclusion}).
+\end{definition}
+
+\begin{lemma}[Turnout bound]
+\label{lem:23:turnout}
+Let $P_r \subseteq I(\hgt_0)$ be the set of identities whose vote on $r$ confirms within the window.
+Then $Y_r(\hgt) \le \sum_{i \in P_r} \vweight{i}(\hgt_0)$ for all $\hgt$ in the window, and if
+$\sum_{i \in P_r} \vweight{i}(\hgt_0) < \vthresh\,\vtotal^{\!\star}(\hgt_0)$ then the report cannot
+be carried and expires.
+\end{lemma}
+
+\begin{proof}
+$V_r(\hgt) \subseteq P_r$ by construction and all weights are non-negative, so
+$Y_r(\hgt) = \sum_{i \in V_r(\hgt)} \vweight{i} \le \sum_{i \in P_r} \vweight{i}$. Carrying requires
+$Y_r(\hgt_c) \ge \vthresh\vtotal^{\!\star}$ for some $\hgt_c$ in the window, which the displayed
+inequality forbids; \Cref{def:23:decision} then expires the report.
+\end{proof}
+
+\begin{theorem}[Turnout is a liveness parameter and never a safety parameter]
+\label{thm:23:turnout}
+Under \Cref{ass:23:mechanism}, for any report $r$ and any participation set $P_r$: adding a
+non-voter to the electorate can only increase $\vtotal^{\!\star}(\hgt_0)$ and hence the weight
+required for a certificate; removing a voter can only decrease $Y_r$. Consequently low turnout
+makes eviction strictly harder, never easier, and no low-turnout election can produce an eviction
+that a full-turnout election with the same $\mathsf{evict}$ votes would not also produce.
+\end{theorem}
+
+\begin{proof}
+The decision predicate is $Y_r(\hgt_c) \ge \vthresh\,\vtotal^{\!\star}(\hgt_0)$. The right-hand side
+depends on the electorate at $\hgt_0$ and not at all on who votes; adding an identity $i'$ to
+$I(\hgt_0)$ increases $\vtotal(\hgt_0)$ by $\vweight{i'} \ge 0$ and hence weakly increases
+$\vtotal^{\!\star}$ and the required threshold. The left-hand side is a sum over the identities that
+actually voted $\mathsf{evict}$; deleting one removes a non-negative term. Therefore the predicate
+is monotone decreasing in the electorate and monotone increasing in the $\mathsf{evict}$ set, and
+the two are independent. Fixing the $\mathsf{evict}$ set and varying turnout among the remaining
+identities changes neither side.
+\end{proof}
+
+The contrast is the point. Had the threshold been defined over votes cast — that is,
+$Y_r / \sum_{i \in P_r} \vweight{i} \ge \vthresh$ — then a single identity of any weight could evict
+any application by being the only voter, and low turnout would convert from a liveness limitation
+into a safety hole. The settled rule excludes this. Stated in the design's own terms: the
+\SI{25}{\percent} figure is a liveness/safety dial, abstention counts against removal, and the
+design deliberately errs toward leaving content up rather than removing it wrongly. That is the
+defensible position for a censorship-resistant network, and it is the strongest property this
+mechanism has.
+
+It is paid for in liveness, and the bill is legible.
+
+\begin{proposition}[Liveness]
+\label{prop:23:liveness}
+If identities of combined weight at least $\vthresh\vtotal^{\!\star}(\hgt_0)$ broadcast
+$\mathsf{evict}$ votes on $r$ and those transactions confirm by
+$\hgt_0 + \Delta_{\mathrm{vote}}$, then the report is carried at some
+$\hgt_c \le \hgt_0 + \Delta_{\mathrm{vote}}$, and the application is removed by
+$\hgt_c + \delta + \Delta_{\mathrm{exec}}$ with $\delta$ as in
+\Cref{def:23:safety-liveness}.
+\end{proposition}
+
+\begin{proof}
+By hypothesis $Y_r$ reaches $\vthresh\vtotal^{\!\star}(\hgt_0)$ at the height at which the last of
+those votes confirms, which is within the window; that height is $\hgt_c$ or later than the least
+such height, and \Cref{def:23:decision} takes the least. A producer at some height
+$\hgt_b = \hgt_c + \delta$ carries the memo, valid by \Cref{def:23:ban}; by (A4) it is not reorged
+out, and by \Cref{thm:23:verifiable} every honest node computes the same ban set and applies
+\Cref{def:23:enforcement} at $\hgt_b + \Delta_{\mathrm{exec}}$.
+\end{proof}
+
+Note what dropped out of the hypothesis. The message-layer construction needed a party willing to
+assemble a certificate and pay for an anchoring transaction --- a coordination step with no assigned
+actor and no incentive attached to it. Here there is nothing to assemble: the votes are already in
+the chain, and the count is a function every validator already evaluates. That is a genuine
+liveness improvement and it comes from the same choice that delivers
+\Cref{thm:23:verifiable}.
+
+What that hypothesis costs at the measured distribution:
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}lrr@{}}
+\toprule
+who abstains & weight remaining & share of the remainder that must vote $\mathsf{evict}$ \\
+\midrule
+nobody & \SI{100}{\percent} & \SI{25.0}{\percent} \\
+the 3 largest keys & \SI{74.9}{\percent} (\num{66314.5} units) & \textbf{\SI{33.4}{\percent}} \\
+the 16 largest keys & \SI{49.9}{\percent} (\num{44193.0} units) & \textbf{\SI{50.1}{\percent}} \\
+\bottomrule
+\end{tabular}
+\caption{Turnout required among the remainder to reach $\vthresh = 0.25$, by abstaining prefix,
+computed from the measured weight distribution
+\srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}.}
+\end{table}
+
+The design intake's own premise is that most operators do not vote and will not follow votes
+continuously \srcintent{evidence/design/04-moderation.md}. Combined with
+\Cref{lem:23:turnout}, the operational reading is that at $\vthresh = 0.25$ liveness depends on the
+large keys participating, because the dispersed remainder is unlikely to reach a third of itself.
+The same identities that would make the mechanism unsafe are the ones that would make it live.
+
+The \SI{24}{\hour} window makes that bill due in one day rather than seven, and the honest way to
+present the consequence is not as a defect.
+
+\begin{proposition}[Expiry is the mechanism working]
+\label{prop:23:expiry}
+Carrying a report requires identities holding at least
+$\vthresh\vtotal^{\!\star}(\hgt_0) = \num{22128.6}$ units at the measured distribution --- the
+equivalent of \num{554} Stratus nodes --- to get $\mathsf{evict}$ transactions \emph{confirmed}
+inside \num{2880} blocks. Whenever that does not happen the report expires, and by
+\Cref{lem:23:turnout} expiry is exactly the event ``no set of the required weight voted''. An
+expired report removes nothing, penalises nobody, and returns the capacity slot; the application
+stays up.
+\end{proposition}
+
+Against the abstention-counts-as-no rule this is a safety property, not a failure. A missed window
+is the mechanism declining to act on insufficient agreement, which is the direction the settled dial
+points, and the design's own premise about operator participation implies that most reports will
+end this way. The paper states the expectation in those terms rather than presenting a
+low-success-rate mechanism as a broken one: what a \SI{24}{\hour} window at
+$\vthresh = 0.25$ buys is a fast path for the cases where the large holders agree quickly, and
+nothing else. The cost of that choice is stated in \Cref{prop:23:liveness}'s hypothesis and in the
+table above; the benefit is that a genuinely harmful workload can be gone in a day rather than a
+week.
+
+% =====================================================================
+\subsection{The measurement}
+\label{sec:23:measurement}
+
+Collateral weighting is deliberate and settled, and it is settled for a good reason: voting power
+tracks economic stake because collateral is what is at risk. It delivers Sybil resistance as a
+property of the construction rather than as a hope.
+
+\begin{property}[Sybil resistance]
+\label{prop:23:sybil}
+Voting weight cannot be increased without locking additional collateral. Re-keying, re-addressing,
+splitting one node's collateral across many node records, or registering additional identities
+never changes $\sum_i \vweight{i}$ under one party's control, because $\vweight{i}$ is a sum over
+collateral amounts attested by consensus state and each collateral UTXO backs exactly one confirmed
+node \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.cpp}{445--453}.
+\end{property}
+
+This is the resource-cost answer to the identity-multiplication attack of
+\citet{douceur2002sybil}, and it is the reason the weighting is settled.
+\Cref{prop:23:capacity} is the identical argument applied to proposal capacity, which is why the
+anti-spam rule inherits this property instead of needing one of its own: both quantities are sums
+over confirmed nodes, and a confirmed node costs collateral. The same choice is what
+concentrates the mechanism, and the concentration is measurable.
+
+\begin{definition}[Collusion set]
+\label{def:23:collusion}
+For a threshold $\vthresh \in (0,1]$,
+\[
+\kappa(\vthresh) \;\defeq\; \min\Bigl\{\,\lvert S\rvert \ :\ S \subseteq I(\hgt_0),\
+\textstyle\sum_{i \in S} \vweight{i}(\hgt_0) \;\ge\; \vthresh\,\vtotal(\hgt_0)\,\Bigr\}.
+\]
+Because weights are fixed and non-negative, the minimum is attained by a greedy prefix of
+identities in decreasing weight order.
+\end{definition}
+
+\begin{theorem}[Safety is exactly a collusion bound]
+\label{thm:23:collusion}
+Under \Cref{ass:23:mechanism}, an application can be wrongly evicted only if some set of at
+least $\kappa(\vthresh)$ identities all sign $\mathsf{evict}$: no smaller set can, at any turnout.
+Conversely, the $\kappa(\vthresh)$ heaviest identities can, at any turnout, whenever
+$\vtotal^{\!\star}(\hgt_0) = \vtotal(\hgt_0)$.
+\end{theorem}
+
+\begin{proof}
+($\Rightarrow$) The voter set that carries a report is a set $S$ with $\sum_{i \in S}\vweight{i} \ge
+\vthresh\vtotal^{\!\star} \ge \vthresh\vtotal$, so $\lvert S\rvert \ge \kappa(\vthresh)$ by
+minimality in \Cref{def:23:collusion}. ($\Leftarrow$) The greedy prefix of size $\kappa(\vthresh)$
+has weight at least $\vthresh\vtotal = \vthresh\vtotal^{\!\star}$ under the stated condition, so its
+confirmed $\mathsf{evict}$ votes carry the report whatever every other identity does, since by \Cref{lem:23:turnout} other identities can
+only add to $Y_r$ and never subtract from it, and the threshold does not depend on them. The claim
+``at any turnout'' is \Cref{thm:23:turnout}.
+\end{proof}
+
+The mechanism therefore has the safety property ``no coalition smaller than $\kappa(\vthresh)$ can
+censor''. Whether that is a property or an assumption about people depends entirely on the number.
+Computed from the \num{6489} raw node records:
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+$\vthresh$ & required weight (units) & $\kappa$ by owner identity (869)
+  & $\kappa$ by node key (819) & Stratus nodes alone & of Stratus set \\
+\midrule
+\SI{10}{\percent}   & \num{8851.5}  & \textbf{1} & \textbf{1} & 222 & \SI{13.6}{\percent} \\
+\SI{15}{\percent}   & \num{13277.2} & 2 & 2 & 332 & \SI{20.4}{\percent} \\
+\SI{20}{\percent}   & \num{17702.9} & 3 & 2 & 443 & \SI{27.2}{\percent} \\
+\textbf{\SI{25}{\percent}} & \textbf{\num{22128.6}} & \textbf{4} & \textbf{3} & \textbf{554}
+  & \textbf{\SI{34.1}{\percent}} \\
+\SI{30}{\percent}   & \num{26554.4} & 6 & 5 & 664 & \SI{40.8}{\percent} \\
+\SI{33.3}{\percent} & \num{29475.3} & 8 & 6 & 737 & \SI{45.3}{\percent} \\
+\SI{40}{\percent}   & \num{35405.8} & 12 & 10 & 886 & \SI{54.5}{\percent} \\
+\SI{50}{\percent}   & \num{44257.3} & 19 & 16 & \num{1107} & \SI{68.0}{\percent} \\
+\SI{51}{\percent}   & \num{45142.4} & 20 & 17 & \num{1129} & \SI{69.4}{\percent} \\
+\bottomrule
+\end{tabular}
+\caption{$\kappa(\vthresh)$ under the settled weighting, by identity proxy, from
+\srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03} (\num{6489} records, chain tip
+\num{2917115}; this table and every other figure this section computes from that snapshot are
+reproduced by \texttt{scripts/\allowbreak{}22-moderation-tables.\allowbreak{}py}). The operative column is the first: the vote is signed with the owner key, whose
+public proxy is \texttt{payment\_address}. The node-key column is retained only because it is the
+lower of the two and therefore the conservative reading; \texttt{pubkey} is the VPS message-signing
+key and is not the vote key \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{154}. Merging addresses into
+clusters by shared node key or shared collateral funding transaction (797 clusters) gives
+$1 / 2 / 3 / 16$ at \SI{10}{\percent} / \SI{15}{\percent} / \SI{25}{\percent} / \SI{50}{\percent};
+the intermediate rows were not computed for that model. Nimbus alone cannot reach
+\SI{25}{\percent} — it would need \num{1771} of \num{1615} nodes — and Cumulus in its entirety
+holds \SI{3.67}{\percent}.}
+\end{table}
+
+The largest single identity holds \SI{10.71}{\percent} of voting weight across 237 Stratus nodes
+under both identity models. Decomposed by node key, the three largest hold \num{9480} units across
+those 237 nodes (\SI{10.71}{\percent}), \num{9360} across 234 nodes (\SI{10.57}{\percent}), and
+\num{3360} across 84 nodes (\SI{3.80}{\percent}), summing to \SI{25.08}{\percent} — that is
+\num{22200000}\flux\ of collateral held by three keys. Under the owner-identity model the same
+threshold takes four addresses. The Gini coefficient of voting weight is \num{0.8375} across payment
+addresses and \num{0.839} across node keys. 47 keys pay to more than one address and 5 addresses
+receive from more than one key; no collateral funding transaction pays more than one address
+(0 of \num{6178}), so funding-transaction grouping fragments rather than merges and is not by itself
+a party model. The fleet is bimodal: 107 keys with ten or more nodes hold \SI{72.5}{\percent} of all
+weight, while 334 keys hold exactly one node and are electorally irrelevant. That 819 node keys
+serve \num{6489} nodes is a separate observation with two consequences: operators routinely reuse
+one node key across many machines, which is a linkage signal here and a key-hygiene matter
+elsewhere.
+
+\begin{corollary}[The measured verdict]
+\label{cor:23:verdict}
+At $\vthresh = 0.25$ and the measured distribution, $\kappa(0.25) = 4$ by payment address --- the
+owner-linked proxy, and therefore the operative figure --- and $3$ by node key. Merging addresses
+linked by a shared node key or a shared collateral funding transaction into single clusters gives
+797 identities and $\kappa(0.25) = 3$ as well. Safety against wrongful eviction is therefore not a
+property of the mechanism but the assumption that three or four specific parties do not agree, and
+the figure is stable across every identity model computable from public data.
+\end{corollary}
+
+Both counts are \textbf{lower bounds} on concentration. They assume every distinct key is a
+distinct party; one party holding several keys makes the true number smaller, never larger. They
+are not upper bounds on anything. This limitation is structural rather than a gap in the
+measurement: a figure that reflects \emph{parties} rather than keys cannot be obtained from public
+data.
+
+\begin{corollary}[The graduated tiers are unilateral]
+\label{cor:23:tiers}
+The proposed graduated-penalty tier at approximately \SI{10}{\percent} is reachable by the largest
+single identity alone, which holds \SI{10.71}{\percent} across 237 Stratus nodes under one key. The
+tier at approximately \SI{15}{\percent} is reachable by two identities. Any action attached to those
+tiers is therefore an action that one or two parties can take at will.
+\end{corollary}
+
+\settlednote{Removed --- one threshold, at \SI{25}{\percent} (\Cref{tab:23-recommended}). Actions at the graduated \SI{10}{\percent} and \SI{15}{\percent} tiers, or their removal.
+Domain: $\{$none, flag, warn, restrict egress, \ldots$\}$. Trade-off: by \Cref{cor:23:tiers} any
+\emph{destructive} action at those tiers is one party's decision; non-destructive, reversible
+actions remain consistent with the fail-safe direction. The design intake proposes the tiers without
+specifying their effects.}
+
+\begin{corollary}[Raising the threshold does not rescue the property]
+\label{cor:23:threshold}
+$\kappa \ge 10$ requires $\vthresh \ge 0.40$; $\kappa \ge 16$ requires $\vthresh \ge 0.50$. Even
+$\vthresh = 0.51$, the value the design rejected as unreachable in practice, corresponds to
+seventeen identities.
+\end{corollary}
+
+Raising $\vthresh$ trades liveness (\Cref{prop:23:liveness}) for a larger but still small coalition.
+It does not produce a $\kappa$ that could honestly be called a property rather than a promise.
+
+\begin{conjecture}[Custodial dispersion]
+\label{conj:23:custody}
+If a substantial fraction of the largest owner identities are custodial hosting providers holding
+collateral for many distinct beneficial owners, then the number of \emph{parties} behind the four
+identities that reach \SI{25}{\percent} is larger than four, and $\kappa(0.25) = 4$ overstates
+concentration by however much beneficial ownership is dispersed behind those addresses. Note what
+the measurement already rules out: the gain cannot come from separating the node key from the
+owner, because the measurement is already taken at the owner --- \texttt{payment\_address} is
+derived from the collateral public key
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}rpc/\allowbreak{}fluxnode.cpp}{1512--1520} --- and moving between the two identity models
+changes $\kappa(0.25)$ only between 3 and 4.
+\end{conjecture}
+
+This is a conjecture and not a result, and unlike the other open items in this section it is not
+convertible into one: beneficial ownership behind a transparent address is not exposed by any public
+data. $\kappa(0.25) = 4$ is therefore the number that stands and the number the paper prints. Note
+also that the conjecture cuts both ways — a custodial identity votes with its customers' stake,
+which is a different and worse problem than concentration, and it is invisible in the same data.
+
+\notestablished{Open measurement, now narrowed rather than open: the earlier draft of this section
+called for concentration by collateral-spending script. That measurement is subsumed, because
+\texttt{payment\_address} is derived from the collateral key, so the owner-identity column of the
+table above \emph{is} the collateral-key measurement. What remains is beneficial ownership behind
+those addresses, which is not computable from public data and which decides
+\Cref{conj:23:custody}. No claim about dispersion may be made from public data.}
+
+\settlednote{The start-transaction shape, signed by the collateral (owner) key (\Cref{tab:23-recommended}). Which existing transaction shape the vote follows, and hence which key signs it. Domain:
+$\{$the start-transaction shape, signed by the collateral (owner) key
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}activefluxnode.cpp}{253--288}; the confirm-transaction shape, signed by
+the node key \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}activefluxnode.cpp}{290--332}; either, via an on-chain
+delegation$\}$. Trade-off: the settled rule says node \emph{owner} keys, which selects the
+start-transaction shape --- stake-bound, cold, and the identity every figure in this section is
+computed against --- at the cost of asking operators to sign with a cold key on a \SI{24}{\hour}
+deadline. The confirm-transaction shape is operationally far easier because that key is already hot
+and already signs every 500 blocks, but it is the VPS key, it may be custodial, and choosing it
+would require recomputing the entire concentration measurement against the node-key column and
+restating $\kappa(0.25)$ as 3.}
+
+% =====================================================================
+\subsection{The negative result}
+\label{sec:23:negative}
+
+\begin{remark}[The measured concentration is accepted, not disputed]
+\label{rem:23:accepted}
+Before the negative result, the team's position on it. Presented with the measurement --- four owner
+identities reaching the \SI{25}{\percent} threshold, three under the strongest linkage computable
+from public data --- the response was to accept it: if four parties hold a quarter of the network's
+collateral then those parties should be able to remove an application, and ``as network grows it will
+be more decentralized'' \srcintent{08-answers-round-2.md, round 11} (\planned).
+
+The paper records this as a deliberate acceptance rather than an unrecognised risk, which changes how
+the rest of this section should be read: what follows is not an objection the design has failed to
+answer, but a property the design has been told about and kept. Two observations remain load-bearing
+even so, and neither is a criticism of the choice.
+
+\textbf{First, growth dilutes concentration only if new collateral is new parties.} The measurement
+is a ratio, not a count. If the network doubles and the four largest owners double with it, the ratio
+is unchanged; dilution requires that marginal entrants be new and independent, which is an empirical
+question this corpus cannot settle either way. \textbf{Second, and more sharply, the mechanism the
+paper elsewhere identifies as the response to weak demand runs the other way.}
+\Cref{rem:pnr:contraction} records that a demand shortfall is answered by contraction --- operators
+exit, the survivors earn more --- and contraction concentrates. Growth as a remedy and contraction as
+a stabiliser cannot both be relied on; which one obtains depends on demand for Flux Cloud, and no part
+of this section's design references demand at all.
+\end{remark}
+
+The natural response to \Cref{cor:23:verdict} is to change the weight function. It does not work,
+and the reason it does not work is worth stating precisely, because it is the section's
+contribution.
+
+Capping per-identity weight at some $c$ is defeated at negligible cost: an address is free, each
+node's collateral can be respent to its own, and the 237-node identity becomes 237 identities. The
+cost of that split is one collateral respend, 100 blocks of maturity and one start transaction per
+node \srccode{fluxd/\allowbreak{}src/\allowbreak{}coins.cpp}{630--686} — real, but bounded by a few hours of missed rotation
+against the \num{22128625}\flux\ the threshold requires, so it is not a barrier to anyone who can
+reach the threshold in the first place. This is exactly the Sybil that
+collateral weighting was chosen to prevent, reintroduced with the cap itself as the incentive.
+Quadratic weighting per identity is defeated identically and more sharply — the same holder is
+worth $\sqrt{9480} \approx 97.4$ as one identity and $237\sqrt{40} \approx 1498.9$ as 237, a
+fifteenfold reward for splitting. Only weightings applied \emph{per node} are Sybil-neutral, and
+those are tier reweightings, not concentration fixes:
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}lrrrrrrr@{}}
+\toprule
+weighting & Stratus & top key & top 3 & $\kappa(0.25)$ & $\kappa(0.51)$ & Gini
+  & cost of \SI{25}{\percent} (\flux) \\
+\midrule
+collateral (settled) & \SI{73.5}{\percent} & \SI{10.71}{\percent} & \SI{25.08}{\percent}
+  & \textbf{3} & 17 & \num{0.839} & \num{22128625} \\
+tier base $1:3.5:9$ & \SI{62.2}{\percent} & \SI{9.06}{\percent} & \SI{21.23}{\percent}
+  & 5 & 22 & \num{0.793} & --- \\
+$\sqrt{\coll{t}/\num{1000}}$ per node & \SI{53.5}{\percent} & \SI{7.79}{\percent}
+  & \SI{18.31}{\percent} & 6 & 26 & \num{0.770} & --- \\
+one node, one vote & \SI{25.1}{\percent} & \SI{7.40}{\percent} & \SI{17.58}{\percent}
+  & 6 & 38 & \num{0.716} & \num{1623000} \\
+\bottomrule
+\end{tabular}
+\caption{Sybil-neutral reweightings, computed over the same \num{6489} records
+\srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}. Every row costs
+\num{1000}\flux\ to add one Cumulus node, so none reopens the Sybil vector; the last column is the
+capital needed to \emph{buy} the threshold outright, and only the two extreme rows were computed.
+Dashes are uncomputed, not zero.}
+\end{table}
+
+\begin{remark}[Which identity model this table uses, and how to read it]
+\label{rem:23-table-identity}
+Every row above is computed under the \textbf{node-key} model, in which the settled weighting gives
+$\kappa(0.25) = 3$ rather than the operative $4$ that the owner-identity model yields. The
+owner-identity recomputation has not been run for the per-row figures.
+
+This is a caveat about reading individual rows, not a defect in the conclusion. The recomputation
+would shift each row by the same one-or-two identities that \Cref{sec:23:measurement} measures between
+the two models --- it moves every row in the same direction by roughly the same amount, which is why
+the open problem below is stated as \emph{no row approaches a $\kappa$ that could be called a
+property} rather than as a claim about any particular row. The aggregate conclusion is robust to the
+model choice; a single row quoted on its own is not, and should be recomputed under the owner-identity
+model first.
+\end{remark}
+
+\begin{openproblem}[No reweighting, threshold or listed remedy raises $\kappa$ meaningfully]
+\label{op:23:negative}
+At the measured distribution and $\vthresh = 0.25$: no weight function in the Sybil-neutral design
+space raises $\kappa(0.25)$ above 6, and the best of them --- one node, one vote --- reduces the
+capital required to buy the threshold from \num{22128625}\flux\ to \num{1623000}\flux, a factor of
+\num{13.6}, which is a strictly worse trade. Raising $\vthresh$ to \num{0.51} yields
+$\kappa = 17$ at a liveness cost the design has already rejected (\Cref{cor:23:threshold}). None of
+the remedies listed in \Cref{sec:23:remedies} changes $\kappa$ at all, and neither does the on-chain
+shape of \Cref{sec:23:mechanism}: moving the tally into consensus changes who can \emph{verify} the
+decision, not who can \emph{make} it. \emph{Open:} whether any
+mechanism consistent with the settled decisions --- collateral weighting, absolute threshold,
+abstention-as-no, no collateral slashing --- achieves a $\kappa^{\star}$ at $\vthresh = 0.25$
+materially above the measured 4 (3 under the node-key model)
+without reintroducing a Sybil vector. This paper does not have one, and the two-chamber rule of
+\Cref{sec:23:remedies} explicitly does not claim to be one.
+\end{openproblem}
+
+The reason is not subtle once stated: concentration lives in node \emph{ownership}, not in the
+weight function. The largest key holds \SI{7.4}{\percent} of nodes by count, so even one-node-one-vote
+leaves it above the \SI{5}{\percent} mark; the weight function only decides how much worse than
+that the ownership distribution is allowed to make things.
+
+% =====================================================================
+\subsection{Dilution: why the honesty incentive does not bind}
+\label{sec:23:dilution}
+
+The design's argument for why free voting is not a vulnerability is that operators are paid from
+application revenue, so evicting applications reduces their own income and they are therefore
+incentivised to be honest \srcintent{evidence/design/04-moderation.md}. The argument is correct in
+aggregate and wrong at the margin, which is the standard shape of a collective-action problem. It
+fails in three steps, each independently sufficient.
+
+\subsubsection{The current term is already paid}
+
+\begin{proposition}[Eviction is income-neutral to the fleet for the current term]
+\label{prop:23:neutral}
+Under \PNR{} as specified in \Cref{sec:07-pnr}, hosting is prepaid for $\dur$ blocks and the price
+$\price$ is split by consensus at payment time: $\foundshare\price$ to the Foundation and
+$\nodeshare\price$ into the pool $\pool$, which pays all nodes a drip of $\pool/\drip$ per block
+regardless of which applications run. Eviction of $\app$ leaves $\pool$ unchanged. Therefore the
+fleet's income for the current term is invariant under eviction, and for a node currently hosting
+$\app$ the effect is strictly positive: unchanged pay, released resources.
+\end{proposition}
+
+\begin{proof}
+$\pool$ is credited at payment and drained by a per-block drip that is a function of $\pool$ and
+$\drip$ only; no term of the drip references the set of running applications. Removing $\app$ alters
+no argument of that function. A hosting node's payment is likewise independent of hosting, so its
+income is unchanged while its committed CPU, RAM and disk are freed.
+\end{proof}
+
+What the fleet loses is the \emph{future}: renewals of $\app$, and the demand effect of a network
+where eviction is capricious. Let $R_\app$ be expected future renewal revenue in \flux, $g_i \ge 0$
+the resource relief to a hosting node, and $b_i \ge 0$ any private benefit to identity $i$ from
+$\app$'s removal. With $s_i$ node $i$'s share of the pool, node $i$ prefers eviction iff
+$b_i + g_i > \nodeshare\, s_i\, R_\app$.
+
+\subsubsection{Dilution}
+
+\PNR{} splits the drip across tiers in the ratio $1 : 3.5 : 9$ and then equally within a tier, so
+$s_i = (\tbase{t_i}/13.5)/\ncount{t_i}$:
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+tier & $s_i$ (\PNR{} tier-base split) & $s_i$ (collateral share) & cost of evicting $\app$ at $\nodeshare = 0.20$ \\
+\midrule
+Cumulus & \SI{0.0023}{\percent} & \SI{0.0011}{\percent} & \SI{0.00046}{\percent} of $R_\app$ \\
+Nimbus  & \SI{0.0161}{\percent} & \SI{0.0141}{\percent} & \SI{0.0032}{\percent} of $R_\app$ \\
+Stratus & \textbf{\SI{0.0410}{\percent}} & \textbf{\SI{0.0452}{\percent}} & \textbf{\SI{0.0082}{\percent}} of $R_\app$ \\
+\bottomrule
+\end{tabular}
+\caption{Per-node pool share and the private cost of destroying an application's future revenue.}
+\end{table}
+
+A bloc of 554 Stratus nodes — the \SI{25}{\percent} threshold — internalises
+$554/\num{1627} \times 9/13.5 = \SI{22.7}{\percent}$ of the operator share, i.e.\
+\SI{4.54}{\percent} of $R_\app$ at $\nodeshare = 0.20$. The largest single identity internalises
+\SI{1.94}{\percent}. The social cost of a wrong eviction is $\nodeshare R_\app$ to operators, plus
+$\foundshare R_\app$ to the Foundation, plus the tenant's unused prepayment, plus the loss to the
+application's users; the decisive coalition bears under \SI{5}{\percent} of the first term alone.
+
+This is a collective-action problem in textbook form: the fleet collectively wants applications and
+no individual member is deterred from destroying one. The two design decisions that produce it are
+each correct on their own terms. Paying \emph{all} nodes is the fair rule — placement is
+luck-driven and over a rotation every node is paid equally — and it is precisely what makes
+$s_i \approx 4 \times 10^{-4}$. Paying only hosting nodes would concentrate the deterrent where the
+workload sits, and would reintroduce exactly the placement-metering dependency \PNR{} was designed
+to avoid. The team should see the interaction plainly: \textbf{fairness in \PNR{} and honesty in
+moderation pull on the same rope in opposite directions.}
+
+\subsubsection{The deterrent is weakest at launch}
+
+\begin{proposition}[Launch-time deterrent]
+\label{prop:23:launch}
+At \PNR{} activation, with $\nodeshare = 0.20$, operator emission of \num{6386040}\flux\ per year
+and application revenue at approximately \SI{4.3}{\percent} of operator income, the expected future
+revenue a Stratus operator forgoes by destroying one average application is approximately
+\num{0.10}\flux\ per year.
+\end{proposition}
+
+\begin{proof}[Proof sketch]
+Application revenue at \SI{4.3}{\percent} of total operator income against \num{6386040}\flux\ of
+emission gives \num{286320}\flux\ per year from all applications (\Cref{sec:07-pnr}). The Stratus
+tier receives $9/13.5$ of the operator share, i.e.\ about \num{190880}\flux\ per year, spread over
+\num{1627} nodes, i.e.\ about \num{117.3}\flux\ per node per year. Divided across the \num{1193} priced
+applications in the \PNR{} demand baseline \srcintent{plan/mech-pnr.md} — the registry returns
+\num{1195} specifications
+\srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03} — that is
+\num{0.10}\flux\ per Stratus node per application per year.
+\end{proof}
+
+Against a forfeiture floor of \num{0.01}\flux\ on the tenant's side, that is the entire economic
+content of the honesty argument at launch. It rises with the ramp toward $\nodesharecap = 0.50$ and
+with demand, and it is smallest on the day the mechanism would ship. Note also the self-dealing
+case, which is worse than neutral: an operator who also hosts $\app$ has $g_i > 0$ by
+\Cref{prop:23:neutral}, so under \PNR{} there is a small positive incentive to evict one's own
+tenants, bounded only by the threshold.
+
+Finally, a constraint this section exports to the revenue mechanism. \Cref{sec:07-pnr} must
+guarantee that \textbf{forfeitures from eviction never enter the fee pool}. If they did, evicting an
+application would pay the fleet that voted to evict it, converting a socialised cost into a
+distributed gain and inverting the incentive this subsection has just shown to be weak.
+
+\settlednote{Burn pro-rata (\Cref{tab:23-recommended}, \Cref{rem:o16-burn}). Disposition of the pool's unearned remainder on eviction. Domain: $\{$keep in $\pool$
+(status quo); burn pro-rata$\}$. Trade-off: burning the unearned fraction is the only construction
+identified that gives voters a non-zero \emph{current-term} cost of eviction and thereby repairs
+\Cref{prop:23:neutral}; it requires \PNR{} payments to be bound to individual applications, which
+the private-payment section notes may leak the workload under shielded payment. Keeping the
+remainder preserves \Cref{prop:23:neutral} exactly as measured.}
+
+% =====================================================================
+\subsection{Remedies, evaluated}
+\label{sec:23:remedies}
+
+Each remedy below is assessed on three axes: what it fixes, what it costs, and what it does not
+fix. The first is adopted by the specified design and the rest are not; the third column is the
+same in every one of them, and it is the actual problem.
+
+\paragraph{Proposal capacity bounded by collateral (adopted, \Cref{def:23:capacity}).}
+\emph{Fixes:} report spam, at a price of \num{1000}\flux\ of locked collateral per concurrently open
+report; block-space exhaustion by fee-less transactions, which nothing else in the design bounds;
+and, as a side effect, reporter eligibility, which stops being a parameter. \emph{Costs:} nothing
+new — no bond, no custody script, no adjudicator that must learn the outcome to release funds, and
+no forfeiture destination to argue about. It is a validity predicate over data \fluxd{} already
+holds. \emph{Does not fix:} capacity is distributed as node counts, so the ability to occupy the
+report channel is concentrated in the same hands as everything else (Gini \num{0.716}); and it
+prices nuisance in \emph{locked} rather than \emph{spent} capital, so a determined griefer pays
+only opportunity cost. Concentration.
+
+\paragraph{Refundable report bond (evaluated, not adopted).} \emph{Would fix:} frivolous reports,
+by making $n$ failed reports cost $n\bond$ outright rather than $n$ node-slots of locked capital.
+\emph{Costs:} a refundable bond needs an adjudicator that can read the outcome — a consensus change,
+a release key, or a non-refundable fee that taxes honest reporters — and each of those is a new
+trusted or new consensus object. The capacity rule obtains a comparable bound with none of them,
+which is why the design has no bond and why $\bond$ appears nowhere in this section's arithmetic.
+\emph{Does not fix:} any report that succeeds is free either way, so a coalition at threshold pays
+nothing. Concentration.
+
+\paragraph{Rate limiting.} \emph{Fixes:} denial of service against operator attention; serial
+re-reporting of one tenant. \emph{Costs:} per-key limits multiply with keys — a 480-node operator
+who gives each node its own key obtains $480\,r_{\max}$ at zero collateral cost, and per-node limits
+are the same thing. This is precisely the failure the capacity rule avoids by counting
+\emph{nodes} rather than \emph{keys}: by \Cref{prop:23:capacity} the total is invariant under any
+re-keying, so the rule is a genuine bound where a per-key rate limit is not. \emph{Does not fix:}
+anything about who can reach threshold. Concentration.
+
+\paragraph{Eligibility gating.} \emph{Fixes:} excludes dead and unbenchmarked nodes, and — because
+confirmation in $N(\hgt)$ already requires a benchmark-bearing confirmation transaction within the
+last 640 blocks — makes ``confirmed at $\hgt_0$'' the on-chain proxy for benchmark-passing, which is
+also what keeps the tally verifiable against consensus state rather than against a
+\FluxOS{}-local status. \emph{Costs:} the benchmark signature is not operator-bound, as the
+system-model section establishes, so the gate is only as strong as the benchmark; any stricter
+``good standing'' test that is not on-chain breaks verifiability. \emph{Does not fix:} the largest
+keys are benchmark-passing nodes in good standing. Concentration.
+
+\paragraph{Reinstatement (rejected: the team's decision is that a ban is final;
+\Cref{op:23:reinstatement}).} \emph{Would fix:}
+a symmetric reinstatement quorum gives an honest majority a path to reverse a wrongful ban; a
+\emph{sunset}, under which a ban expires unless renewed by a fresh report and a fresh quorum, puts
+the liveness burden on the side that has already demonstrated it can reach quorum — a persistent bad
+application is re-banned each period, a wrongly banned one returns by default. \emph{Costs:} a
+symmetric quorum inherits \Cref{lem:23:turnout} and is asymmetric in
+exactly the wrong direction, since the dispersed honest majority faces the \SIrange{33}{50}{\percent}
+turnout problem while the coalition that banned can reinstate at will; a sunset gives a harmful
+application a periodic window of uptime, costs the banning side a renewed quorum every period, and
+converts the ban set from monotone (\Cref{prop:23:monotone}) into state that must be re-derived at
+every height. \emph{Does not fix:} under a symmetric quorum the same four identities decide both
+directions. The specified design adopts neither, consistent with the team's decision that a ban is
+final and the remedy is redeployment (\Cref{op:23:reinstatement}).
+Concentration.
+
+\paragraph{Opt-in delegation.} \emph{Fixes:} liveness. Turnout rises without operators following
+every report, and a higher, safer $\vthresh$ becomes reachable later. \emph{Costs:} delegation
+concentrates weight in delegates by construction, which is the documented trajectory of every
+delegated token-vote system, and makes delegates the target of the coalition. \emph{Does not fix:}
+concentration — it measurably worsens it.
+
+\settlednote{Evidence is an optional content hash, and a report counts as its reporter's vote at $\hgt_0$ (\Cref{tab:23-recommended}). The report's descriptive fields, and whether a report is itself a vote. Domains:
+$\mathsf{evidence} \in \{$absent; optional; a mandatory content hash$\}$; $\mathsf{category}$ as
+left open in \Cref{sec:23:c5}; and whether $\mathrm{own}_r$'s own weight is added to $Y_r$ at
+$\hgt_0$ or requires a separate vote transaction. Trade-offs: an evidence hash is unverifiable by
+any node and costs bytes in a fee-less transaction, and its only real consumer is a future
+adjudication of the kind the team's fallback contemplates; counting the report as a vote saves one
+transaction and makes the report's author's weight implicit rather than explicit in the chain
+record, which is a small loss of the attribution the design otherwise provides. Note that three
+parameters the earlier draft carried here are now \emph{settled} by the on-chain shape rather than
+chosen: the per-application cooldown is zero, the network-wide cap on open reports is
+$\lvert N(\hgt) \rvert$ (\Cref{cor:23:capacity}), and reporter eligibility is $I(\hgt_0)$.}
+
+\subsubsection{The recommended construction, and exactly what it buys}
+
+\begin{definition}[Two-chamber decision rule]
+\label{def:23:twochamber}
+Let $\mathrm{tenure}_i(\hgt) \defeq \hgt - \min_{j\,:\,\mathrm{own}_j = i}
+\mathrm{added\_height}_j$, the age of the identity's oldest node. Carry the report iff \emph{both}
+\[
+Y_r \;\ge\; \vthresh\,\vtotal^{\!\star}(\hgt_0)
+\qquad\text{and}\qquad
+\bigl\lvert\{\, i \in V_r \ :\ \mathrm{tenure}_i(\hgt_0) \ge T \,\}\bigr\rvert \;\ge\; m,
+\]
+with $m \in \mathbb{N}$ and $T \in \mathbb{N}$ (blocks) open.
+\end{definition}
+
+\begin{proposition}[The two-chamber rule preserves everything settled and lowers nothing]
+\label{prop:23:twochamber}
+Adding the second conjunct leaves weights, threshold, abstention rule and enforcement untouched;
+\Cref{lem:23:turnout}, \Cref{thm:23:turnout} and \Cref{thm:23:collusion} continue to hold verbatim
+for the first chamber; the vote transactions are unchanged, with validation extended by a
+tenure lookup against $N(\hgt_0)$, which is data \fluxd{} already holds. In particular
+$\kappa(0.25) = 4$ is unchanged.
+\end{proposition}
+
+\begin{proof}
+The rule is a conjunction, so the set of evictable configurations shrinks weakly; every statement of
+the form ``no set smaller than $X$ can evict'' is preserved and no statement of that form is
+strengthened, because the second conjunct is satisfiable by any coalition that has positioned $m$
+tenured identities. \Cref{lem:23:turnout} and \Cref{thm:23:turnout} concern the first conjunct only
+and are untouched.
+\end{proof}
+
+The tenure gate is not optional. Without it the second chamber counts identities, and an identity is
+nearly free: a four-identity coalition re-addresses $m-4$ of its own nodes and satisfies the chamber
+at no collateral cost at all. Re-addressing requires a collateral respend and a new start
+transaction and, \srcinferred, resets \texttt{added\_height} and the node's position in the payment
+rotation — one missed Stratus rotation
+is \num{9}\flux, about \SI{0.155}{\percent} of that node's annual subsidy income. That inference
+is load-bearing for the parameter choice and is not verified in this survey; it must be confirmed in
+\fluxd{} before $m$ and $T$ are set.
+
+Tenure eligibility at the measured distribution:
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+$T$ & nodes with tenure $\ge T$ & distinct keys & tenured weight & top-3 keys' tenured weight \\
+\midrule
+\SI{7}{\day} (\num{20160} blocks)   & \num{5639} (\SI{86.9}{\percent}) & 744 & \SI{90.1}{\percent} & \SI{24.05}{\percent} \\
+\SI{30}{\day} (\num{86400})         & \num{4149} (\SI{63.9}{\percent}) & 607 & \SI{77.0}{\percent} & \SI{23.95}{\percent} \\
+\SI{90}{\day} (\num{259200})        & \num{2824} (\SI{43.5}{\percent}) & 412 & \SI{57.2}{\percent} & \SI{19.66}{\percent} \\
+\SI{180}{\day} (\num{518400})       & \num{1516} (\SI{23.4}{\percent}) & 286 & \SI{31.5}{\percent} & \SI{9.49}{\percent} \\
+\bottomrule
+\end{tabular}
+\caption{Tenure distribution \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}. The
+last column is the weight, as a share of all weight, of the three largest keys among those with
+tenure $\ge T$; it is informational — the tenure gate applies to the identity chamber only — but
+that the three largest keys' nodes are mostly younger than \SI{180}{\day} says the concentration is
+recent.}
+\end{table}
+
+What the rule buys is precise and limited. A reactive eviction — ``these four identities sign now'' —
+would no longer be possible unless $m-4$ other tenured identities also sign. A \emph{pre-planned}
+eviction would remain possible for any coalition that positioned $m - \kappa(\vthresh)$ tenured
+identities at least $T$ blocks earlier, at a cost of $(m-4) \times \num{1000}\flux$ in Cumulus
+collateral, or nothing at all by re-addressing nodes it already owns, and in either case
+\textbf{visible on-chain in advance}. At the settled
+$m = 21$ the collateral route costs \num{17000}\flux, which is \SI{0.077}{\percent} of the
+\num{22100000}\flux\ the first chamber already requires; at $m = 100$, the top of the domain, it
+costs \num{96000}\flux, \SI{0.43}{\percent}. The rule is therefore not a capital
+barrier. It is a time-and-visibility barrier, and its entire value lies in composition with
+publishing $\kappa(\vthresh)$, the top-$N$ shares and the Gini at every reduction height: a burst of
+re-addressing, or of new single-node identities from a large operator, becomes a public, datable
+warning.
+
+It costs liveness in the second chamber — $m$ distinct tenured identities must actually vote. With
+the settled $T = \SI{30}{\day}$ and $m = 21$, \SI{3.5}{\percent} of eligible keys must participate
+(\SI{16.5}{\percent} at $m = 100$); with $T = \SI{90}{\day}$, \SI{5.1}{\percent}. Median node
+tenure is \num{193620} blocks, about
+\SI{67}{\day}, so any $T$ beyond roughly \SI{60}{\day} disenfranchises the median node from the
+second chamber.
+
+\settlednote{$m = \num{21}$, $T = \num{86400}$ blocks (\Cref{tab:23-recommended}). $m$, the identity-chamber count, and $T$, the identity tenure. Domains:
+$m \in [5,\ 100]$; $T \in [\num{20160}\ (\SI{7}{\day}),\ \num{259200}\ (\SI{90}{\day})]$ blocks.
+Trade-offs: larger $m$ raises the Sybil cost of pre-positioning to $(m-\kappa)\times\num{1000}\flux$
+or to $T$ blocks of waiting, and raises the number of tenured identities that must actually vote;
+larger $T$ raises the attacker's required lead time and disenfranchises younger honest identities
+against a median tenure of \SI{67}{\day}. The second chamber counts the same owner identities as the
+first (\Cref{def:23:electorate}); it is the tenure gate, not the identity definition, that does the
+work, because every identity definition available here is cheap to multiply.}
+
+This is the honest ceiling. Raising the cost of \emph{surprise} rather than the cost of
+\emph{capture} is what mechanism design can do here, and the section says so rather than presenting
+a bicameral rule as a safety proof it is not.
+
+% =====================================================================
+\subsection{Attacks and failure surface}
+\label{sec:23:attacks}
+
+\paragraph{Report brigading.} $n$ colluding reporters filing $n$ reports on one application would
+achieve nothing beyond one report: at most one report per application hash is open, and the tally is
+per identity, not per report. Brigading the \emph{vote} is simply the coalition of
+\Cref{thm:23:collusion}; it costs nothing at all, because there is no bond and no fee. Brigading the
+\emph{report channel} is bounded by \Cref{prop:23:capacity} at one concurrent report per node
+operated, which is the whole of the anti-spam design. Cost to the network per brigade: one fee-less
+transaction per report, plus whatever vote traffic the reports attract, against the block-space
+budget computed in \Cref{sec:23:mechanism}.
+
+\paragraph{A competitor evicting a rival.} Requires $\vthresh\vtotal^{\!\star}$ of weight. If the
+competitor is one of the four largest owner identities, the other three suffice with it. If not, it
+must acquire \num{22100000}\flux\ of collateral, wait 100 blocks of maturity plus confirmation,
+and — under the two-chamber rule — pre-position tenure; or it must rent the signatures. Its payoff
+is the rival's diverted demand less $\nodeshare s_i R_\app$, which for the largest identity is about
+\SI{2}{\percent} of $R_\app$. Nothing is staked and nothing is forfeited on either outcome. The
+record is public, so the deterrent is reputational and, under the fallback below, retrospective.
+
+\paragraph{A censoring bloc.} Four owner identities — three under the strongest linkage computable
+from public data — would ban any application at will within
+$\Delta_{\mathrm{vote}} + \delta + \Delta_{\mathrm{exec}}$ blocks at zero cost, and at
+\SI{50}{\percent} (nineteen identities) they would satisfy any two-chamber rule they had prepared
+for. Nothing in the mechanism prevents this, and under \Cref{op:23:reinstatement} nothing reverses
+it: a wrongful ban is a permanent chain fact. What the mechanism does is make it
+\emph{attributable}, and the on-chain shape strengthens exactly this: the evidence is not a
+gossiped certificate that a node may or may not hold but a set of confirmed, height-stamped
+transactions that every archival node has, in an order the chain fixes.
+
+\paragraph{Producer-level censorship.} New with the on-chain shape, and the reason the inclusion
+rule of \Cref{prop:23:inclusion-required} was made consensus-required rather than left to producer
+discretion. Under the settled rule a producer cannot decline to include a due ban memo and still
+produce a valid block, so this vector is closed by a consensus rule rather than merely made
+statistically unlikely: the delay is one slot for a report with no carried report queued ahead of it,
+regardless of $f$, the fraction of nodes that would have preferred to withhold it
+(\Cref{prop:23:inclusion}). What remains subject to producer
+discretion is \emph{vote} censorship: a coalition holding a fraction $f$ of nodes can decline to
+include a given vote, but it needs every one of \num{2880} slots to succeed, so vote censorship
+fails with probability $1 - f^{\num{2880}}$. Putting the decision on-chain now makes both the vote
+and the memo robust to an individual producer --- the vote by the size of the window, the memo by an
+explicit consensus rule --- which is the reverse of the asymmetry an earlier draft of this section
+anticipated.
+
+\paragraph{Electorate timing.} The reporter chooses $\hgt_0$. Without the trailing maximum of
+\Cref{def:23:electorate}, a reporter would choose a height at which many nodes are temporarily
+unconfirmed. The largest two keys hold \SI{21.28}{\percent} and reach \SI{25}{\percent} of any
+$\vtotal(\hgt_0) \le 0.851\,\vtotal$; the largest alone reaches it if
+$\vtotal(\hgt_0) \le 0.428\,\vtotal$. Confirmation expiry is 640 blocks, so an incident that leaves
+\SI{15}{\percent} of weight unconfirmed for a few hours is the attack window, and $\Delta_W$ closes
+it. Racing a vote to the window boundary is not an attack — a vote confirming after
+$\hgt_0 + \Delta_{\mathrm{vote}}$ is simply invalid — but a reorg across the ban block is, and
+$\Delta_{\mathrm{exec}}$ absorbs it.
+
+\paragraph{Griefing, and what actually bounds it.} The specified design's answer is
+\Cref{def:23:capacity} and nothing else: a griefer's sustained report rate is its node count per
+\SI{24}{\hour}, and its concurrent footprint is its node count, priced at \num{1000}\flux\ of
+locked and recoverable collateral per slot. Holding every deployed application under permanent
+report therefore costs \num{1195000}\flux\ of locked capital and buys operator attention rather than
+eviction. Compare the alternatives the design did not take: a bond would charge per \emph{failed}
+report and nothing to a griefer with a whale's backing; a per-key rate limit would be multiplied by
+free keys, since a 480-node operator has 480 of them; eligibility gating alone requires
+\num{1000}\flux, which is already true of every operator. Under the two-chamber rule, a griefer
+who reaches the first chamber must also find $m$ tenured identities.
+
+\paragraph{Wash-deployment.} A deployer who registers and then reports their own application spends
+$\price$ and, on success, forfeits the unused remainder of it; on expiry, spends nothing further,
+because reporting is free and the only cost was the capacity slot. There is no state in which the
+cycle yields more than it costs, because the mechanism has no pool a wash could farm — which is
+exactly the property that the \Cref{sec:07-pnr} constraint on forfeitures preserves.
+
+\paragraph{The quorum is simply wrong.} An honest coalition bans a legitimate application on
+mistaken evidence. Recourse, in order of availability: redeployment under a new name, always
+available, costing one fee and preserving none of the old instance's reachability, since \FDM{} and
+\PDNS{} names are keyed per application name; and the public chain record, which names the voters.
+Reinstatement is \emph{not} on that list, because the design has none
+(\Cref{op:23:reinstatement}). When redeployment does not suffice, \textbf{the design bounds the
+damage rather than preventing the error}: the maximum loss is one prepaid term (floor
+\num{0.01}\flux, typically the unused fraction of $\price$), the redeployment fee, and
+$\Delta_{\mathrm{vote}} + \delta + \Delta_{\mathrm{exec}}$ blocks plus redeployment time of
+downtime. That bound is the ``err toward leaving content up'' dial applied to the cost of the other
+error, and it is the design's actual guarantee. It is also the whole of the guarantee: the ban
+itself is permanent.
+
+\paragraph{Byzantine minority and colluding majority.} A minority below $\vthresh$ can report
+(bounded by its node count), can vote, cannot ban, cannot forge or replay votes, cannot keep a vote
+out of the chain for a whole window (\Cref{prop:23:inclusion}), and cannot produce a valid ban memo,
+because a block carrying one for an uncrossed report is invalid and is rejected like any other
+invalid block. A coalition at or above $\vthresh$ is the censoring bloc above. Sustained low demand
+shrinks $\pool$ and drives the already-negligible \PNR{} deterrent toward zero without affecting
+safety. Sustained low participation means genuinely harmful applications stay up, which is a
+liveness failure and not a safety failure (\Cref{prop:23:expiry}).
+
+\paragraph{The team's stated fallback.} If malicious reporting appears, the chain is to be forked to
+introduce penalties for malicious submissions \srcintent{evidence/design/04-moderation.md}. This is
+a legitimate governance answer and the paper states it plainly, with its limits. It is
+\emph{reactive}, acting after the ban. It requires a \emph{hard fork} of \fluxd, with the
+coordination that implies — and the consensus section's history of what a consensus change costs
+this network is directly relevant. It requires \emph{distinguishing malicious from mistaken reports
+after the fact}, for which no oracle exists and which the mechanism does not attempt. And because
+collateral is never slashed, the penalty must be something other than collateral, which is not
+specified. What the mechanism does contribute is the record: a future fork would have signed,
+height-stamped, chain-resident evidence of every vote to act on, and would not have to trust anyone
+to have kept it. Without that the fallback would have nothing. It is worth noting that a fork is
+also the only route the specified design leaves for undoing a wrongful ban, which makes
+\Cref{op:23:reinstatement} and this paragraph the same problem seen from two sides.
+
+% =====================================================================
+\subsection{The decentralization endgame}
+\label{sec:23:endgame}
+
+A section on governance owes the reader an inventory of what is team-operated today and must not be
+at target. Drawing on the networking and addressing section's centralization table and on the
+node-services extraction, the components are: \texttt{api.\allowbreak{}runonflux.\allowbreak{}io} as the sole
+application-discovery source, with no on-chain fallback and no independent replica
+\srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}flux/\allowbreak{}dataFetcher.js}{47--91}; the Foundation-operated
+private \texttt{10.100.0.0/24} carrying the WireGuard hub, the DNS gateway, the Arcane load
+balancers and both PowerDNS masters
+\srccode{flux-fdm-infrastructure/\allowbreak{}ansible/\allowbreak{}inventory/\allowbreak{}hosts.yaml}{102--206}; the 16-host \FDM{} fleet
+\srccode{flux-fdm-infrastructure/\allowbreak{}ansible/\allowbreak{}inventory/\allowbreak{}hosts.yaml}{8--100},
+none of which runs on a node operator's machine; the \texttt{fluxos-\allowbreak{}network-\allowbreak{}policy} channel of
+\Cref{def:23:policy-channel}; the single-instance \texttt{fluxstorage} service, which holds
+oversized environment variables and commands unencrypted at rest with no write-side protection at
+all \srccode{fluxstorage/\allowbreak{}src/\allowbreak{}routes.js}{17--67}; the release API, which performs no cryptographic
+verification of what it serves as the latest release
+\srccode{fluxos-release-api/\allowbreak{}src/\allowbreak{}flux\_release\_api/\allowbreak{}api.py}{176--229}; the Foundation-held application
+owner keys used for auto-renewal \srccode{appsmonitor/\allowbreak{}config/\allowbreak{}default.js}{1--3}; and a
+\texttt{fluxteam} privilege level in the node UI strictly above a node owner's own \texttt{admin}
+\srccode{fluxos-frontend/\allowbreak{}src/\allowbreak{}navigation/\allowbreak{}vertical/\allowbreak{}fluxadmin.js}{39--43}. To that list the consensus
+layer adds the 2-of-4 emergency-block key set \srccode{fluxd/\allowbreak{}src/\allowbreak{}emergencyblock.cpp}{24--30,183--190} —
+3-of-4 with fresh keys intended, aligning with the bridge quorum (\S22), unscheduled, \planned
+\srcintent{evidence/design/08-answers-round-2.md, round 5 answers} — the
+consensus-enforced dev-fund remainder paid to a hardcoded address
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2877--2884}, and the single transparent address to which all
+application payments land today by policy
+\srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03}.
+
+One further fact belongs here rather than being left for a reader to discover. The largest in-flight
+change to how applications are described on Flux — the \specv{9} work — currently lives on an
+individual contributor's fork rather than in the organisation's repository: \num{1167} commits ahead
+of the organisation's development branch, and 932
+changed files with $+\num{180317}/-\num{49561}$ lines against upstream master, actively pushed
+\srcmeasured{gh api repos/\allowbreak{}RunOnFlux/\allowbreak{}flux/\allowbreak{}compare/\allowbreak{}development...MorningLightMountain713:feat/\allowbreak{}fluxos-v9}{2026-09-03}.
+That is an ordinary open-source pattern and not a criticism. For a paper arguing progressive
+decentralization it is nonetheless a fact about where development authority sits, and the paper
+states it rather than omitting it.
+
+The order in which these move matters, and one ordering constraint is already visible: the policy
+channel's own stated next step — signed documents with a rollback-resistant sequence number
+\srccode{fluxos-network-policy/\allowbreak{}README.md}{323--326} — is strictly cheaper than the quorum, requires
+no consensus change, and would raise the deployed mechanism from ``no authentication'' to
+``authenticated by a named key''. It would not raise $\kappa_{\mathrm{deployed}}$ above 1. A
+threshold over publisher keys would, and is the obvious intermediate step between
+\Cref{prop:23:kappa-today} and the quorum.
+
+% =====================================================================
+\subsection{Recommended values for the open parameters}
+\label{sec:23:recommended}
+
+Every parameter this section left open is collected here with a value. Each was proposed by this
+paper and \textbf{confirmed by the author} \srcintent{08-answers-round-2.md, round 11}; the reasoning
+is retained so that any of them can be overridden with a number rather than re-argued from the
+beginning. Block counts assume the \SI{30}{\second}
+post-\PoN{} target, i.e.\ \num{2880} blocks per day \srccode{fluxd/src/chainparams.cpp}{105}.
+
+\begin{table}[H]
+\centering\footnotesize
+\caption{Parameter values for the content-reporting quorum. Proposed by this paper and
+\textbf{confirmed by the author} \srcintent{08-answers-round-2.md, round 11}. \planned,
+\srcinferred{} for the derivations except where a citation is given.}
+\label{tab:23-recommended}
+\begin{tabular}{@{}llp{0.44\linewidth}@{}}
+\toprule
+Parameter & \textbf{Recommended} & Reason \\
+\midrule
+$\Delta_W$ trailing window & \textbf{\num{20160}} (\SI{7}{\day}) & trailing \emph{maximum}; an
+attacker must wait a week after any contraction, and staleness fails safe \\
+$\mathsf{app\_hash}$ scope & \textbf{$(\mathsf{app\_name}, \mathsf{owner})$} & a spec-version hash is
+evaded by re-broadcasting a trivially edited spec \\
+$\mathsf{decision}$ field & \textbf{evict-only} & a recorded-but-uncounted ``keep'' is chain bloat
+with no effect \\
+relay policy & \textbf{per-identity mempool quota} & fee-less votes need a non-fee scarcity term \\
+ordering at one height & \textbf{least crossing height, then least $H(r)$} & deterministic, and
+first-to-quorum is the defensible priority \\
+memo carriage & \textbf{coinbase field} & settled: consensus requires the ban memo
+\srcintent{08-answers-round-2.md, round 5} \\
+$\Delta_{\mathrm{exec}}$ & \textbf{\num{120}} (\SI{1}{\hour}) & $3\times$ the \num{40}-block consensus
+reorg limit \srccode{fluxd/src/main.h}{74} \\
+\SI{10}{\percent}/\SI{15}{\percent} tiers & \textbf{remove} & any destructive action there is one
+party's decision (\Cref{cor:23:tiers}) \\
+vote signing key & \textbf{collateral (owner) key} & weight derives from collateral; a node key is
+VPS-resident (C32) \\
+pool remainder & \textbf{burn pro-rata} & the only option giving voters a current-term cost
+(\Cref{rem:o16-burn}) \\
+$\mathsf{evidence}$ & \textbf{optional content hash} & mandatory evidence is unverifiable on chain;
+absent evidence is unreviewable \\
+report counts as vote & \textbf{yes, at $\hgt_0$} & a separate confirming vote from the reporter is
+a redundant transaction \\
+$m$ identity chamber & \textbf{\num{21}} & odd (no ties); Sybil pre-positioning costs
+$(21-\kappa)\times\num{1000}\flux$ \\
+$T$ identity tenure & \textbf{\num{86400}} (\SI{30}{\day}) & reuses the \PNR{} constant $K$
+(\Cref{sec:pnr}); one tenure constant, two mechanisms \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{The four that carry real weight.} Most of the table is mechanical. Four are not, and the
+reasoning is given rather than compressed into a cell.
+
+\textbf{$\Delta_W$ as a trailing maximum, not a mean.} The electorate-timing attack of
+\Cref{sec:23:attacks} works by voting while $\vtotal^{\!\star}$ is transiently low, since the
+\SI{25}{\percent} threshold is a fraction of it. A trailing maximum over seven days means the
+denominator cannot be made to dip on the attacker's schedule: they must wait out the window. The
+cost is that after a genuine fleet contraction the threshold stays high --- eviction becomes
+temporarily harder --- and that is the correct direction for the error to point.
+
+\textbf{Enforcement scope is the application identity, not a specification version.} If
+$\mathsf{app\_hash}$ commits to one specification version, a deployer evades the ban by
+re-broadcasting the same application with any trivial edit, and the quorum has to vote again for each
+edit. If it extends to \emph{all} applications of the same owner, the mechanism becomes collective
+punishment keyed on a field whose binding to a real party is exactly what \Cref{sec:23:measurement}
+shows is weak. $(\mathsf{app\_name}, \mathsf{owner})$ is the smallest scope that is not trivially
+evadable, and it matches the settled position that a banned deployer may return as a genuinely fresh
+application \srcintent{08-answers-round-2.md, round 5}.
+
+\textbf{Remove the graduated tiers.} \Cref{cor:23:tiers} is the argument: at \SI{10}{\percent} and
+\SI{15}{\percent}, the measured concentration means a single party can reach the threshold alone. A
+destructive action there is therefore one party's decision wearing the costume of a quorum, which is
+worse than no mechanism because it carries the mechanism's legitimacy. Non-destructive actions ---
+flagging, warning --- survive that objection but do no work: they neither stop harm nor inform anyone
+who is not already watching the chain. One threshold, at \SI{25}{\percent}, is the honest design.
+
+\textbf{The owner key signs, not the node key.} Voting weight is collateral-weighted, and the
+collateral is controlled by the owner key; the node's \texttt{pubkey} is a VPS-resident signing key
+(conflict C32). If the node key could vote, compromising $n$ virtual machines would deliver $n$
+nodes' voting weight without touching a single unit of collateral --- which would make the security
+of a collateral-weighted vote depend on the security of the least-hardened VPS in the fleet. The
+start-transaction shape \srccode{fluxd/src/fluxnode/activefluxnode.cpp}{253--288} already carries an
+owner-key signature and is the right template, which is also the shape the team described
+\srcintent{08-answers-round-2.md, round 5}.
+
+% =====================================================================
+\subsection{Comparison with prior art}
+\label{sec:23:priorart}
+\label{sec:23:related}
+
+\paragraph{Stake-weighted governance.} Compound and MakerDAO weight votes by token balance against
+an absolute quorum expressed as a fraction of supply — the same shape as
+$\vthresh\vtotal$ — and both have exhibited the plutocracy failure measured above. In Compound's
+Proposal 289 (July 2024) a coordinated holder group won a majority of votes cast --- \num{682190}
+COMP for against \num{633640} --- for moving \num{499000} COMP into a vault it controlled, and the
+proposal was canceled before execution following community pressure rather than defeated by the
+mechanism \citep{compound289}; in MakerDAO's October 2020 incident a participant used
+flash-borrowed MKR, roughly \$7M worth, to pass a whitelisting vote and returned the tokens in the
+same transaction, after which Maker extended its governance security module delay from
+\SI{12}{\hour} to \SI{72}{\hour} \citep{makerflashloan2020}. \emph{What transfers:} that stake-weighting
+concentrates decision power in proportion to capital; that delegation concentrates it further; and
+that a post-decision delay — Compound's timelock, Maker's pause — is the cheapest available safety
+margin, which here is $\Delta_{\mathrm{exec}}$. \emph{What does not transfer:} flash-loan capture.
+Voting weight here would be \emph{locked} collateral with 100-block maturity and a confirmation
+requirement, and the electorate would be frozen at $\hgt_0$, so weight cannot be borrowed into a
+vote after the report exists. That is a genuine advantage of collateral weighting and the paper
+claims it. The plutocracy failure, by contrast, transfers exactly. In both incidents the decisive
+set was small — a coordinated holder group in one case, a single flash-borrowing participant in the
+other — which is the same shape as $\kappa(0.25) = 4$, with one difference that cuts against Flux:
+here the decisive set is a standing property of the collateral distribution rather than something
+assembled for one vote.
+
+\paragraph{Sybil resistance.} \citet{douceur2002sybil} establishes that without a trusted identity
+authority or a resource cost, a single party can present arbitrarily many identities — which is
+exactly why the settled weighting binds voting power to locked collateral and why every
+concentration remedy that decouples them (weight caps, per-identity quadratic weighting) is defeated
+at zero cost (\Cref{sec:23:negative}). Personhood-based approaches do not transfer: Flux operators
+are businesses and machines, and no personhood attestation is available to a \FluxOS{} node. What
+does transfer is the \emph{bicameral} shape used where token weight is paired with an
+attested-identity house; \Cref{def:23:twochamber} is that structure with tenure standing in for
+personhood — a much weaker identity, which is precisely why it claims detectability rather than
+resistance.
+
+\paragraph{Content moderation in peer-to-peer systems.} \citet{benet2014ipfs} describes a
+content-addressed store; the surrounding ecosystem publishes an opt-in denylist of hashed
+identifiers that each node \emph{may} apply. Freenet has no removal at all by design; the fediverse
+moderates per instance by defederation; Tor exit policies and relay policies are per operator.
+\emph{What transfers:} the per-node denylist is exactly the shape of Flux's deployed blocklist —
+except that Flux's is \emph{mandatory} on every node and centrally authored, which makes Flux more
+centralised than IPFS in this one respect. \emph{What does not:} every system above stores or relays
+\emph{bytes}. Flux runs \emph{processes} with network egress that can phish, command, spam and
+attack third parties, which is why a network-wide removal — stronger than anything those systems do
+— is on the table at all. Note that the intended scope is broader still: by
+\Cref{rem:content-veto} the quorum is a content veto, so Flux is choosing a power that none of the
+comparison systems exercises, and choosing it knowingly. It is also why concentration matters more here: a denylist a node may ignore is a
+recommendation; a ban carried in the chain that every node must honour is a power.
+
+\paragraph{Filecoin, Arweave, Akash.} \citet{filecoin2017} specifies a market in which storage
+providers choose which deals to accept; the protocol itself removes nothing. Arweave nodes run local
+content policies over what they store and serve, and the protocol cannot remove. Akash providers set
+per-provider acceptance attributes, and no network-wide eviction exists \citep{akash}. \emph{What
+transfers:} the position that the protocol should not hold a content veto — which is the roadmap's
+own principle and which the quorum contradicts unless the taxonomy is confined to behaviour.
+\emph{What does not:} their tenants' data is inert and Flux's tenants' processes are not, and a
+provider-level ``I will not host this'' is categorically different from a network-level ``nobody may
+host this''. The quorum is the latter. The paper presents it as a deliberate departure from the
+Filecoin and Arweave position, justified by the difference between storing and executing, rather
+than as an industry norm.
+
+% =====================================================================
+\subsection{Open parameters}
+\label{sec:23:open}
+
+The on-chain shape settles six things the earlier specification carried as parameters, and it is
+worth listing them as gains: the voting window ($\Delta_{\mathrm{vote}} = \num{2880}$ blocks), the
+per-application cooldown after an unmet report (zero), reporter eligibility
+($\reporters = I(\hgt_0)$, by \Cref{def:23:capacity}), the network-wide cap on concurrently open
+reports ($\lvert N(\hgt) \rvert$, by \Cref{cor:23:capacity}), the entire bond question, which
+disappears with the bond, and producer obligation --- ban-memo inclusion, over the first unbanned
+carried report in the settled order, is consensus-required rather than discretionary
+(\Cref{prop:23:inclusion-required}). Eleven
+further elements were carried as open parameters through the earlier drafts, each marked in place
+above with its domain and its trade-off, and all but the first are now settled at the values of
+\Cref{tab:23-recommended}: the category taxonomy, which remains open as an enumeration task
+(\Cref{rem:content-veto}); $\Delta_W$; what $\mathsf{app\_hash}$ hashes, which is
+also the enforcement scope; the $\mathsf{decision}$ field and the relay policy for fee-less
+transactions; the ordering rule when two reports cross in
+one slot, and how the memo is carried in the coinbase; $\Delta_{\mathrm{exec}}$; the actions at the
+graduated \SI{10}{\percent} and \SI{15}{\percent} tiers; which transaction shape the vote follows
+and hence which key signs it; the report's evidence field and whether a report is itself a vote;
+$(m, T)$ for the identity chamber; and the disposition of the pool's unearned remainder.
+
+Three further items are recorded here rather than marked in place, because they are not parameters of
+this mechanism. Whether opt-in delegation is adopted, and with what revocation semantics
+(\Cref{sec:23:remedies}). Whether \FDM{} and \PDNS{} honour bans by dropping routes at
+$\hgt_b + \Delta_{\mathrm{exec}}$ — without which a banned application would remain reachable at its
+name until the last node had removed it, and with which the Foundation-operated reachability plane
+acquires a new dependency on moderation state. And the sequencing question this section
+inherits from \Cref{sec:23:endgame}: signing the deployed policy documents is strictly cheaper than
+the quorum, requires no consensus change, and should not wait for it. Whether the ban set is ever
+pruned is no longer open: \Cref{prop:23:monotone} and \Cref{op:23:reinstatement} together settle it
+as no --- a ban is final, and the ban set only grows.
+
+Three items cannot be set by parameter choice. Two are \emph{verifications} in \fluxd{}: whether
+the emergency-block path is subject to the coinbase rules the ban memo would rely on --- now checked
+against source and answered favourably (\Cref{rem:emergency-coinbase}) --- and whether re-addressing
+resets \texttt{added\_height}, which decides whether the tenure gate of \Cref{def:23:twochamber} does
+any work at all and remains unverified. The third cannot be resolved at all from public data:
+beneficial ownership behind the payment addresses that carry the voting weight
+(\Cref{conj:23:custody}). The first two are prerequisites, not refinements. The third is the reason
+$\kappa(0.25) = 4$ is printed as a measurement of \emph{identities} and never as a count of
+\emph{people}.
+
+%% Drain this section's float queue before the next begins.
+\FloatBarrier

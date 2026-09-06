@@ -1,0 +1,37 @@
+%% Abstract.
+Flux is a decentralized cloud of \num{6489} collateralised nodes running \num{1195} deployed
+applications, on a chain that replaced proof-of-work with collateral-gated sortition at height
+\num{2020000}. This paper does two things. It describes the deployed system --- consensus, node
+tiering and benchmarking, monetary policy, orchestration and placement, addressing, attested
+execution, and the Zcash-derived shielded layer --- at a depth from which the behaviour could be
+reimplemented or audited, citing source by file and line. It then specifies the target architecture
+at the same depth: revenue-funded operator compensation replacing issuance, a redesigned bridge,
+a content-reporting quorum, application specification v9, a bonded attestation network,
+post-quantum migration, and the machine-facing interfaces an autonomous tenant needs to provision,
+pay for and release capacity without a human. It also argues one positioning claim from the
+substrate rather than from intent: the interconnect requirement that centralises frontier-model
+inference does not apply to models that fit on a single device, so a dispersed fleet of
+collateralised commodity machines is a structurally appropriate home for small task-specialised
+models --- once accelerators can be subdivided, which is the one thing the current allocation
+model cannot do.
+
+The discipline that keeps the second half honest is that every undecided element is named rather
+than filled: each mechanism is given as state, transitions, invariants and failure handling, with
+open parameters marked as decisions and open constructions marked as open. Two axes of tagging let a
+reader tell, at any sentence, whether they are reading about code that runs or a design that does
+not.
+
+Several findings are not what the roadmap or the design intent would predict, and the paper reports
+them as measured. A fee pool with a per-block drip is necessary because deterministic payment
+rotation otherwise admits a timing attack recapturing most of an operator's own fee; the same pool
+design, by paying every node regardless of what it hosts, leaves no marginal incentive to host at
+all, which makes hardening the eligibility gate a precondition for revenue-funded rewards rather
+than a follow-on. Collateral-weighted moderation is Sybil-resistant by construction and, at the
+measured ownership distribution, not censorship-resistant: four owner identities reach the proposed
+removal threshold, and no weighting or remedy in the design space raises that number. The shielded
+pools have been closed to new entrants by consensus since 2021 and hold \SI{0.0225}{\percent} of
+supply; they are to be retired rather than reopened, leaving \Flux{} settling transparently and
+treating payment privacy as an unsolved problem rather than a delivered feature. A header format chosen for consensus reasons forecloses light-client
+bridging. Of twenty-two mechanisms assessed, six are extensions of what exists, eleven are
+engineering, one has moved from research toward engineering, and four are open research problems
+--- which the paper names rather than absorbs.

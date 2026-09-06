@@ -1,0 +1,504 @@
+\section{Managed services: databases, RPC, archive, and indexing}
+\label{sec:managed-services}
+
+A stateless application on \Flux tolerates a bad host: if the container dies, \FluxOS
+reschedules it elsewhere and the workload resumes with no state to lose. A managed
+database cannot make that trade. Its correctness is defined by what happens to data
+that exists only on machines the operator does not control, that are geographically
+dispersed, that may leave the network without notice, and that share none of a
+datacenter's usual assumptions --- no shared storage fabric, no operator-trusted
+network, no guaranteed clock, no assurance that the node reporting a given IP is the
+node that was there a minute ago. Every other node-level daemon this paper describes
+(telemetry shipping, coordinated shutdown, expiry notification) is stateless with
+respect to the application: it observes or forwards, and if it fails the application's
+own state is untouched. A managed database is the one place on \Flux where the
+platform's usual escape hatch --- reschedule and move on --- is exactly the operation
+that can destroy data. This section describes the two implementations that exist for
+this problem today, states precisely what each one guarantees, and shows that the two
+guarantees are not the same guarantee.
+
+\subsection{\texttt{Flux-Shared-DB}: ad-hoc leader election over the \FluxOS location API}
+\label{subsec:flux-shared-db}
+
+\texttt{Flux-Shared-DB} (\shipped) is a Node.js ``Operator'' sidecar that clusters
+independent MySQL/MariaDB engine instances running on separate \FluxNode s into one
+logical database. It intercepts the MySQL wire protocol, sequences writes on an
+elected master, and replays them on followers via its own replication log, called the
+``backlog'' \srcdoc{Flux-Shared-DB/README.md:5}. It is deployed as an ordinary
+tenant-deployable \FluxOS application component \srcdoc{Flux-Shared-DB/README.md:20-49}.
+
+\paragraph{Leader election.} Membership and master selection are derived entirely from
+the \FluxOS application-location API, not from a consensus protocol: there are no term
+numbers, no quorum proof, and no Raft or Paxos implementation anywhere in the
+repository. \texttt{findMaster()} fetches the app's instance IPs from
+\texttt{https://api.runonflux.io/apps/location/\{appName\}}, polls every reachable
+peer's status, and ranks candidates by (1) highest replication sequence number,
+descending; (2) a static IP, true first; (3) OS uptime, descending
+\srccode{Flux-Shared-DB/\allowbreak{}ClusterOperator/\allowbreak{}Operator.js}{1464-1489}. If the local node
+ranks first, it does not declare itself master outright: it asks the second-ranked
+candidate to confirm before doing so. If the local node does not rank first, it asks
+the top-ranked candidate who the master is, and if that answer disagrees with the
+candidate list, it asks the \emph{reported} master to confirm itself
+\srccode{Flux-Shared-DB/\allowbreak{}ClusterOperator/\allowbreak{}Operator.js}{1494-1543}. Any ambiguous or null
+response causes the routine to recurse with no fixed retry cap or backoff
+\srccode{Flux-Shared-DB/\allowbreak{}ClusterOperator/\allowbreak{}Operator.js}{1508,1519,1538,1552}. This is a
+self-built, ad-hoc leader-election protocol layered directly on an HTTP location
+service, and it is the default, unconditional path --- there is no feature flag
+selecting a different mechanism.
+
+\paragraph{Failover detection.} A health-check timer runs every $120{,}000$~ms
+(2~minutes) and re-derives the master if any of: more than one node reports a
+conflicting master IP; the master fails three consecutive \texttt{getMaster} probes;
+the master's IP disappears from the app's location list; or, on the master itself, the
+Socket.IO server has zero connected clients
+\srccode{Flux-Shared-DB/\allowbreak{}ClusterOperator/\allowbreak{}Operator.js}{1265-1338}
+\srccode{Flux-Shared-DB/\allowbreak{}ClusterOperator/\allowbreak{}server.js}{1543-1544}. Independently of the
+poll, a follower's WebSocket \texttt{disconnect}\slash\texttt{connect\_error} handler
+triggers immediate re-election on that follower, so the effective failover-detection
+latency is bounded above by the 2-minute poll but can be much shorter when the
+transport itself notices the drop
+\srccode{Flux-Shared-DB/\allowbreak{}ClusterOperator/\allowbreak{}Operator.js}{178-196}.
+
+\paragraph{Write durability.} This is the load-bearing finding for the section.
+
+\begin{property}[\texttt{Flux-Shared-DB} acknowledges before it replicates]
+\label{prop:sharedb-durability}
+A write reaches the connecting MySQL client as soon as the elected master finishes
+executing that query against the tenant's own database on the master's local engine
+\srccode{Flux-Shared-DB/\allowbreak{}ClusterOperator/\allowbreak{}Backlog.js}{145-149}. Only \emph{after} the
+client has been told the write succeeded does the master broadcast it to connected
+follower sockets, via \texttt{serverSocket.emit('query', \ldots)}; no follower
+acknowledgment is awaited or required before that call returns
+\srccode{Flux-Shared-DB/\allowbreak{}ClusterOperator/\allowbreak{}Operator.js}{379-389}. No code path awaiting
+a follower ack was found anywhere in \texttt{Operator.js}, \texttt{Backlog.js}, or
+\texttt{server.js}: this is fire-and-forget asynchronous replication, and there is no
+synchronous mode in this codebase. If the master fails between acknowledging the
+client and completing that broadcast, the write is gone: the next master is whichever
+surviving node holds the highest \emph{already-replicated} sequence number
+\srccode{Flux-Shared-DB/\allowbreak{}ClusterOperator/\allowbreak{}Operator.js}{1483-1489}, and a write that never
+left the old master leaves no trace anywhere else in the code reviewed. The size of
+this data-loss window is not bounded by anything in the codebase examined: in the best
+case it is the single most recent write; under sustained load or follower lag it can be
+an unbounded number of recent writes, limited only by how far behind the surviving
+followers happened to be.
+\end{property}
+
+A second, compounding detail: even the master's own record of the write in its local
+backlog table is not confirmed before the client is told the write succeeded. The
+insert into \texttt{flux\_backlog.\allowbreak{}backlog} is issued without an \texttt{await}, and the
+subsequent error check on its result is short-circuited by a literal
+\texttt{if (false \&\& \ldots)} guard that can never fire
+\srccode{Flux-Shared-DB/\allowbreak{}ClusterOperator/\allowbreak{}Backlog.js}{126-144}. Reads compound the
+problem in the other direction: ordinary (non-write) queries execute directly against
+whichever node the client happens to be connected to, regardless of replication lag,
+so a client on a lagging follower can read stale data indefinitely and two clients on
+two different followers can observe different states at the same instant
+\srccode{Flux-Shared-DB/\allowbreak{}ClusterOperator/\allowbreak{}Operator.js}{720-733}. An
+\texttt{AUTH\_MASTER\_ONLY} setting restricts DB connections to the master only, but it
+is opt-in and defaults to \texttt{false} \srccode{Flux-Shared-DB/\allowbreak{}ClusterOperator/\allowbreak{}config.js}{24}.
+
+\paragraph{Partition behavior.} There is no quorum requirement to elect a master. A
+minority partition containing the node with the highest sequence number will elect
+that node as master regardless of how much of the mesh it can actually reach, so a
+classic split-brain --- two nodes simultaneously believing themselves master and
+accepting writes --- is possible whenever the mesh disagrees about who the master is
+for up to the 2-minute health-check interval; the code's only defense is detecting
+that disagreement on the next cycle, not preventing it in the first place
+\srccode{Flux-Shared-DB/\allowbreak{}ClusterOperator/\allowbreak{}Operator.js}{1265-1271}. No explicit
+split-brain test or fencing mechanism was found in the repository, so this specific
+scenario is stated here as a structural consequence of the mechanisms above, not as an
+observed incident \srcinferred.
+
+\paragraph{Maturity, honestly assessed.} \texttt{Flux-Shared-DB} is shipped: it is the
+default, unconditional replication path, and a CI pipeline builds and pushes three
+Docker Hub image variants (\texttt{latest}, \texttt{latest-mysql},
+\texttt{latest-mariadb}) on every merge to \texttt{master}
+\srccode{Flux-Shared-DB/\allowbreak{}.github/\allowbreak{}workflows/\allowbreak{}docker-image.yml}{1-33}, which is evidence of
+active use, not merely of a working build. But none of the properties above --- leader
+election correctness, split-brain avoidance, or the failover data-loss window in
+Property~\ref{prop:sharedb-durability} --- has an automated test. The only test file in
+the repository exercises Bitcoin-message-signature verification, unrelated to
+replication, failover, or backup/restore
+\srccode{Flux-Shared-DB/\allowbreak{}test/\allowbreak{}bitcoinMessage.test.js}{1-18}. The hardest properties of
+this system are, in this precise sense, unverified.
+
+Two further findings, stated as facts rather than as speculation about intent: (1) an
+AES-256-CBC ``comm'' encryption layer for the internal cluster protocol exists in code
+(\texttt{Security.\allowbreak{}encryptComm}, a \texttt{shareKeys} socket event), but the
+key-exchange handshake that would populate the AES key and IV on the connecting side is
+commented out, so this layer is not exercised on the path reviewed and internal cluster
+traffic --- queries, keys, session tokens --- runs as plaintext Socket.IO by default
+\srccode{Flux-Shared-DB/\allowbreak{}ClusterOperator/\allowbreak{}Operator.js}{151-168}. (2) The MySQL wire-protocol
+proxy parses the client's username and password scramble at connection time but never
+verifies the scramble against a password
+\srccode{Flux-Shared-DB/\allowbreak{}lib/\allowbreak{}mysqlServer.js}{291-320}; the operator's actual
+authorization gate is an IP allowlist (\texttt{WHITELIST}, the first \texttt{172.x}
+address to connect, or membership in the app's own instance-IP list)
+\srccode{Flux-Shared-DB/\allowbreak{}ClusterOperator/\allowbreak{}Operator.js}{324-359}. Authentication to this
+managed database is, in the code reviewed, IP-allowlist-only.
+
+\subsection{\texttt{flux-\allowbreak{}pg-\allowbreak{}cluster}: Patroni/etcd-backed PostgreSQL HA}
+\label{subsec:flux-pg-cluster}
+
+\texttt{flux-\allowbreak{}pg-\allowbreak{}cluster} (\shipped) is a Go agent (\texttt{flux-agent}) that turns three
+or more \FluxOS application instances into a standard Patroni-managed PostgreSQL
+high-availability cluster, adding \Flux-specific glue: membership discovery via the
+\FluxOS location API, a primary-routing TCP proxy, and conservative bootstrap/recovery
+logic intended to prevent split-brain across an unreliable, geographically dispersed,
+possibly NAT'd node set \srcdoc{flux-pg-cluster/README.md:7}
+\srccode{flux-pg-cluster/\allowbreak{}cmd/\allowbreak{}flux-agent/\allowbreak{}daemon.go}{25}.
+
+\paragraph{Leader election: standard, not custom.} Unlike \texttt{Flux-Shared-DB}, this
+system does not reimplement consensus. \texttt{etcd} holds the distributed
+configuration store, and Patroni elects the primary via \texttt{etcd} leader keys with
+\texttt{PATRONI\_TTL}$=30$\,s and \texttt{PATRONI\_LOOP\_WAIT}$=10$\,s, both defaults
+\srccode{flux-pg-cluster/\allowbreak{}patroni.yml.tpl}{30-33}
+\srccode{flux-pg-cluster/\allowbreak{}internal/\allowbreak{}config/\allowbreak{}config.go}{150-151}. The \Flux-specific code
+renders Patroni's configuration template from discovered peer IPs and manages the
+\texttt{etcd} process lifecycle and cluster-membership reconciliation; it does not
+reimplement the election itself \srccode{flux-pg-cluster/\allowbreak{}cmd/\allowbreak{}flux-agent/\allowbreak{}init.go}{422}.
+
+\paragraph{Primary-routing proxy.} A Go TCP proxy listening on port 5433 polls every
+candidate node's Patroni \texttt{/primary} and \texttt{/replica} REST endpoints every
+\texttt{PROXY\_HEALTH\_INTERVAL\_SECONDS}$=3$\,s (default) and forwards new TCP
+connections to whichever node most recently answered 200 on \texttt{/primary}
+\srccode{flux-pg-cluster/\allowbreak{}cmd/\allowbreak{}flux-agent/\allowbreak{}proxy.go}{64,114-154}
+\srccode{flux-pg-cluster/\allowbreak{}internal/\allowbreak{}patroni/\allowbreak{}client.go}{49-57}. In-flight connections are
+not killed on failover --- the documentation states this explicitly, and the code
+performs no active disconnect \srccode{flux-pg-cluster/\allowbreak{}cmd/\allowbreak{}flux-agent/\allowbreak{}proxy.go}{26-27}
+--- so an application holding an open connection across a failover must detect the stale
+connection itself.
+
+\paragraph{Bootstrap and recovery gating.} On a from-scratch or dead-DCS boot, the
+agent probes every expected peer's HMAC-authenticated identity endpoint and requires
+either (a) exactly one node reporting non-empty PostgreSQL data, or (b) unanimous
+total-DCS-loss with matching PostgreSQL system IDs across every reachable peer, before
+selecting a recovery authority; ties are broken by the most advanced replica's durable
+WAL position, with deterministic node-name tie-breaking as a last resort
+\srccode{flux-pg-cluster/\allowbreak{}cmd/\allowbreak{}flux-agent/\allowbreak{}bootstrap\_identity.go}{263-378}. Any
+unreachable peer, membership mismatch, or multiple-primary condition blocks automatic
+recovery outright \srcdoc{flux-pg-cluster/README.md:206}
+\srccode{flux-pg-cluster/\allowbreak{}cmd/\allowbreak{}flux-agent/\allowbreak{}bootstrap\_identity.go}{271-368}. Separately,
+a quorum-loss recovery path writes to a quorum-probe \texttt{etcd} key every reconcile
+cycle; if that write fails for \texttt{Desired\allowbreak{}State\allowbreak{}Stability\allowbreak{}Cycles}$=3$ (default)
+consecutive cycles while the local node still holds PostgreSQL data, the agent rebuilds
+the \texttt{etcd} cluster with \texttt{-\allowbreak{}-\allowbreak{}force-\allowbreak{}new-\allowbreak{}cluster}, gated by a cooldown
+\srccode{flux-pg-cluster/\allowbreak{}cmd/\allowbreak{}flux-agent/\allowbreak{}daemon.go}{121-153,388-427}. This path is
+exercised end-to-end by \texttt{test\_ec3\_majority\_replacement.\allowbreak{}py}, which kills two of
+three nodes and asserts recovery within a 300-second test budget
+\srccode{flux-pg-cluster/\allowbreak{}tests/\allowbreak{}scenarios/\allowbreak{}test\_ec3\_majority\_replacement.py}{1-60}.
+\texttt{ALLOW\_PG\_DATA\_WIPE} defaults to \texttt{false}; on a system-ID mismatch, data
+is wiped only if this flag is explicitly \texttt{true} \emph{and} the live primary
+confirms authority, otherwise the agent logs an error and leaves the data directory
+intact \srccode{flux-pg-cluster/\allowbreak{}internal/\allowbreak{}config/\allowbreak{}config.go}{137-141}.
+
+\begin{remark}[Default replication favors availability over guaranteed durability]
+\label{rem:pgcluster-durability}
+Default replication in \texttt{flux-\allowbreak{}pg-\allowbreak{}cluster} is asynchronous: ``the primary commits
+writes without waiting for replicas'' \srcdoc{flux-pg-cluster/README.md:210},
+confirmed by \texttt{Patroni\allowbreak{}Synchronous\allowbreak{}Mode} defaulting to \texttt{false}
+\srccode{flux-pg-cluster/\allowbreak{}internal/\allowbreak{}config/\allowbreak{}config.go}{158} and templated directly into
+Patroni's \texttt{bootstrap.dcs} configuration
+\srccode{flux-pg-cluster/\allowbreak{}patroni.yml.tpl}{37-39}. This is a documented data-loss-on-failover
+trade-off, not an oversight, and the durability semantics themselves are delegated
+entirely to upstream Patroni/PostgreSQL streaming replication rather than reimplemented
+in this codebase. Setting \texttt{PATRONI\_SYNCHRONOUS\_MODE=\allowbreak{}true} is an opt-in toggle
+that makes every commit wait for \texttt{PATRONI\_SYNCHRONOUS\_NODE\_COUNT}$=1$
+(default) replica acknowledgment before returning success, eliminating the
+failover-data-loss window at the cost of write latency; with
+\texttt{PATRONI\_SYNCHRONOUS\_MODE\_STRICT=\allowbreak{}true} it additionally blocks all writes when
+no synchronous replica is reachable \srcdoc{flux-pg-cluster/README.md:164-232} (the
+config plumbing for this is confirmed in code
+\srccode{flux-pg-cluster/\allowbreak{}internal/\allowbreak{}config/\allowbreak{}config.go}{158-161}; the runtime
+commit-blocking behavior itself lives inside Patroni/PostgreSQL, outside this
+repository's Go code, and is asserted here only as configuration wiring, not as
+directly observed runtime behavior). Even in the default asynchronous mode,
+\texttt{PATRONI\_MAX\_LAG}$=33{,}554{,}432$ bytes (32~MiB, default) caps how far behind
+a replica may fall and still be eligible for promotion during failover
+\srccode{flux-pg-cluster/\allowbreak{}internal/\allowbreak{}config/\allowbreak{}config.go}{153}
+\srccode{flux-pg-cluster/\allowbreak{}patroni.yml.tpl}{34}: the tolerance is generous, but it is
+bounded.
+\end{remark}
+
+\paragraph{Test coverage.} In sharp contrast to \texttt{Flux-Shared-DB}, this repository
+has a pytest integration-test suite (\texttt{tests/\allowbreak{}scenarios/\allowbreak{}}) that spins up
+three-node Docker Compose clusters and a mock \FluxOS location API and asserts on real
+failure injection: leader kill followed by election within 120~s
+(\texttt{test\_normal\_failover.\allowbreak{}py}), unreachable-node and late-API-registration
+handling, majority-node replacement recovering via \texttt{force-\allowbreak{}new-\allowbreak{}cluster} within a
+300-second budget (\texttt{test\_ec3\_majority\_replacement.\allowbreak{}py}), and system-ID
+mismatch handling
+\srccode{flux-pg-cluster/\allowbreak{}tests/\allowbreak{}scenarios/\allowbreak{}}{test\_normal\_failover.py, test\_ec3\_majority\_replacement.py, et al.}. It also has Go unit tests colocated
+with the agent code (\texttt{bootstrap\_identity\_test.\allowbreak{}go}, \texttt{recovery\_test.\allowbreak{}go},
+\texttt{proxy\_test.go}, \texttt{init\_test.go}, \texttt{config\_test.\allowbreak{}go},
+\texttt{etcdmgr\_test.\allowbreak{}go}, \texttt{fluxapi/\allowbreak{}client\_test.\allowbreak{}go}). The repository's only CI
+workflow builds and pushes Docker images and does not invoke the pytest suite, so the
+suite is not a merge gate
+\srccode{flux-pg-cluster/\allowbreak{}.github/\allowbreak{}workflows/\allowbreak{}docker-image.yml}{1-55}.
+\texttt{DEAD\_CLUSTER\_RECOVERY} and \texttt{ALLOW\_PG\_DATA\_WIPE} are both live,
+tested safety toggles gating destructive recovery paths (the former on by default, the
+latter off by default)
+\srccode{flux-pg-cluster/\allowbreak{}internal/\allowbreak{}config/\allowbreak{}config.go}{136-141} --- concrete evidence that
+split-brain and data-loss edge cases were found and hardened against, rather than left
+theoretical.
+
+\subsection{The comparison}
+\label{subsec:managed-db-comparison}
+
+Both systems are \shipped, as operators a tenant deploys with its own application
+(\S\ref{subsec:managed-db-tenant}); neither is the managed-database \emph{product} the public
+roadmap lists as planned --- ``Postgres and MongoDB as one step in the deployment flow, with
+backup and restore attached'' \srcdoc{flux-roadmap/public/flux-roadmap-public.md:71-72}. Both
+solve the same problem: keeping a database consistent
+across nodes that are untrusted, dispersed, and may vanish. The engineering postures
+are not comparable.
+
+\begin{center}
+\small
+\begin{tabular}{|p{3.6cm}|p{5.6cm}|p{5.6cm}|}
+\hline
+& \textbf{\texttt{Flux-Shared-DB}} & \textbf{\texttt{flux-\allowbreak{}pg-\allowbreak{}cluster}} \\
+\hline
+Election protocol & Ad-hoc, hand-rolled over the \FluxOS location API; no term numbers, no quorum proof \srccode{Flux-Shared-DB/\allowbreak{}ClusterOperator/\allowbreak{}Operator.js}{1464-1489} & Patroni/\texttt{etcd}, standard leader-lease election, TTL 30~s, \texttt{loop\_wait} 10~s \srccode{flux-pg-cluster/\allowbreak{}internal/\allowbreak{}config/\allowbreak{}config.go}{150-151} \\
+\hline
+Failover detection & 2-min health-check poll + immediate reconnect-triggered re-election \srccode{Flux-Shared-DB/\allowbreak{}ClusterOperator/\allowbreak{}server.js}{1543-1544} & Patroni lease expiry (TTL 30~s) + proxy health poll every 3~s \srccode{flux-pg-cluster/\allowbreak{}internal/\allowbreak{}config/\allowbreak{}config.go}{165} \\
+\hline
+Default write durability & Ack after master's local write only; broadcast to followers is unawaited (Property~\ref{prop:sharedb-durability}) & Ack after primary's local commit; async streaming replication (Remark~\ref{rem:pgcluster-durability}) \\
+\hline
+Synchronous option & None found in the codebase & \texttt{PATRONI\_SYNCHRONOUS\_MODE=\allowbreak{}true}, opt-in \srccode{flux-pg-cluster/\allowbreak{}internal/\allowbreak{}config/\allowbreak{}config.go}{158} \\
+\hline
+Split-brain defenses & Detection only, on next 2-min cycle; no fencing found \srccode{Flux-Shared-DB/\allowbreak{}ClusterOperator/\allowbreak{}Operator.js}{1265-1271} & Quorum-loss gating, unanimous-identity bootstrap check, \texttt{force-\allowbreak{}new-\allowbreak{}cluster} cooldown \srccode{flux-pg-cluster/\allowbreak{}cmd/\allowbreak{}flux-agent/\allowbreak{}daemon.go}{121-153,388-427} \\
+\hline
+Automated failure-injection tests & None (only a signature-verification unit test exists) \srccode{Flux-Shared-DB/\allowbreak{}test/\allowbreak{}bitcoinMessage.test.js}{1-18} & pytest suite killing nodes and asserting recovery within stated time budgets \srccode{flux-pg-cluster/\allowbreak{}tests/\allowbreak{}scenarios/\allowbreak{}test\_ec3\_majority\_replacement.py}{1-60} \\
+\hline
+\end{tabular}
+\end{center}
+
+The lesson is not that one team is better than the other; it is that on a decentralized
+substrate, the durability guarantee a managed service can offer is bounded by the
+replication protocol beneath it, and the two protocols here are not equivalent. A
+tenant choosing between \texttt{Flux-Shared-DB} and \texttt{flux-\allowbreak{}pg-\allowbreak{}cluster} is choosing
+between different, precisely different, durability guarantees --- not between two
+skins on the same underlying service --- and the platform should say which is which
+rather than presenting both under a single ``managed database'' label.
+
+\begin{figure}[H]
+\centering
+
+\begin{tikzpicture}[
+  font=\scriptsize, x=1mm, y=1mm,
+  ax/.style={-{Latex[length=1.6mm]}, thick},
+  ev/.style={circle, fill=black, inner sep=0.8pt},
+  lbl/.style={font=\tiny, align=center, inner sep=1pt},
+  nm/.style={font=\scriptsize, anchor=east},
+  loss/.style={fill=black!14},
+]
+  % ---- timeline 1: Flux-Shared-DB
+  \fill[loss] (18,34) rectangle (108,40);
+  \draw[ax] (0,37) -- (112,37);
+  \node[nm] at (-2,37) {\texttt{Flux-Shared-DB}};
+  \node[ev] (w1)  at (6,37)  {}; \node[lbl, above=0.5mm of w1] {write};
+  \node[ev] (l1)  at (18,37) {}; \node[lbl, below=0.5mm of l1] {local\\write};
+  \node[ev] (a1)  at (18,37) {}; \node[lbl, above=0.5mm of a1] {\textbf{ack}};
+  \node[ev] (b1)  at (46,37) {}; \node[lbl, below=0.5mm of b1] {broadcast\\emitted\\(unawaited)};
+  \node[lbl, anchor=west] at (74,37.2) {follower receipt: not awaited, not bounded};
+
+  % ---- timeline 2: flux-pg-cluster, async
+  \fill[loss] (18,18) rectangle (58,24);
+  \draw[ax] (0,21) -- (112,21);
+  \node[nm] at (-2,21) {\texttt{flux-\allowbreak{}pg-\allowbreak{}cluster} (async)};
+  \node[ev] (w2)  at (6,21)  {}; \node[lbl, above=0.5mm of w2] {write};
+  \node[ev] (c2)  at (18,21) {}; \node[lbl, below=0.5mm of c2] {local\\commit};
+  \node[lbl, above=0.5mm] at (18,21) {\textbf{ack}};
+  \node[ev] (r2)  at (58,21) {}; \node[lbl, below=0.5mm of r2] {replica\\receives};
+  \node[ev] (p2)  at (86,21) {}; \node[lbl, below=0.5mm of p2] {replica\\applies};
+
+  % ---- timeline 3: flux-pg-cluster, synchronous
+  \draw[ax] (0,5) -- (112,5);
+  \node[nm] at (-2,5) {\texttt{flux-\allowbreak{}pg-\allowbreak{}cluster} (sync)};
+  \node[ev] (w3)  at (6,5)  {}; \node[lbl, above=0.5mm of w3] {write};
+  \node[ev] (c3)  at (18,5) {}; \node[lbl, below=0.5mm of c3] {local\\commit};
+  \node[ev] (r3)  at (58,5) {}; \node[lbl, below=0.5mm of r3] {replica\\acknowledges};
+  \node[lbl, above=0.5mm] at (58,5) {\textbf{ack}};
+  \draw[very thick] (58,3.6) -- (58,6.4);
+  \node[lbl, anchor=west] at (64,5.6) {loss window collapses to zero};
+
+  \node[lbl, anchor=west, fill=black!14, inner sep=1.2pt] at (0,46)
+    {shaded: writes acknowledged to the client that a failover can still lose};
+\end{tikzpicture}
+
+\caption{Write-acknowledgment timing relative to replication, compared across
+\texttt{Flux-Shared-DB} and the two \texttt{flux-\allowbreak{}pg-\allowbreak{}cluster} replication modes.}
+\label{fig:managed-db-ack-timing}
+\end{figure}
+
+\subsection{How a tenant uses these}
+\label{subsec:managed-db-tenant}
+
+\paragraph{\texttt{Flux-Shared-DB}.} A tenant registers two \FluxOS application
+components --- a stock \texttt{mysql:latest}\slash\texttt{mariadb} engine and the
+\texttt{runonflux/\allowbreak{}shared-\allowbreak{}db} Operator image --- or a single bundled image with the
+engine baked in \srcdoc{Flux-Shared-DB/README.md:20-49,73-101}. Credentials are set at
+first boot via \texttt{DB\_INIT\_PASS}\slash\texttt{DB\_USER} environment variables and are
+not re-keyable afterward: ``changing it later will not re-key an already-initialized
+\texttt{/app/db} datadir'' \srcdoc{Flux-Shared-DB/README.md:88}. The tenant application
+connects with an ordinary MySQL connection string to the Operator's proxy port (default
+3307) \srcdoc{Flux-Shared-DB/README.md:46-49}. As established in
+\S\ref{subsec:flux-shared-db}, authorization at that proxy is IP-allowlist-based, not
+credential-based, and internal cluster traffic (queries, keys, session tokens) is
+plaintext Socket.IO by default, since the AES ``comm'' layer's key exchange is
+commented out. The debug UI can optionally run over TLS with a self-signed certificate
+if \texttt{SSL=true}, default \texttt{false}
+\srccode{Flux-Shared-DB/\allowbreak{}ClusterOperator/\allowbreak{}Security.js}{163-185}
+\srccode{Flux-Shared-DB/\allowbreak{}ClusterOperator/\allowbreak{}config.js}{25}. No at-rest encryption of the
+MySQL/MariaDB data directory was found in the repository.
+
+\paragraph{\texttt{flux-\allowbreak{}pg-\allowbreak{}cluster}.} A tenant registers a single \FluxOS application
+component with a fixed port set (5432, 5433, 8008, 2379, 2380)
+\srcdoc{flux-pg-cluster/README.md:78}. Superuser and replication credentials are
+supplied as \texttt{POSTGRES\_SUPERUSER\_PASSWORD}\slash\texttt{POSTGRES\_REPLICATION\_PASSWORD}
+environment variables and persisted, shell-quoted, to \texttt{/\allowbreak{}etc/\allowbreak{}cluster\_env} for
+reuse by later agent subcommands
+\srccode{flux-pg-cluster/\allowbreak{}internal/\allowbreak{}config/\allowbreak{}config.go}{331-332}. Tenants connect through
+the primary-routing proxy on port 5433, which always routes writes to the current
+primary across failovers, or bypass it to a specific node on 5432 for read-only access
+to a replica \srcdoc{flux-pg-cluster/README.md:284-338}. Encryption is opt-in:
+\texttt{SSL\_ENABLED} defaults to \texttt{false}
+\srccode{flux-pg-cluster/\allowbreak{}internal/\allowbreak{}config/\allowbreak{}config.go}{117}; when set, a deterministic
+self-signed CA and per-service TLS certificates are generated for PostgreSQL,
+\texttt{etcd} peer/client traffic, and the Patroni REST API, and \texttt{pg\_hba}
+accepts \texttt{hostssl}\slash\texttt{cert clientcert=verify-\allowbreak{}full} for replication
+connections alongside plain \texttt{host} md5 entries that the template and the
+reconciler retain in either mode \srccode{flux-pg-cluster/\allowbreak{}generate-certs.sh}{45-306}
+\srccode{flux-pg-cluster/\allowbreak{}patroni.yml.tpl}{69-73}
+\srccode{flux-pg-cluster/\allowbreak{}cmd/\allowbreak{}flux-agent/\allowbreak{}daemon.go}{452-457}. With \texttt{SSL\_ENABLED=\allowbreak{}false}, the
+default, inter-node PostgreSQL replication and \texttt{etcd} traffic run over the
+public internet in plaintext --- the project's own architecture documentation labels
+this path ``Replication via Public Internet'' \srcdoc{flux-pg-cluster/README.md:55}.
+As with \texttt{Flux-Shared-DB}, no at-rest encryption of the PostgreSQL data directory
+was found in the repository.
+
+\subsection{Backup and restore}
+\label{subsec:managed-db-backup}
+
+\paragraph{\texttt{Flux-Shared-DB}.} Backups are periodic full \texttt{mysqldump}
+snapshots, taken as part of the log-compaction cycle described in the evidence,
+written to \texttt{./dumps/*.sql} inside the container and retaining only the two most
+recent files \srccode{Flux-Shared-DB/\allowbreak{}ClusterOperator/\allowbreak{}Operator.js}{504-548}. If the
+application's declared container data includes \texttt{s:/app/dumps}, \FluxOS's own
+directory-sync mechanism replicates that path across the app's instances --- this
+sync is a \FluxOS-level feature, not code in the operator repository itself
+\srcdoc{Flux-Shared-DB/README.md:76,81-83}. Anyone who can reach the debug UI and
+authenticate via a Bitcoin-message-signature login tied to the application owner's
+ZelID can list, download, or delete backups, or execute an uploaded or
+URL-fetched \texttt{.sql} file directly into the live cluster via
+\texttt{/executebackup}, which first rolls the database back to sequence zero --- i.e.,
+wipes it --- before importing \srccode{Flux-Shared-DB/\allowbreak{}ClusterOperator/\allowbreak{}server.js}{653-715}.
+No evidence of restore being exercised by an automated test was found; the only test
+file in the repository covers signature verification, unrelated to backup or restore
+\srccode{Flux-Shared-DB/\allowbreak{}test/\allowbreak{}bitcoinMessage.test.js}{1-18}.
+
+\paragraph{\texttt{flux-\allowbreak{}pg-\allowbreak{}cluster}.} An opt-in (\texttt{BACKUP\_ENABLED=\allowbreak{}false} by
+default \srcdoc{flux-pg-cluster/README.md:170}) backup agent runs \texttt{pg\_dumpall},
+gzip-compresses the result, and overwrites a previous backup only after an integrity
+check (valid gzip, and presence of the ``PostgreSQL database dump complete'' marker)
+via a temp-file-then-atomic-rename pattern
+\srccode{flux-pg-cluster/\allowbreak{}cmd/\allowbreak{}flux-agent/\allowbreak{}backup.go}{90-143,204-223}. Backups run only on
+whichever node Patroni currently reports as the healthy running primary, avoiding
+duplicate copies
+\srccode{flux-pg-cluster/\allowbreak{}cmd/\allowbreak{}flux-agent/\allowbreak{}backup.go}{93-99,145-164}. Retention keeps the
+newest \texttt{BACKUP\_RETENTION\_COUNT}$=1$ (default) files, then prunes further by a
+total-size cap that is unlimited by default
+\srccode{flux-pg-cluster/\allowbreak{}cmd/\allowbreak{}flux-agent/\allowbreak{}backup.go}{275-337}. Backup storage is
+\texttt{/\allowbreak{}var/\allowbreak{}lib/\allowbreak{}postgresql/\allowbreak{}backups}, explicitly documented as \emph{not} covered by
+persisting the main data-directory volume, and lost on reschedule unless separately
+persisted \srcdoc{flux-pg-cluster/README.md:77,276}. Restore is a manual, documented
+\texttt{gunzip~|~psql} command \srcdoc{flux-pg-cluster/README.md:280-282}; the README
+itself instructs the operator to ``verify restores regularly'' as their own
+responsibility \srcdoc{flux-pg-cluster/README.md:186}, which is a stronger honesty
+signal than a silent absence of guidance but does not amount to an automated restore
+guarantee. A file named \texttt{test\_restore\_reconciliation.\allowbreak{}py} exists in the same
+test suite \srccode{flux-pg-cluster/\allowbreak{}tests/\allowbreak{}scenarios/\allowbreak{}}{test\_restore\_reconciliation.py},
+but its contents were not reviewed for this section, so it is not counted here as
+verified automated restore coverage.
+
+For neither system, then, has restore been exercised in a way this section can verify
+end to end: \texttt{Flux-Shared-DB} has no restore test at all, and
+\texttt{flux-\allowbreak{}pg-\allowbreak{}cluster}'s restore path is documented as a manual operation with an
+unreviewed test file of unknown scope.
+
+\subsection{RPC, archive, and indexing (\planned)}
+\label{subsec:rpc-archive-indexing}
+
+The roadmap names RPC, archive, and indexing services the network's ``first
+capacity-selling product,'' scheduled for Q3 2026
+\srcroadmap{flux-roadmap-public.md:33-34}, and states that this product ``pairs
+directly with chain pruning: the archive nodes pruning requires become the product''
+\srcroadmap{flux-roadmap-public.md:34}. Main-chain pruning itself is treated at
+reimplementation depth in \S8; the roadmap's own framing of pruning is that ``pruned
+nodes stay fully able to produce blocks, with designated archive nodes preserving full
+history for explorers and the data services above''
+\srcroadmap{flux-roadmap-public.md:121-122}. The direction of dependency between the two
+items is stated loosely (``pairs directly with''), not as a strict blocking gate
+\srcinferred.
+
+No RPC, archive, or indexing implementation was surveyed for this section: the evidence
+available covers only the two managed-database operators above, and no repository
+matching an RPC gateway, an archive-node service, or an indexing service was read. This
+item is therefore reported here purely as a roadmap commitment, and its construction is
+left explicitly open rather than described as a system that does not yet exist.
+\begin{remark}[The shape of the RPC product --- settled at the architectural level]
+\label{rem:rpc-shape}
+The request-routing model was carried as undecided. Its architecture is now settled, and in a way
+that answers the structural half of the question while leaving the commercial half open:
+\textbf{archive nodes run as \FluxCloud{} applications}, deployed by the team, with access to RPC and
+other node APIs sold as a product \srcintent{08-answers-round-2.md, round 16} (\planned).
+
+That decides three things. Routing is to \emph{operator-deployed shared endpoints} rather than to
+per-tenant archive deployments --- a tenant buys API access, not a node. The pruning-exempt storage
+requirement does not interact with the tiering and collateral model of \S\ref{sec:consensus} at all,
+because an archive node is a tenant workload subject to the application resource model, not a
+\FluxNode{} tier: it needs no collateral and confers no eligibility. And history availability is
+consequently a property of this product rather than of the node set
+(\Cref{rem:archive-product}).
+
+What remains commercial rather than architectural: the indexing schema and the pricing unit --- per
+request, per method, per byte returned, or a flat subscription. Those do not constrain any mechanism
+in this paper and are not stated here.
+\end{remark}
+
+Whatever this product becomes, it will inherit the same question this section has just
+answered for the two managed-database implementations: what does the platform promise
+about durability and consistency, and under what replication or storage protocol.
+Archived chain history is, if anything, a harder case than a tenant's own database,
+because it is by definition unrecoverable once lost from every archive node
+simultaneously; the paper takes no position here on which of the two postures compared
+above --- hand-rolled and untested, or consensus-backed and failure-tested --- an
+archive service would follow, because no such service has been surveyed.
+
+\subsection{Implication for lifecycle: eviction is where the guarantee is tested}
+\label{subsec:managed-db-lifecycle}
+
+The containers that implement both systems above are, from the node's point of view,
+ordinary Docker containers, and they are stopped through the same generic pipeline as
+any other application when a node evicts, redeploys, or is asked to stop an
+application. In production today, that pipeline executes only its Signal and Cleanup
+stages; the drain and pre-stop hook stages exist in the state machine and are
+unit-tested, but are ``not yet reachable from real events''
+\srccode{flux-shutdownd/\allowbreak{}crates/\allowbreak{}shutdownd/\allowbreak{}src/\allowbreak{}pipeline/\allowbreak{}state\_machine.rs}{3-7}, even
+though the underlying mechanism already reads per-container
+\texttt{shutdown.\{drain,prestop,graceful\}-s} labels intended to drive exactly this
+behavior \srccode{flux-shutdownd/\allowbreak{}crates/\allowbreak{}shutdownd/\allowbreak{}src/\allowbreak{}config.rs}{41-65}. For a
+stateless workload, skipping a drain step is a latency blip. For a managed database, it
+is the difference between an orderly checkpoint and whatever durability guarantee ---
+or absence of one --- \S\ref{subsec:managed-db-comparison} describes: an application
+that is killed rather than quiesced is, from the perspective of
+Property~\ref{prop:sharedb-durability}, indistinguishable from a crash.
+
+This is the requirement §16 must carry forward: a managed database is a stateful
+service whose eviction destroys data, so the grace, suspension, and eviction state
+machine that governs how and when a node stops an application matters more here than
+for any stateless workload this paper describes elsewhere.
+
+%% Drain this section's float queue before the next begins.
+\FloatBarrier

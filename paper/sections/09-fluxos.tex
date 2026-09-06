@@ -1,0 +1,821 @@
+\section{FluxOS: orchestration, placement, and the application lifecycle}
+\label{sec:fluxos}
+
+\FluxOS is the Node.js daemon that every \FluxNode operator runs. It exposes the node's HTTP/HTTPS
+API, keeps a gossip mesh open to other \FluxOS instances, and decides — locally, with no message
+sent to any other component asking permission — whether to pull an image, start a container, leave
+it running, redeploy it, or tear it down. There is no scheduler in the sense a reader from
+conventional cluster orchestration would expect: no process anywhere holds a global view of node
+load and assigns work to relieve it. Instead, every node runs the same loop over the same
+gossiped state and reaches its own conclusion about which of the network's under-replicated
+applications to attempt next. What keeps two thousand independent conclusions from producing three
+thousand copies of the same container is not agreement — it is a fixed wait, a broadcast, and a
+rule for breaking ties by whoever broadcast first. That mechanism, its guarantees, and its failure
+mode are the center of this section. Everything below is \shipped and cited to the deployed
+\FluxOS source unless a claim is explicitly marked otherwise; where the evidence gathered for this
+paper itself records a code path as not fully traced, this section says so rather than smoothing
+the gap into confident prose. Line numbers in \texttt{flux/\ldots} citations are read against the
+organisation repository's working checkout at commit \texttt{933614b1c}, one unpublished commit
+ahead of \texttt{master} --- the flagged \specv{9} schema gate described in \S\ref{sec:appspec-v9},
+which also appends a price-table row at height \num{2950000} with unchanged rates; where a cited
+construct exists only on that branch, the citation says so.
+
+\subsection{Process architecture}
+\label{sec:fluxos-process}
+
+\subsubsection{Processes and ports}
+\FluxOS starts as two entry points: \texttt{apiServer.js} (the HTTP/HTTPS API) and
+\texttt{homeServer.js} (a static UI server) \srccode{flux/\allowbreak{}apiServer.js}{285}. \texttt{apiServer.js}
+calls \texttt{serviceManager.\allowbreak{}startFluxFunctions()} only after both listeners are up
+\srccode{flux/\allowbreak{}apiServer.js}{285}, so the boot sequence described below begins after the ports are
+already bound.
+
+\begin{table}[H]
+\centering
+\caption{\FluxOS process ports and adjacent service ports.}
+\begin{tabular}{l l l}
+\toprule
+Listener & Value & Source \\
+\midrule
+API port (default) & 16127 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{28} \\
+Allowed API ports (boot aborts otherwise) & \{16127,16137,16147,16157,16167,16177,16187,16197\} &
+  \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{26} \\
+API HTTPS port & apiPort $+$ 1 & \srccode{flux/\allowbreak{}apiServer.js}{38} \\
+Home UI port & apiPort $-$ 1 & \srccode{flux/\allowbreak{}homeServer.js}{19} \\
+Syncthing (by convention) & apiPort $+$ 2, absolute default 8384 & \srcdoc{flux/ZelBack/config/default.js:405} \\
+MongoDB & 127.0.0.1:27017 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{31--32} \\
+\fluxbench RPC / P2P port & 16224 / 16225 (testnet 26224 / 26225) & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{102--106} \\
+\fluxd P2P / RPC / ZMQ port & 16125 / 16124 / 16123 (testnet 26125 / 26124) & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{109--115} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The HTTPS listener uses a self-signed certificate generated on first boot by
+\texttt{helpers/\allowbreak{}createSSLcert.\allowbreak{}sh} if \texttt{certs/v1.key} is absent
+\srccode{flux/\allowbreak{}apiServer.js}{248--258}. Boot hard-blocks on \texttt{dbHelper.\allowbreak{}waitForMongo()} and
+\texttt{dockerService.\allowbreak{}waitForDocker()} before any other service starts; the code's own comment
+reads "hard dependencies — nothing starts until these are confirmed"
+\srcdoc{flux/ZelBack/src/services/serviceManager.js:132} \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{133--134}.
+
+\subsubsection{Boot sequence}
+\texttt{serviceManager.\allowbreak{}startFluxFunctions} runs a long, mostly-\texttt{await}ed sequence
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{126--572}. In order: (1) reject an
+unsupported API port and exit \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{126--129}; (2)
+start the enterprise node/owner map sync from \texttt{helpers/\allowbreak{}enterprisenodes.\allowbreak{}json}, then resync
+from GitHub every 6\,h, with fetch failure swallowed by a \texttt{.catch} handler so boot proceeds
+on stale data \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{130--136}; (3) hard-block on
+Mongo and Docker availability (above); (4) start UPnP firewall maintenance if a router IP is
+configured \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{138--153}; (5) start
+\texttt{flux\allowbreak{}Node\allowbreak{}Service}, repair Docker log corruption, and start \texttt{systemService.\allowbreak{}monitorSystem()}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{158--163}; (6) drop the
+\texttt{loggedusers}\slash\texttt{activeloginphrases}\slash\texttt{activesignatures} collections — every
+restart invalidates all sessions — and (re)create TTL indexes: \texttt{loggedusers} 14\,d,
+\texttt{activeloginphrases}\slash\texttt{activesignatures} 900\,s, \texttt{activepaymentrequests}
+3{,}600\,s, \texttt{completedpayments} 7\,d, \texttt{apptamperingevents} 30\,d
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{165--215}; (7) run tamper-reboot detection
+and merge pre-unique-index duplicate runtime-state documents
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{216--220}; (8) prepare global-apps indexes,
+including TTL-by-\texttt{expireAt} on the location, event, and installing-broadcast collections
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{227--260}; (9) run a one-off repair of a
+legacy \texttt{valueSat: NaN} bug \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{265--267};
+(10) schedule volume-mount validation at 45\,s and hardware-requirement validation (which removes
+non-compliant apps) at 50\,s, explicitly "before boot reconciliation"
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{285--297}; (11) migrate any container still
+on Docker's native \texttt{unless-stopped}\slash\texttt{always} restart policy to \texttt{no}, "because
+\FluxOS manages container startup after dbReady" \srcdoc{flux/ZelBack/src/services/serviceManager.js:301}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{299--302}; (12) start the container
+reconciler and its Docker die-event bridge, which begin queuing triggers but do not yet drain them
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{304--310}; (13) read boot context and, fire-and-forget,
+reconcile apps on boot \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{312--319}; (14) build
+the \fluxd client and block on \texttt{wait\allowbreak{}For\allowbreak{}Daemon\allowbreak{}Rpc()} — the code comment notes this daemon
+must be running before \texttt{daemonReady} is set, and that boot reconciliation separately
+enforces an internal 5-minute timeout on the same event
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{321--328}; (15)--(19) wire the app-sync
+orchestrator, adjust the firewall, remove any stray watchtower container, and start P2P discovery
+unless \texttt{config.\allowbreak{}fluxapps.\allowbreak{}discoveryAutostart === false}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{319--414}; (20) register the long tail of
+periodic monitors listed in Table~\ref{tab:monitors}. On any thrown exception anywhere in this function,
+the entire function is retried after a flat 15{,}000\,ms — not an exponential backoff — with no
+retry cap \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{568--572}; boot is therefore a
+self-healing infinite retry loop rather than a circuit breaker, a property revisited in
+\S\ref{sec:fluxos-trust}.
+
+\begin{table}[H]
+\centering
+\caption{Representative periodic monitors registered at the end of boot.}
+\label{tab:monitors}
+\begin{tabular}{l l}
+\toprule
+Monitor & Interval \\
+\midrule
+Firewall/UFW re-check + mount test & 30\,s \\
+Stop-non-\Flux-container sweep, app-availability monitor, port restore & 1\,min (port restore repeats every 600{,}000\,ms) \\
+Enterprise identity resolution & every 5\,min until resolved \\
+Node-status monitor & 1.5\,min \\
+CPU-usage check (\texttt{cpu\allowbreak{}Check\allowbreak{}Interval\allowbreak{}Ms}) & 900{,}000\,ms (15\,min) \\
+App-availability check & 3\,min \\
+Image compliance sweep & 3{,}600{,}000\,ms (1\,h) \\
+Forced-removal sweep & 30\,min, then every 2\,h \\
+Daemon health monitor & 5\,min, then every 15\,min \\
+Storage-space check & 20\,min \\
+Local-backup cleanup & 25\,min \\
+\bottomrule
+\end{tabular}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{433--563}
+\end{table}
+
+\subsubsection{Databases and collections}
+\FluxOS keeps five Mongo databases, all on the local instance bound above
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{33--87}:
+\begin{itemize}
+\item \texttt{zelfluxlocal} — session and local-node bookkeeping: \texttt{loggedusers},
+  \texttt{activeloginphrases}, \texttt{activesignatures}, \texttt{activepaymentrequests},
+  \texttt{completedpayments}, \texttt{geolocation}, \texttt{benchmark}, \texttt{apptamperingevents},
+  \texttt{nodestartuptracker}.
+\item \texttt{zelcashdata} — a mirror of \fluxd chain-scan state: \texttt{scannedheight},
+  \texttt{utxoindex}, \texttt{addresstransactionindex}, \texttt{zelnodetransactions},
+  \texttt{zelappshashes}, \texttt{coinbasefusionindex}.
+\item \texttt{localzelapps} — this node's own truth about its containers:
+  \texttt{zelappsinformation} and \texttt{zelappsruntimestate} (the per-component controller state
+  consumed by the reconciler in \S\ref{sec:fluxos-reconciler}: desired state, restart
+  history/crash-backoff position, last exit).
+\item \texttt{globalzelapps} — network-global truth, replicated by P2P gossip and not by consensus
+  (\S\ref{sec:fluxos-p2p}): \texttt{zelappsmessages}, \texttt{zelappsinformation},
+  \texttt{zelappstemporarymessages}, \texttt{zelappslocation}, \texttt{appsinstallinglocations},
+  \texttt{apps\allowbreak{}Installing\allowbreak{}Errors\allowbreak{}Locations}, \texttt{appstateevents} (an event log of
+  \texttt{apprunning}\slash\texttt{sigterm}\slash\texttt{appremoved}\slash\texttt{evicted} transitions),
+  \texttt{fluxappinstallingbroadcasts}, \texttt{fluxappinstallingerrorsbroadcasts}.
+\item \texttt{chainparams} — \texttt{chainmessages}: soft-fork price/parameter messages posted
+  on-chain by the Foundation multisig, active from their occurrence height (\S\ref{sec:fluxos-pricing}).
+\end{itemize}
+
+\subsubsection{HTTP API surface and the privilege model}
+The route table (\texttt{ZelBack/\allowbreak{}src/\allowbreak{}routes.\allowbreak{}js}) is organized into groups, each guarded by
+\texttt{verificationHelper.\allowbreak{}verifyPrivilege(privilege, req, appName)}. Every check is keyed off a
+\texttt{zelidauth} header \texttt{\{zelid,\allowbreak{} signature,\allowbreak{} loginPhrase\}} verified with
+\texttt{bitcoinMessage.\allowbreak{}verify} against the ZelID, a base58 P2PKH-style address
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}verificationHelper.js}{17--48,90--106}.
+
+\begin{table}[H]
+\centering
+\caption{Privilege tiers enforced by \texttt{verify\allowbreak{}Privilege}.}
+\begin{tabular}{p{3.15cm} p{4.95cm} p{2.2cm} p{3cm}}
+\toprule
+Privilege & Definition & Freshness window & Representative endpoints \\
+\midrule
+\texttt{admin} & \texttt{zelid === userconfig.\allowbreak{}initial.\allowbreak{}zelid} — the node's own operator
+  \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}verificationHelperUtils.js}{19--46} & re-signed each call & \texttt{/daemon/stop}, \texttt{/\allowbreak{}daemon/\allowbreak{}reindex},
+  \texttt{/\allowbreak{}daemon/\allowbreak{}createfluxnodekey}, \texttt{/\allowbreak{}daemon/\allowbreak{}signrawtransaction} \\
+\texttt{fluxteam} & \texttt{zelid} $\in \{$\texttt{fluxTeamFluxID}, \texttt{flux\allowbreak{}Support\allowbreak{}Team\allowbreak{}Flux\allowbreak{}ID}$\}$
+  \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}verificationHelperUtils.js}{96--122} & re-signed each call & cross-node views spanning more than this node's own data \\
+\texttt{adminandfluxteam} & union of the two above
+  \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}verificationHelperUtils.js}{130--156} & re-signed each call & \texttt{/daemon/start}, \texttt{/\allowbreak{}daemon/\allowbreak{}restart},
+  \texttt{/daemon/ping}, \texttt{/\allowbreak{}daemon/\allowbreak{}startbenchmark}, \texttt{/\allowbreak{}flux/\allowbreak{}broadcastmessage*} \\
+\texttt{appowner}/ \texttt{appownerabove} & caller matches the app's current owner as resolved by
+  \texttt{registryManager.\allowbreak{}getApplicationOwner(appName)}; the \texttt{-above} variant also admits
+  admin/fluxteam \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}verificationHelperUtils.js}{164--248} & 2\,h & \texttt{/apps/appstart}, \texttt{/apps/appstop},
+  \texttt{/\allowbreak{}apps/\allowbreak{}apprestart}, \texttt{/\allowbreak{}apps/\allowbreak{}appremove}, \texttt{/apps/redeploy},
+  \texttt{/\allowbreak{}apps/\allowbreak{}redeploycomponent} \\
+\texttt{user} & any ZelID with a valid signature over a \texttt{loginPhrase} carrying a 13-digit
+  millisecond timestamp no older than 16\,h, unless already in \texttt{loggedusers}
+  \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}verificationHelperUtils.js}{54--88} & 16\,h & \texttt{/\allowbreak{}apps/\allowbreak{}appregister},
+  \texttt{/\allowbreak{}apps/\allowbreak{}appupdate} (self), \texttt{/\allowbreak{}daemon/\allowbreak{}prioritisetransaction} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+All six checks re-verify the ECDSA signature over the login phrase even when a \texttt{loggedusers}
+session document exists; the session document only relaxes the timestamp-freshness check, never the
+signature check \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}verificationHelperUtils.js}{54--248}. The route
+groups themselves are: \texttt{/daemon/*} (a thin proxy to \fluxd's JSON-RPC surface, split across
+public/cached, \texttt{user}, \texttt{admin}, and \texttt{adminandfluxteam} endpoints)
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}routes.js}{78--1408}; \texttt{/apps/*} (public/cached reads,
+\texttt{appownerabove} lifecycle actions, a \texttt{user}-level \texttt{/\allowbreak{}apps/\allowbreak{}appregister}, and an
+\texttt{/\allowbreak{}apps/\allowbreak{}appupdate} reachable by the owner or by \texttt{adminandfluxteam} on the owner's
+behalf) \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}routes.js}{372--1388}; \texttt{/id/*} (ZelID session
+management) \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}routes.js}{508--518}; \texttt{/benchmark/*} (a proxy to
+\fluxbench RPC) \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}benchmarkService.js}{126--427}; and
+\texttt{/flux/*} (network-control endpoints, including the broadcast primitives used by
+\S\ref{sec:fluxos-p2p}) \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}routes.js}{1022}.
+
+\subsection{The application lifecycle}
+\label{sec:fluxos-lifecycle}
+
+An application moves through eight named stages between a user's signature and a running
+container. Table~\ref{tab:lifecycle-timing} collects the timing constants; the paragraphs below name
+each stage and its transition.
+
+\textbf{Construct and submit.} The client signs \texttt{\{appSpecification,\allowbreak{} timestamp,\allowbreak{} signature,\allowbreak{}
+type,\allowbreak{} version\}}, where \texttt{type} must be \texttt{zelappregister} or \texttt{fluxappregister}
+and the envelope \texttt{version} (distinct from \texttt{appSpecification.\allowbreak{}version}) must be 1
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appDatabase/\allowbreak{}registryManager.js}{1755--1764}, and \texttt{POST}s
+it to \texttt{/\allowbreak{}apps/\allowbreak{}appregister} at \texttt{user} privilege
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appDatabase/\allowbreak{}registryManager.js}{1714--1737}.
+
+\textbf{Verify.} The node rejects the request if it has fewer than 8 outbound or 4 inbound peers
+("not enough peers for safe application registration")
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appDatabase/\allowbreak{}registryManager.js}{1744--1750}; rejects a
+\specv{9} spec unless \texttt{config.\allowbreak{}fluxapps.\allowbreak{}acceptV9} is set (default \texttt{false}; \S10
+covers the version-gating scheme in full) --- a check that exists only on an unpublished working
+branch, not in the deployed source (\inprogress)
+\srcbranch{RunOnFlux/\allowbreak{}flux}{feat/appspec-v9}{ZelBack/src/services/appDatabase/registryManager.js:1766-1769};
+rejects a timestamp more than 1\,h old or more than 5\,min in the future
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appDatabase/\allowbreak{}registryManager.js}{1777--1781}; and, once the
+daemon is confirmed synced, runs the full schema/version gate
+(\texttt{appValidator.\allowbreak{}verifyAppSpecifications}; \S10 details the version-gating rules)
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appDatabase/\allowbreak{}registryManager.js}{1783--1798}. For enterprise
+apps the signature is verified against the \emph{unformatted} spec — the signature covers the
+pre-encryption content — after which \texttt{contacts}\slash\texttt{compose} are zeroed out of the
+object that is actually hashed and stored
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appDatabase/\allowbreak{}registryManager.js}{1809--1824}. The node then
+computes \texttt{messageHASH} = SHA-256(type $\Vert$ version $\Vert$ JSON(spec) $\Vert$ timestamp
+$\Vert$ signature) \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appDatabase/\allowbreak{}registryManager.js}{1827--1829}.
+
+\textbf{Broadcast (temporary).} The message is stored with a 1\,h TTL and broadcast to all peers
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appDatabase/\allowbreak{}registryManager.js}{1831--1841}. The API call then
+blocks through a fixed confirmation round-trip — \texttt{delay(1200)}, request the message back
+from peers, \texttt{delay(1200)}, then poll for its own existence up to 20 times at 500\,ms — and
+throws \emph{"Unable to register application on the network. Try again later."} if it is still
+absent \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appDatabase/\allowbreak{}registryManager.js}{1843--1858}. On success
+the API returns only the message hash: this endpoint never touches the chain, and the caller must
+still pay (\S\ref{sec:fluxos-pricing}) for the registration to ever become permanent
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appDatabase/\allowbreak{}registryManager.js}{1737}.
+
+\textbf{On-chain confirmation.} \fluxd's chain scan (\texttt{explorerService.\allowbreak{}processInsight}, run
+per block) recognizes a payment by its output address — \texttt{fluxapps.\allowbreak{}address} at any height, or
+one of two height-gated multisig addresses — sums \texttt{valueSat} across matching outputs, and
+extracts the temp-message hash from the transaction's \texttt{OP\_RETURN}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}explorerService.js}{309--345}, queuing
+\texttt{messageVerifier.\allowbreak{}checkAndRequestApp} \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}explorerService.js}{444}.
+
+\textbf{Promote to permanent global state.} \texttt{check\allowbreak{}And\allowbreak{}Request\allowbreak{}App} re-verifies update
+signatures against the current permanent owner immediately before promotion — an explicit
+anti-race measure against two updates racing the same base state
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMessaging/\allowbreak{}messageVerifier.js}{636--682} — computes the
+PoN-fork-aware expiration height, and for a fresh registration requires
+\texttt{valueSat} $\geq$ \texttt{appPrice}$\times 10^{8}$. \textbf{If underpaid, the registration is
+silently dropped}: the code logs a warning and returns, with no error surfaced to the payer, no
+retry, and no refund path visible in this repository
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMessaging/\allowbreak{}messageVerifier.js}{735--763}; updates have the
+same silent-drop behavior on underpayment
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMessaging/\allowbreak{}messageVerifier.js}{797--828}. This is a
+correctness gap, not a documented design choice, and \S16 takes up what a payer-facing signal
+should look like. On success, \texttt{insert\allowbreak{}App\allowbreak{}Specifications} makes the spec part of
+\texttt{globalzelapps}, and any updates queued while the registration was outstanding are flushed
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMessaging/\allowbreak{}messageVerifier.js}{735--763}.
+
+\textbf{Placement.} Every node independently decides whether to install (\S\ref{sec:fluxos-placement}).
+
+\textbf{Docker deployment and running.} \texttt{appInstaller.\allowbreak{}registerAppLocally} performs port
+setup, image pull/verification, and Docker network creation before calling
+\texttt{install\allowbreak{}Application\allowbreak{}Hard} or \texttt{install\allowbreak{}Application\allowbreak{}Soft}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appInstaller.js}{415--746}; the evidence available
+does not trace the exact Docker API calls (container-create options, network-attach order, volume
+mount construction) inside those two functions beyond their call sites
+\srcinferred. Container start/stop itself is centralized in the reconciler
+(\S\ref{sec:fluxos-reconciler}), not in the installer.
+
+\textbf{Monitoring and expiry.} While running, the app is subject to the node-health, benchmark,
+and image-compliance gates of \S\ref{sec:fluxos-resources} and \S\ref{sec:fluxos-moderation}, and —
+where the operator has opted the app into it — per-container telemetry shipped by
+\texttt{flux-\allowbreak{}telemetryd} to a customer-chosen backend, sampled every 15\,s
+\srccode{flux-telemetryd/\allowbreak{}src/\allowbreak{}identity.rs}{1--31,56--74}
+\srccode{flux-telemetryd/\allowbreak{}src/\allowbreak{}collector.rs}{26} \srcdoc{flux-telemetryd/README.md:1-20} (\shipped, a
+companion daemon evidenced among the node-level services surrounding \FluxOS rather than in
+\FluxOS itself). A departing node's \texttt{fluxnodesigterm} broadcast extends its apps' location
+TTL by \texttt{SIGTERM\_EXPIRY\_MS} = 420{,}000\,ms (7\,min) rather than expiring them immediately
+(\S\ref{sec:fluxos-p2p}); a companion node-wide/per-app graceful-drain daemon,
+\texttt{flux-shutdownd}, exists to broadcast a machine-readable termination reason to the container
+before this happens, but only its signal-and-cleanup pipeline stages are wired to production
+events today — drain-broadcast and \texttt{preStop} execution are modelled and unit-tested but not
+yet reachable \srcdoc{flux-shutdownd/crates/shutdownd/src/pipeline/state\_machine.rs:3-7}
+(\inprogress). An app's actual expiration height, once reached, is
+enforced by a periodic expiry pass every \texttt{expire\allowbreak{}Flux\allowbreak{}Apps\allowbreak{}Period} = 100 blocks
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{298}.
+
+\begin{table}[H]
+\centering
+\caption{Lifecycle timing constants.}
+\label{tab:lifecycle-timing}
+\begin{tabular}{l l}
+\toprule
+Stage / constant & Value \\
+\midrule
+Registration timestamp window & $>1$\,h old or $>5$\,min future rejected \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appDatabase/\allowbreak{}registryManager.js}{1777--1781} \\
+Temp-message TTL & 3{,}600\,s \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{314} \\
+Registration confirmation round-trip & $2\times1{,}200$\,ms delay $+$ up to $20\times500$\,ms poll ($\approx$8--10\,s) \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appDatabase/\allowbreak{}registryManager.js}{1843--1858} \\
+\texttt{minOutgoing} / \texttt{minIncoming} peers to register & 8 / 4 \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{262--265} \\
+Location TTL & 7{,}500\,s \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{311} \\
+Installing-broadcast TTL & 900\,s \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{312} \\
+Install-error TTL & 3{,}600\,s \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{313} \\
+SIGTERM grace window & 420{,}000\,ms (7\,min) \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}appConstants.js}{86} \\
+\texttt{blocksLasting} (default lifetime) & 22{,}000 blocks ($\approx$1 month pre-\PoN, $\approx$1 week post-\PoN) \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{285} \\
+Expiry sweep period & 100 blocks \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{298} \\
+Update sweep / removal sweep period & 9 / 11 blocks \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{299--300} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Placement: opportunistic self-selection with broadcast collision-avoidance}
+\label{sec:fluxos-placement}
+
+There is no hash-seeded, deterministic node-selection algorithm, and no component that assigns an
+application to a node. Every node runs the same self-looping procedure
+(\texttt{appSpawner.\allowbreak{}trySpawningGlobalApplication}, invoked as \texttt{spawnLoop} with the delay
+returned by its previous iteration) \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{54--65,77--787},
+against its own local read of the gossiped \texttt{globalzelapps} state. This is the mechanism the
+outline's single claim is about, and Algorithm~\ref{alg:placement} states it in full.
+
+\begin{definition}[Opportunistic self-selection]
+A node that observes an application with fewer running instances than its specification requests
+may attempt to become one of those instances. It decides to attempt \emph{unilaterally}: no other
+node, and no on-chain transaction, grants or denies it that attempt in advance. Conflicts among
+simultaneous attempts are resolved after the fact, by broadcast and a wait, not before the fact by
+assignment.
+\end{definition}
+
+\begin{algorithm}[H]
+\footnotesize
+\DontPrintSemicolon
+\caption{One iteration of the per-node placement loop
+  \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{77--787}}
+\label{alg:placement}
+\KwData{this node's local state; its local replica of \texttt{globalzelapps}}
+\If{\textbf{not} (enterprise identity resolved \textbf{and} daemon synced \textbf{and} local DB
+    ready \textbf{and} \textbf{not} DoS-flagged \textbf{and} node confirmed \textbf{and}
+    \fluxbench not erroring \textbf{and} own external IP known \textbf{and} locally installed
+    apps $<$ \texttt{maxAppsPerNode} = 200)}{
+  \Return (retry after the loop's error-path delay) \tcp*{gate, \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{78--150}}
+}
+$M \gets$ apps whose actual (\PoN-fork-aware) expiration height has not passed and whose running
+  instance count is below \texttt{instances} $\lor 3$ \tcp*{Mongo aggregation, \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{152--247}}
+\eIf{a due entry exists in the deferred-recheck queue \texttt{apps\allowbreak{}To\allowbreak{}Be\allowbreak{}Checked\allowbreak{}Later}}{
+  $\app \gets$ pop that entry \tcp*{deterministic, not random}
+}{
+  $C \gets \{a \in M : a.\texttt{nodes} \text{ names this node's own IP}\}$\;
+  \eIf{$C \neq \emptyset$}{$\app \gets$ uniform-random draw from $C$}{$\app \gets$ uniform-random
+    draw from $M$} \tcp*{\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{254--336}: own-IP bias, then uniform}
+}
+\If{$\app$ fails a node-targeting or geolocation filter}{
+  discard $\app$ this cycle, continue the loop
+  \tcp*{enterprise \texttt{nodes} is strict at any version; non-enterprise \texttt{nodes} binds
+  only versions $<8$; geolocation allow/deny by \texttt{ac<geo>}\slash\texttt{a!c<geo>} prefix match
+  (exact encoding not fully traced) \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{288--300} \srcinferred}
+}
+\If{$\app$ trips a soft-deferral condition (non-enterprise app on an \ArcaneOS node; static-IP
+    mismatch; datacenter mismatch; targeted-\texttt{nodes} app not naming this
+    node; a capacity-gap tier where this node is too large for a small app)}{
+  push $\app$ onto \texttt{apps\allowbreak{}To\allowbreak{}Be\allowbreak{}Checked\allowbreak{}Later} with a condition- and enterprise-specific delay
+  (Table~\ref{tab:spawn-deferrals}); \Return \tcp*{\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{520--630}}
+}
+verify the image against the Docker Hub whitelist and pull it; verify port availability, including
+  a public reachability probe relayed through peers
+  \tcp*{\texttt{portManager.\allowbreak{}checkInstallingAppPortAvailable}}
+broadcast \texttt{fluxappinstalling} $\{$type, version:\,1, name, own IP, \texttt{broadcastedAt}$\}$
+  to all peers and store it locally\;
+wait \texttt{install\allowbreak{}Collision\allowbreak{}Wait\allowbreak{}Ms} = 90{,}000\,ms \tcp*{\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{321}, comment: "give it 1.5m so messages are propagated"}
+re-read the global installing $+$ running location lists for $\app$\;
+\If{combined count $>$ required instances}{
+  rank all installing nodes by \texttt{broadcastedAt} ascending\;
+  \If{this node's rank does not fit within the remaining slots}{abandon $\app$; \Return}
+  \tcp*{\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{686--703}: earliest-broadcast wins — the entire conflict-resolution mechanism}
+}
+$\mathit{ok} \gets$ \texttt{appInstaller.\allowbreak{}registerAppLocally}($\app$) \tcp*{Docker deployment}
+\If{\textbf{not} $\mathit{ok}$}{
+  cache $\app$'s hash in \texttt{spawn\allowbreak{}Errors\allowbreak{}Longer\allowbreak{}App\allowbreak{}Cache} (no automatic retry until it expires);
+  \Return \tcp*{\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{730--743}}
+}
+wait 60\,s; re-read running locations for $\app$; rank by \texttt{runningSince} (nodes with none
+  yet sort first)\;
+\If{this node's rank $>$ \texttt{minInstances}}{
+  uninstall $\app$ locally, immediately \tcp*{self-correction, \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{745--775}}
+}
+\end{algorithm}
+
+\begin{table}[H]
+\centering
+\caption{Soft-deferral delays (push back into \texttt{apps\allowbreak{}To\allowbreak{}Be\allowbreak{}Checked\allowbreak{}Later}, do not abandon).}
+\label{tab:spawn-deferrals}
+\begin{tabular}{l l l}
+\toprule
+Condition & Enterprise app & Standard app \\
+\midrule
+Non-enterprise app on an \ArcaneOS node & — & 120{,}000\,ms \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{34} \\
+Targeted \texttt{nodes} not naming this node & 1{,}800{,}000\,ms & 3{,}420{,}000\,ms \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{341} \\
+Static-IP mismatch & 1{,}620{,}000\,ms & 3{,}420{,}000\,ms \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{342} \\
+Datacenter mismatch & 1{,}620{,}000\,ms & 3{,}420{,}000\,ms \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{343} \\
+Capacity gap, large/medium/small & 1{,}800{,}000 / 1{,}260{,}000 / 720{,}000\,ms & 7{,}020{,}000 / 5{,}220{,}000 / 3{,}420{,}000\,ms \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{345--347} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The datacenter-mismatch row exists in the deferral table but the branch that would trigger it is
+flagged by the code's own comment as currently unreachable: apps with \texttt{datacenter=\allowbreak{}true} are
+routed through an ownership filter to enterprise nodes before this deferral chain runs, so
+\texttt{datacenter} is always false by the time this check executes
+\srcdoc{flux/ZelBack/src/services/appLifecycle/appSpawner.js:568}. A syncthing-specific tie-break
+additionally picks the earliest broadcaster among nodes sharing a \texttt{/24}-like IP-prefix range
+when several attempt installation concurrently, so replicated storage does not converge two masters
+on the same subnet \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{706--727}.
+
+\begin{property}[Earliest-broadcast-wins is the entire conflict-resolution mechanism]
+When more nodes attempt installation than an application's specification requests, the network
+resolves the conflict by ranking the competing \texttt{fluxappinstalling} broadcasts by their
+self-reported \texttt{broadcastedAt} timestamp and letting only the earliest ones proceed. There is
+no leader election, no quorum, and no on-chain arbitration anywhere in this path
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{686--703}.
+\end{property}
+
+\textbf{Invariant and failure mode.} The mechanism's target property is that, given enough peer
+connectivity for gossip to be reliable (the spawner is only active above an
+\texttt{app\allowbreak{}Sync\allowbreak{}Peer\allowbreak{}Threshold} of 12 live peers and is explicitly paused below an
+\texttt{app\allowbreak{}Sync\allowbreak{}Degraded\allowbreak{}Threshold} of 4, "gossip unreliable"
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{268--269}, \S\ref{sec:fluxos-p2p}), the number of nodes
+that both install and keep an application converges to its requested instance count within roughly
+one 90-second wait plus one 60-second post-install check. The mechanism's honesty assumption is
+exactly as narrow as that sentence: it depends on every competing node broadcasting an honest
+\texttt{broadcastedAt} and actually backing off when its rank does not fit. Nothing in the code
+paths read re-verifies \texttt{broadcastedAt} against the signed message envelope's own timestamp
+for this specific message type \srcinferred; a node that broadcasts a forged early
+\texttt{broadcastedAt}, or that never re-checks its rank, can over-claim install slots, and a
+network partition that delays propagation past the fixed 90{,}000\,ms window can produce the same
+effect without any dishonesty at all. There is no mechanism above this one — no on-chain record, no
+elected coordinator — that would notice or correct such an outcome directly; the only correction is
+the pair of independent loops described next.
+
+\begin{remark}[Convergence by opposing correction, not by agreement]
+The system does not converge on the target instance count because nodes agree on who should run an
+application. It converges because two independent, opposing loops keep nudging the count back
+toward the target from either side. First, immediately after its own install, a node re-checks its
+rank by \texttt{runningSince} (nodes with no \texttt{runningSince} yet — i.e. still starting —
+sort first) and uninstalls itself at once if it now ranks below \texttt{minInstances}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{745--775}. Second, independently and
+periodically, \texttt{advancedWorkflows.\allowbreak{}checkAndRemoveApplicationInstance} scans every locally
+installed app whose live location count exceeds \texttt{instances}, ranks all running instances by
+\texttt{runningSince} descending (newest first) with IP descending as a tiebreak, and removes
+locally if this node ranks 0 — the newest — waiting \texttt{removal.delay} = 300\,s before
+evaluating the next over-provisioned app "so we don't have more removals at the same time"
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}advancedWorkflows.js}{2899--2966,2928--2963}. Both
+loops correct over-installation; neither one, nor anything else in this design, corrects
+under-installation faster than the next node's own random draw happens to land on the
+under-replicated app. Under a network partition that produces two disjoint views of
+\texttt{runningSince} ordering, both loops can independently conclude "I am over-ranked," causing
+more removals than intended, or conclude the opposite and remove none, until gossip re-converges.
+\end{remark}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  font=\scriptsize, node distance=4.2mm,
+  stp/.style={draw, rounded corners=2pt, align=center, text width=52mm, minimum height=6.5mm,
+              inner ysep=2pt},
+  cross/.style={stp, very thick, fill=black!8},
+  outbox/.style={draw, rounded corners=2pt, align=center, text width=24mm, fill=black!4,
+              minimum height=6mm, font=\scriptsize},
+  arr/.style={-{Latex[length=1.8mm]}, thick},
+  lbl/.style={font=\tiny, inner sep=1.5pt, align=left},
+]
+  \node[stp]                     (gate)  {precondition gate\\{\tiny synced, DB ready, not in DOS, confirmed, benchmark ok, under \texttt{maxAppsPerNode}}};
+  \node[stp, below=of gate]      (pick)  {candidate selection\\{\tiny own-IP bias first, then \textbf{uniform random}}};
+  \node[stp, below=of pick]      (filt)  {targeting and geolocation filters};
+  \node[stp, below=of filt]      (defer) {soft-deferral branches\\{\tiny capacity tiers, static IP, ArcaneOS, datacenter}};
+  \node[cross, below=of defer]   (bcast) {broadcast \texttt{fluxappinstalling}\\{\tiny then wait a fixed \SI{90000}{\milli\second}}};
+  \node[cross, below=of bcast]   (rank)  {re-read global list; rank by \texttt{broadcastedAt}\\{\tiny proceed only if this node still fits the remaining slots}};
+  \node[stp, below=of rank]      (inst)  {install locally (Docker)};
+  \node[stp, below=of inst]      (self)  {after \SI{1}{\minute}: rank by \texttt{runningSince}\\{\tiny if over-ranked, \textbf{uninstall self}}};
+
+  \foreach \x/\y in {gate/pick, pick/filt, filt/defer, defer/bcast, bcast/rank, rank/inst, inst/self}
+    \draw[arr] (\x) -- (\y);
+
+  \node[outbox, right=7mm of defer] (dfr) {deferred: retry later};
+  \node[outbox, right=7mm of rank]  (aba) {abandon this attempt};
+  \draw[arr] (defer) -- (dfr);
+  \draw[arr] (rank)  -- (aba);
+
+  \draw[arr] (self.west) -- ++(-5mm,0) |- node[lbl, left, pos=0.25] {loop} (gate.west);
+
+  \node[draw, dashed, rounded corners=2pt, inner sep=2.5mm, fit=(bcast)(rank),
+        label={[font=\tiny, align=center]right:{the \emph{only} cross-node\\coupling: two broadcast\\/read points}}] {};
+\end{tikzpicture}
+\caption{Placement flow for one node's attempt at one application. The loop is private to a single
+node: every step is a local decision, and the only coupling to other nodes is the broadcast/read pair
+shown dashed. Conflicts are resolved by earliest-broadcast-wins, not by election or arbitration —
+there is no scheduler in this picture, and that is the point \shipped
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{77--787}.}
+\label{fig:placement-flow}
+\end{figure}
+
+\subsection{The reconciler: a single, level-based actuator}
+\label{sec:fluxos-reconciler}
+
+Once a container exists, everything that starts or stops it goes through one component,
+documented in its own source as "the single, level-based actuator for app containers"
+\srcdoc{flux/ZelBack/src/services/appMonitoring/appReconciler.js:20-27}. Every trigger — a Docker
+\texttt{die} event, a stream reconnect, an hourly tick, boot, a post-install callback, or a
+master/slave (syncthing) decision — only \emph{enqueues} a component identifier;
+\texttt{reconcile()} is the only function that calls \texttt{appDockerStart}\slash\texttt{appDockerStop}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMonitoring/\allowbreak{}appReconciler.js}{20--27}.
+
+Desired state is resolved from four inputs, in strict priority order, highest wins
+\srcdoc{flux/ZelBack/src/services/appMonitoring/appReconciler.js:29-45}:
+\begin{enumerate}
+\item \texttt{operator\allowbreak{}Stopped} — durable, persisted in \texttt{apps\allowbreak{}Runtime\allowbreak{}State}. The source calls
+  this "user lock, wins over all."
+\item \texttt{controller\allowbreak{}Desired} — in-memory only, re-derived every cycle by the master/slave and
+  syncthing deciders. The source states why it is \emph{not} persisted: "a stale election after a
+  reboot must not act."
+\item \texttt{dataDesired} — an in-memory "clear" flag requesting an app-data wipe before the next
+  run, also not persisted, for the same class of reason: "a stale wipe intent surviving a restart
+  could delete the only good copy."
+\item Restart policy and the last exit code, as the residual default.
+\end{enumerate}
+The syncthing/master-slave decider that feeds \texttt{controller\allowbreak{}Desired} is a second, large state
+machine (\texttt{syncthingFolderStateMachine.\allowbreak{}js}, \texttt{syncthing\allowbreak{}Monitor.\allowbreak{}js}) that this evidence
+pass did not read in depth; only its output channel into the reconciler is characterized here
+\srcinferred.
+
+Concurrency is single-flight per component identifier: an \texttt{inFlight} set prevents two
+reconciles of the same component from running at once, and a \texttt{dirty} set forces one more
+pass if the identifier was re-enqueued while a reconcile was already running
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMonitoring/\allowbreak{}appReconciler.js}{51--52}. A boot drain gate (an
+\texttt{AsyncGate}) holds all boot-time triggers in \texttt{bootPending} until every boot-held
+component has completed \emph{one} reconcile pass — not until all are running — capped at
+\texttt{BOOT\_DRAIN\_SETTLE\_CAP\_MS} = 2\,min, so a single wedged reconcile can never indefinitely
+suppress the node's own network-presence broadcast
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMonitoring/\allowbreak{}appReconciler.js}{55--64}. A container found
+detached from its own Docker network — a stale libnetwork endpoint that a plain start cannot repair
+— is force-removed and recreated rather than merely restarted
+\srcdoc{flux/ZelBack/src/services/appMonitoring/appReconciler.js:24-26}. Crash recovery follows a
+fixed backoff ladder, \texttt{crash\allowbreak{}Backoff\allowbreak{}Delays\allowbreak{}Ms} = [0, 30{,}000, 300{,}000, 900{,}000,
+1{,}800{,}000]\,ms (0\,s, 30\,s, 5\,min, 15\,min, 30\,min), reset to the first rung after
+\texttt{crash\allowbreak{}Backoff\allowbreak{}Stable\allowbreak{}Run\allowbreak{}Ms} = 600{,}000\,ms (10\,min) of stable running
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{130--131}.
+
+\subsection{Soft versus hard redeploy}
+\label{sec:fluxos-redeploy}
+
+Redeploy, removal, and installation are mutually exclusive with each other through four boolean
+globals — \texttt{globalState.\allowbreak{}removalInProgress}, \texttt{installation\allowbreak{}In\allowbreak{}Progress},
+\texttt{soft\allowbreak{}Redeploy\allowbreak{}In\allowbreak{}Progress}, \texttt{hard\allowbreak{}Redeploy\allowbreak{}In\allowbreak{}Progress} — checked at entry. If any is
+already set, the call returns a warning and does nothing; it does not queue itself and does not
+retry \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}advancedWorkflows.js}{1245--1281,1355--1383}.
+
+\begin{table}[H]
+\centering
+\caption{Soft versus hard redeploy.}
+\begin{tabular}{l l l}
+\toprule
+& Soft redeploy & Hard redeploy \\
+\midrule
+Teardown & \texttt{soft\allowbreak{}Remove\allowbreak{}App\allowbreak{}Locally}: stops/removes the container,
+  \textbf{keeps} the app volume/data & \texttt{appUninstaller.\allowbreak{}removeAppLocally(force=false)}: full
+  teardown, \textbf{drops} volumes \\
+Wait & \texttt{config.\allowbreak{}fluxapps.\allowbreak{}redeploy.\allowbreak{}delay} = 30\,s & 30\,s (same constant) \\
+Rebuild & \texttt{check\allowbreak{}App\allowbreak{}Requirements} then
+  \texttt{soft\allowbreak{}Register\allowbreak{}App\allowbreak{}Locally} (recreate container against existing data) &
+  \texttt{check\allowbreak{}App\allowbreak{}Requirements} then \texttt{appInstaller.registerAppLocally(...,\allowbreak{}
+  sendRemovalMessage=true)} (full fresh install) \\
+\bottomrule
+\end{tabular}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}advancedWorkflows.js}{1313--1330,1394--1420}
+\end{table}
+
+\textbf{Automatic escalation.} For \specv{8}-and-later apps, if the installed component structure
+differs from the target specification — component count or composition changed —
+\texttt{softRedeploy} escalates itself to \texttt{hardRedeploy} instead of proceeding, "for
+component structure safety" \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}advancedWorkflows.js}{1281--1305}.
+If either path fails, the app is force-removed
+(\texttt{removeAppLocally(.\allowbreak{}.\allowbreak{}.\allowbreak{}, force=true, sendMessage=true)}) as cleanup
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}advancedWorkflows.js}{1332--1341,1422--1427}. Both
+paths stream progress back over the original HTTP response (\texttt{res.write}) when one is
+available: this is a synchronous, long-running HTTP call, not a job queue a client polls.
+
+\subsection{The P2P layer}
+\label{sec:fluxos-p2p}
+
+\subsubsection{Wire format, dispatch, dedup}
+Every \FluxOS-to-\FluxOS message is JSON over WebSocket, wrapped in a signed envelope
+\texttt{\{version:\,\allowbreak{}1,\allowbreak{} timestamp,\allowbreak{} pubKey,\allowbreak{} signature (over version+message+timestamp),\allowbreak{} data\}}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}fluxBroadcastHelper.js}{11--26}. Observed
+\texttt{data.type} values: \texttt{zelappregister}\slash\texttt{fluxappregister},
+\texttt{zelappupdate}\slash\texttt{fluxappupdate}, \texttt{fluxapprequest} (a v1 single-hash form and a
+v2 form batching up to 500 hashes), \texttt{fluxapprunning}, \texttt{fluxipchanged},
+\texttt{fluxappremoved}, \texttt{fluxappinstalling}, \texttt{fluxappinstallingerror},
+\texttt{fluxnodesigterm}, and four sync-round types
+(\texttt{fluxapptempsync}, \texttt{fluxapprunningsync}, \texttt{fluxappinstallingsync},
+\texttt{fluxappinstallingerrorssync}) \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}fluxCommunication.js}{585--602,644--660}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}fluxCommunicationMessagesSender.js}{53--74}. A separate raw,
+non-JSON channel — \texttt{message\allowbreak{}Hash\allowbreak{}Present} (a 40-char hex hash) and
+\texttt{request\allowbreak{}Message\allowbreak{}Hash} — bypasses the signed envelope entirely, because it only ever carries a
+hash and never application data \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}fluxCommunication.js}{511--536}.
+
+Inbound dispatch (\texttt{dispatch\allowbreak{}Flux\allowbreak{}Message}) runs, per message: raw hash-gossip frames first,
+handled and returned immediately, no signature check
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}fluxCommunication.js}{511--536}; a malformed envelope closes the
+connection \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}fluxCommunication.js}{538--546}; deduplication after
+a random 1--75\,ms jitter delay against an in-memory \texttt{messageCache} keyed on
+\texttt{hash(data)} — a seen hash is silently dropped
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}fluxCommunication.js}{549--554} (the exact TTL/eviction policy
+of this cache was not traced to its definition in the evidence available \srcinferred); a blocklist
+check against \texttt{wsPeerCache}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}fluxCommunication.js}{556--563}; then signature/timestamp
+verification, yielding \texttt{OK}, \texttt{NODE\_NOT\_FOUND} (originator not in the deterministic
+node list — dropped without penalizing the relaying peer, "the relay peer is not at fault"), or a
+bad-signature/malformed result, which is tracked per-peer in a rolling 10-minute window and closes
+the connection at 5 or more bad messages in that window (the timestamp array is capped at 20
+entries, truncated to the last 10, bounding memory from an adversarial peer)
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}fluxCommunication.js}{592--618}. A valid, fresh message is
+dispatched by type via \texttt{setImmediate} — deferred one tick, not otherwise queued or
+rate-limited per type \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}fluxCommunication.js}{604--618}; a stale
+but otherwise valid message gets a NAK rather than a silent drop
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}fluxCommunication.js}{601}. Four message types
+(\texttt{fluxapprunning}, \texttt{fluxipchanged}, \texttt{fluxappremoved}, \texttt{fluxnodesigterm}) use a 240{,}000\,ms
+(4\,min) freshness window \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}fluxCommunication.js}{317,405,437,465}.
+
+\subsubsection{Rebroadcast and convergence}
+Rebroadcast follows one of two mutually exclusive strategies, selected by comparing daemon height
+to \texttt{messages\allowbreak{}Broadcast\allowbreak{}Refactor\allowbreak{}Start} = 1{,}751{,}250 ("expected block at 13th October 2024"
+per the code's own comment \srcdoc{flux/ZelBack/config/default.js:124}): below it,
+\texttt{fluxCommunicationMessagesSender.\allowbreak{}relay(.\allowbreak{}.\allowbreak{}.\allowbreak{})} flood-fills the full signed message to every
+other peer; at or above it, only the 40-character hash is gossiped
+(\texttt{peerManager.\allowbreak{}broadcastHash}), and a receiver that lacks the body pulls it on demand via
+\texttt{request\allowbreak{}Message\allowbreak{}Hash} \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}fluxCommunication.js}{407--412,431--436,486--491}.
+This is a live protocol transition keyed on chain height, not a node-local configuration flag. A
+\texttt{fluxnodesigterm} broadcast extends the affected apps' \texttt{expireAt} in
+\texttt{zelappslocation} to \texttt{broadcastedAt} $+$ \texttt{SIGTERM\_EXPIRY\_MS}
+(420{,}000\,ms, 7\,min) rather than letting the location expire immediately
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}fluxCommunication.js}{472--478}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}appConstants.js}{86}. Beyond continuous gossip, a
+periodic hash-sync protocol runs with its own bounded parameters — up to
+\texttt{hash\allowbreak{}Sync\allowbreak{}Max\allowbreak{}Rounds} = 4 rounds, \texttt{hash\allowbreak{}Sync\allowbreak{}Peers\allowbreak{}Per\allowbreak{}Round} = 3,
+\texttt{hash\allowbreak{}Sync\allowbreak{}Ephemeral\allowbreak{}Peers} = 5, \texttt{hash\allowbreak{}Sync\allowbreak{}Max\allowbreak{}Retries} = 3 at
+\texttt{hash\allowbreak{}Sync\allowbreak{}Retry\allowbreak{}Ms} = 300{,}000\,ms, with a \texttt{hash\allowbreak{}Sync\allowbreak{}Settle\allowbreak{}Ms} = 4{,}000\,ms settle
+window \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{355--363}; the exact message sequence of one full
+round (who is asked, in what order, what happens on a partial response) was not traced beyond these
+constants \srcinferred.
+
+\textbf{This is gossip convergence, not consensus.} Global application state — which node is
+running, installing, or has removed which application — lives in \texttt{globalzelapps}, is
+propagated exclusively by the dedup/rebroadcast/hash-sync mechanism above, TTL-expires by the
+constants in Table~\ref{tab:lifecycle-timing}, and is not committed to any block, checked against any
+quorum, or given any finality. Two nodes with a partitioned or lagging gossip view can disagree
+about the current state of an application for as long as the partition lasts; nothing above the
+mesh corrects that disagreement faster than the mesh itself re-converges.
+
+\subsubsection{Peer topology and liveness}
+\texttt{Flux\allowbreak{}Peer\allowbreak{}Manager} is a single in-memory registry of inbound and outbound sockets, ephemeral
+sync peers, a reconnect queue tracking per-peer attempts, an unstable-node tracker, IP-group/unique-IP
+counters, and a bounded circular history buffer of peer lifecycle events
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}FluxPeerManager.js}{31--77}. Inbound admission is capped at
+the larger of \texttt{maxPeers} = $4\times$\texttt{minIncoming} and \texttt{max\allowbreak{}Number\allowbreak{}Of\allowbreak{}Connections}, which is normally
+$9\times$\texttt{minIncoming} but scales down when \texttt{number\allowbreak{}Of\allowbreak{}Flux\allowbreak{}Nodes}/160 falls below that
+figure, so small networks get a proportionally smaller inbound cap rather than a flat one, floored at \texttt{maxPeers}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}FluxPeerManager.js}{839--847}. Reconnect backoff follows
+[120{,}000, 300{,}000, 600{,}000, 900{,}000]\,ms (2/5/10/15\,min)
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}FluxPeerManager.js}{32}. Liveness is a WebSocket ping
+every \texttt{ws\allowbreak{}Ping\allowbreak{}Interval\allowbreak{}Ms} = 15{,}000\,ms; a peer that misses 3 consecutive pongs
+(\texttt{ws\allowbreak{}Max\allowbreak{}Missed\allowbreak{}Pongs}) is force-terminated
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{18--19}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}FluxPeerSocket.js}{86--145,209--212,298}. Placement itself
+is gated on this liveness signal: the spawner runs only above an \texttt{app\allowbreak{}Sync\allowbreak{}Peer\allowbreak{}Threshold} of
+12 live peers and pauses below an \texttt{app\allowbreak{}Sync\allowbreak{}Degraded\allowbreak{}Threshold} of 4
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{268--269}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{38--52}.
+
+\subsection{Resource accounting}
+\label{sec:fluxos-resources}
+
+\begin{table}[H]
+\centering
+\caption{Per-tier resource allowances (total / available to applications).}
+\begin{tabular}{l l l l l}
+\toprule
+Tier & CPU (units of 0.1 core) & RAM (MB) & HDD (GB) & Collateral, current / legacy (\flux) \\
+\midrule
+Cumulus ($\tC$) & 40 / 30 & 7{,}000 / 5{,}000 & 220 / 180 & 1{,}000 / 10{,}000 \\
+Nimbus ($\tN$) & 80 / 70 & 30{,}000 / 28{,}000 & 440 / 400 & 12{,}500 / 25{,}000 \\
+Stratus ($\tS$) & 160 / 150 & 61{,}000 / 59{,}000 & 880 / 840 & 40{,}000 / 100{,}000 \\
+\bottomrule
+\end{tabular}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{380--403}
+\end{table}
+
+Resources locked by the host system, subtracted before any application allocation:
+\texttt{cpu}: 10 (one core, in units of 0.1 core), \texttt{ram}: 2{,}000\,MB, \texttt{hdd}: 60\,GB,
+\texttt{extrahdd}: 20\,GB \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{375--378}, with a further 0.95
+usable-disk multiplier \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}hwRequirements.js}{385}.
+\texttt{hwRequirements.\allowbreak{}checkAppHWRequirements} enforces, per component:
+\begin{multline*}
+\text{usable HDD} = 0.95\cdot\text{total HDD} - 60 - 20, \\
+\text{reject if } \text{app HDD} > \text{usable HDD} - \text{HDD locked by other apps};
+\end{multline*}
+\begin{multline*}
+\text{usable CPU (}\times 10\text{)} = 10\cdot\text{cores} - 10, \\
+\text{reject if } 10\cdot\text{app CPU} > \text{usable CPU} - 10\cdot\text{CPU locked by other apps};
+\end{multline*}
+\begin{multline*}
+\text{usable RAM} = \text{total RAM} - 2{,}000, \\
+\text{reject if app RAM} > \text{usable RAM} - \text{RAM locked by other apps}
+\end{multline*}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}hwRequirements.js}{370--408}. A separate,
+enterprise-only check additionally rejects an install that would leave 4 or fewer free vCores after
+it (\texttt{free\allowbreak{}Cores\allowbreak{}After\allowbreak{}Install} = cores $-$ 1 system-reserved core $-$ locked cores $-$ app
+cores), reserved so the CFS CPU-burst feature always has spare capacity to draw on
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}hwRequirements.js}{411--437}. That burst feature
+is enabled by default (\texttt{cpuBurst.\allowbreak{}enabled: true}, CFS period \texttt{periodUs} = 100{,}000
+(100\,ms), 1 reserved core) \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{440--453}, with the per-host
+caveat, stated in the source itself, that "multiple burstable apps on the same host can
+collectively oversubscribe during simultaneous spikes"
+\srcdoc{flux/ZelBack/config/default.js:441-449}.
+
+\subsection{Pricing}
+\label{sec:fluxos-pricing}
+
+Price is computed from a per-component resource vector $\resvec$, the requested instance count
+$\ninst$, and the requested duration $\dur$ (in blocks, against $\blockslasting$), evaluated at the
+transaction's block height $\hgt$ against a height-scheduled price table
+(\texttt{config.\allowbreak{}fluxapps.\allowbreak{}price[]}, overridable by \texttt{chainmessages} of type \texttt{p} posted
+on-chain by the Foundation multisig) \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}chainUtilities.js}{9--52}.
+Concretely, for a \specv{4}-or-later (composed) app, \texttt{cpuPrice} $= \sum$(CPU units)
+$\times\,\text{table.cpu}\times 10$; \texttt{ramPrice} $=\sum$(RAM units)
+$\times\,\text{table.ram}/100$; \texttt{hddPrice} $=\sum$(HDD units) $\times\,\text{table.hdd}$;
+plus \texttt{table.scope} if the app declares \texttt{nodes} or is \texttt{enterprise}, plus
+\texttt{table.staticip} if it declares \texttt{staticip}, plus \texttt{table.port} per enterprise
+port; that sum is quoted per three instances --- divided by three, ceiled to two decimals, and, from
+height \num{1890000}, scaled by the requested instance count $\ninst$, with a floor of $0.50$ per
+additional instance for the cheapest specifications
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}appUtilities.js}{89--134}. The registration price is then
+scaled by $\dur/\text{defaultExpire}$, where \texttt{defaultExpire} is $\blockslasting$ or
+$4\times\blockslasting$ post-\PoN fork, re-ceiled, and only then floored at \texttt{minPrice}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMessaging/\allowbreak{}messageVerifier.js}{733--743}; an update is priced
+at 90\% of the fresh price minus a further discount proportional to the unused life of the prior
+spec, floored again at \texttt{minPrice} \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMessaging/\allowbreak{}messageVerifier.js}{801--816}.
+\S16 gives the full pricing mechanics and treats the credits/renewal layer built on top of them;
+here it is enough to record the one finding that changes what a payer can rely on:
+\textbf{an underpaid registration or update is silently dropped, with only a server-side log
+warning and no signal of any kind returned to the payer}
+(\S\ref{sec:fluxos-lifecycle}; \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMessaging/\allowbreak{}messageVerifier.js}{735--763,797--828}).
+\S16 takes up what a correct failure signal would require.
+
+\subsection{Moderation, as it exists today}
+\label{sec:fluxos-moderation}
+
+Docker image compliance is enforced against a GitHub-hosted list, not an on-chain or
+network-quorum one: \texttt{get\allowbreak{}Blocked\allowbreak{}Repositores()} fetches
+\texttt{helpers/\allowbreak{}blockedrepositories.\allowbreak{}json} from \texttt{raw.\allowbreak{}githubusercontent.\allowbreak{}com/\allowbreak{}RunOnFlux/\allowbreak{}flux},
+cached in \texttt{fluxCaching.\allowbreak{}blockedRepositoriesCache}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appSecurity/\allowbreak{}imageManager.js}{179--195}; a parallel
+\texttt{vettedrepositories.\allowbreak{}json} lets listed apps bypass user-defined blocked ports and repositories
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appSecurity/\allowbreak{}imageManager.js}{202--236,395--410}.
+\texttt{check\allowbreak{}Applications\allowbreak{}Compliance} runs every \texttt{image\allowbreak{}Compliance\allowbreak{}Interval\allowbreak{}Ms} =
+3{,}600{,}000\,ms (1\,h), removing any locally installed app that matches the blocklist and waiting
+3\,min between removals "so we don't have more removals at the same time"
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{529--531}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{319}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appSecurity/\allowbreak{}imageManager.js}{644--676}. The equivalent
+GitHub-sourced enterprise node/owner map resyncs every 6\,h with fetch failure explicitly swallowed
+by a \texttt{.catch} handler, proceeding on the last-cached value
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{130--136}; the evidence gathered for this
+paper did not separately trace a distinct failure-handling code path for the blocklist fetch itself
+beyond its cache, but the two fetches share the same GitHub-hosted, silently-cached design.
+\S23 analyzes what this means for censorship-resistance and for the roadmap's stated network-quorum
+vision; this section states the mechanism and defers the analysis.
+
+\subsection{Trust and failure model}
+\label{sec:fluxos-trust}
+
+\begin{enumerate}
+\item \textbf{Placement convergence assumes peer honesty.} Instance-count convergence depends
+  entirely on nodes honestly reporting and honoring \texttt{broadcastedAt} rank; nothing in the
+  paths read re-verifies it against the signed envelope's own timestamp for this message type
+  \srcinferred (\S\ref{sec:fluxos-placement}).
+\item \textbf{Underpayment is swallowed, not rejected.} A registration or update that pays too
+  little produces only a log warning; the payer receives no on-chain refund and no distinguishable
+  failure signal \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMessaging/\allowbreak{}messageVerifier.js}{735--763,797--828}.
+\item \textbf{GitHub is the moderation trust root.} The image blocklist, vetted-repository list,
+  and enterprise owner map are all fetched from one GitHub repository on a schedule, with fetch
+  failure silently swallowed and the last-good value kept
+  \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{130--136}; a GitHub outage or a compromise
+  of that specific file is a single point of moderation trust for the whole network, not a
+  network-quorum mechanism (\S\ref{sec:fluxos-moderation}).
+\item \textbf{Boot is a flat-backoff infinite retry, not a circuit breaker.} Any uncaught exception
+  in the boot function restarts it after a fixed 15{,}000\,ms with no retry cap and no escalation,
+  so a persistently failing dependency retries forever rather than surfacing a fatal state
+  \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{568--572}.
+\item \textbf{Distributed enforcement trusts a synchronized local view.} The node-status monitor's
+  network-wide eviction pass — which every confirmed node runs independently against every other
+  node's claimed locations — trusts its own local copy of the deterministic node list; if that
+  local view lags, it can evict still-valid locations or fail to evict dead ones \srcinferred.
+\item \textbf{Self-correction can amplify churn under partition.} Because every node independently
+  re-derives whether an application is over-replicated and removes itself on that basis, a
+  partition that produces disjoint \texttt{runningSince} orderings can cause more nodes to remove
+  an application than intended, or none, until gossip re-converges; there is no distributed lock
+  (\S\ref{sec:fluxos-placement}, remark above).
+\item \textbf{\texttt{admin} is a local file, not a bound credential.} \texttt{admin} privilege is
+  granted to whoever controls \texttt{userconfig.\allowbreak{}initial.\allowbreak{}zelid} on that specific node's disk; there
+  is no additional hardware or HSM binding checked at this privilege level
+  \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}verificationHelperUtils.js}{19--46}.
+\end{enumerate}
+
+%% Drain this section's float queue before the next begins.
+\FloatBarrier

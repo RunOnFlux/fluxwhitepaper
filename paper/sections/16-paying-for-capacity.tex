@@ -1,0 +1,1280 @@
+\section{Paying for capacity: direct settlement, and a service built over it}
+\label{sec:paying-for-capacity}
+
+Buying capacity on \Flux is closer to buying a train ticket than to opening a utility account. A
+tenant computes what a deployment costs, sends that many FLUX to a known address in one transaction,
+and every node independently reads the chain and agrees that the deployment is funded until a
+particular block height. Nobody issues a credential, nobody keeps a ledger of what the tenant owes,
+and when the paid-for height arrives the entitlement simply stops. This section specifies that
+mechanism first, because it is the protocol's settlement path and the one autonomous software should
+use. It then describes something that is not part of the protocol at all: a centralized payment
+service, operated by InFlux Technologies on top of \Flux
+\srcintent{08-answers-round-2.md, round 3}, which holds a person's keys, signs for them, and pays the
+chain on their behalf in exchange for a card payment. The chain does not know that service exists,
+and this section proves it: from consensus's point of view its payments are ordinary payments from
+ordinary keys, and nothing in \fluxd or \FluxOS is aware that a custodian is involved
+(Property~\ref{prop:chainindifferent}). Last, and separately, it specifies --- explicitly as unimplemented --- the deposited-balance layer
+such a service would need in order to become a credit account. The three are kept apart throughout,
+because they belong to different systems, carry different maturities, and fail in different ways.
+The claim the section defends is narrow and falsifiable: \textbf{\Flux's settlement path is trustless
+and ships today in two independent forms; a third party has built a convenience layer over it for
+people who want to pay by card, and the protocol neither knows about that layer nor depends on it.}
+
+\paragraph{Symbols introduced here.}
+Not in \texttt{notation.tex}, used only in this section: $e_\app$ the paid-through height of
+application $\app$; $L^{\ast}(\hgt)$ the effective default lifetime; $\iota(\hgt)$ the active
+rate-table row; $\varpi$ the unused fraction of a previous term; $v^{\mathrm{obs}}$ an observed
+on-chain payment. For the third-party service of Section~\ref{sec:paying:facilitator}: $\mathcal{F}$
+the operator's facilitator service; $K_u$ the pair of private keys it holds in trust for user $u$ and
+never discloses to $u$; $\mathcal{H}$ its set
+of operator hot wallets; $T_{\mathrm{rec}}$ its record retention time; $\Delta_{\mathrm{adv}}$ its
+early-renewal advance window in blocks; $\mathsf{A}_{\mathrm{orb}}, \mathsf{A}_{\mathrm{ren}},
+\mathsf{A}_{\mathrm{paid}}$ its three hardcoded allowlists. For the unimplemented credits layer of
+Section~\ref{sec:paying:creditspec}: $b_u$ a tenant's deposited balance in $\sat$;
+$\mathrm{st}(\app,\hgt)$ the lifecycle state; $G_{\mathrm{g}}, G_{\mathrm{s}}$ the grace and
+suspension windows in blocks; $\Delta_{\mathrm{pre}}$ the pre-authorisation lead in blocks;
+$\price^{\mathrm{ren}}$ and $\price^{\mathrm{res}}$ the renewal and resumption charges;
+$\Delta^{\mathrm{sub}}$ the suspension subsidy. The second group is candidate notation for an object
+that does not exist and must not be absorbed into \texttt{notation.tex} unless it is built.
+
+% =====================================================================
+\subsection{Part A --- Direct settlement}
+\label{sec:paying:direct}
+
+Everything in this part is \shipped and is written in the present tense, and everything in it is a
+property of the network itself --- what \fluxd and \FluxOS do, with no service standing in between.
+It describes two deployed instances of the same idea: the application-hosting path in \FluxOS, and
+the \CumulusVPN entitlement path. Both share one property --- the payment is the entitlement --- and
+neither maintains any forward-looking claim against the payer.
+
+\subsubsection{The price function and the rate schedule}
+
+\begin{assumption}[Settlement environment]
+\label{asm:settle}
+As stated in the system model of Section~2: (i) every node holds the same confirmed chain prefix up
+to the reorg bound (\texttt{MAX\_REORG\_LENGTH} $=40$ outside the PoN stabilisation window);
+(ii) every node runs \FluxOS with the same compiled rate table, subject to on-chain
+\texttt{chainparams} price messages of version \texttt{p} posted by the Foundation multisig, which
+take effect from their occurrence height \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}chainUtilities.js}{9--52};
+(iii) application payments are recognised by output address plus an \texttt{OP\_RETURN} message
+carrying the temporary-message hash \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}explorerService.js}{309--345}.
+Assumption (ii) is a trust assumption on the Foundation and is carried as such in Section~7
+(the price table is the base; consensus fixes only the split).
+\end{assumption}
+
+\begin{definition}[Height-scheduled rate table]
+\label{def:ratetable}
+The rate table is a finite sequence of segments indexed by activation height,
+$\{(h_j, \pricevec^{(j)})\}_{j=0}^{5}$ with $h_0 = -1$ (genesis) and $h_1 < \dots < h_5$ as given in
+Table~\ref{tab:pricetable}. Each row is
+$\pricevec^{(j)} = \bigl(p_{\mathrm{cpu}}, p_{\mathrm{ram}}, p_{\mathrm{hdd}}, p_{\min},
+p_{\mathrm{port}}, p_{\mathrm{scope}}, p_{\mathrm{sip}}\bigr)^{(j)} \in \mathbb{Q}_{>0}^{7}$,
+denominated in FLUX. The active row at height $\hgt$ is $\pricevec(\hgt) \defeq
+\pricevec^{(\iota(\hgt))}$ with $\iota(\hgt) \defeq \max\{\, j : h_j < \hgt \,\}$ (strict: the
+code selects rows with \texttt{height < height}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}appUtilities.js}{32}).
+\end{definition}
+
+\begin{table}[H]
+\centering\small
+\caption{The deployment rate schedule: six segments, genesis plus five revisions. Values as
+returned by the live endpoint and as compiled into \FluxOS.
+\srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03};
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{133--209}. \shipped}
+\label{tab:pricetable}
+\begin{tabular}{@{}lrrrrrrr@{}}
+\toprule
+segment & height $h_j$ & $p_{\mathrm{cpu}}$ & $p_{\mathrm{ram}}$ & $p_{\mathrm{hdd}}$ &
+$p_{\min}$ & $p_{\mathrm{port}}$ & $p_{\mathrm{scope}}$ \\
+\midrule
+genesis     & $-1$              & 3    & 1    & 0.5   & 1    & 2   & 6   \\
+revision 1  & \num{983000}      & 0.3  & 0.1  & 0.05  & 0.1  & 2   & 6   \\
+revision 2  & \num{1004000}     & 0.06 & 0.02 & 0.01  & 0.01 & 2   & 6   \\
+revision 3  & \num{1288000}     & 0.15 & 0.05 & 0.02  & 0.01 & 2   & 6   \\
+revision 4  & \num{1594832}     & 0.15 & 0.05 & 0.02  & 0.01 & 1.5 & 6   \\
+revision 5  & \num{1597156}     & 0.03 & 0.01 & 0.004 & 0.01 & 0.4 & 0.8 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Across the six segments the CPU rate falls from 3 to 0.03, a factor of \num{100}; the RAM rate falls
+from 1 to 0.01 and the disk rate from 0.5 to 0.004. The static-IP surcharge $p_{\mathrm{sip}}$ is 3
+in segments 0--4 and 0.4 in segment 5. A seventh segment is staged at height \num{2950000} with
+values identical to segment 5, so that \specv{9} registrations price against a defined segment
+\srcbranch{flux}{feat/appspec-v9}{ZelBack/config/default.js:196--209}; it is not a revision and is not counted here
+(conflict C27). A parallel USD-denominated table and a \texttt{/\allowbreak{}apps/\allowbreak{}getappspecsusdprice} read
+endpoint also exist in configuration \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{211--224}; which
+denomination governs is a Foundation policy lever, discussed as such in Section~7, and this paper
+makes no claim about it.
+
+\begin{definition}[Deployment price]
+\label{def:price}
+Let $\app$ be an application with component set $C(\app)$ and per-component resources
+$r_c = (r^{\mathrm{cpu}}_c, r^{\mathrm{ram}}_c, r^{\mathrm{hdd}}_c) \in \mathbb{Q}_{\ge 0} \times
+\mathbb{N} \times \mathbb{N}$, in vCPU, \unit{\mega\byte} and \unit{\giga\byte} respectively, and let
+$\resvec(\app) \defeq \sum_{c \in C(\app)} r_c$. Let $\ninst \in \{k_{\min}(\hgt), \dots, 100\}$ be
+the instance count, $\dur \in \{d_{\min}(\hgt), \dots, \num{1056000}\}$ the duration in blocks, and
+$\hgt \in \mathbb{N}$ the height at which the registration is priced. Write
+$\lceil x \rceil_2$ for rounding up to two decimals and $\mathcal{E}(\app)$ for the set of
+enterprise ports the specification requests. The \emph{base}, in FLUX per default lifetime, is
+\begin{multline*}
+B(\app,\hgt) \;\defeq\;
+10\,p_{\mathrm{cpu}}\,\resvec^{\mathrm{cpu}}
+\;+\; \tfrac{1}{100}\,p_{\mathrm{ram}}\,\resvec^{\mathrm{ram}}
+\;+\; p_{\mathrm{hdd}}\,\resvec^{\mathrm{hdd}} \\
+{}\;+\; p_{\mathrm{scope}}\,\indic{\text{targeted or enterprise}}
+\;+\; p_{\mathrm{sip}}\,\indic{\text{static IP}}
+\;+\; p_{\mathrm{port}}\,\lvert\mathcal{E}(\app)\rvert ,
+\end{multline*}
+all rates evaluated at $\pricevec(\hgt)$
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}appUtilities.js}{89--122}. The base is quoted per
+three instances: write $\beta(\app,\hgt) \defeq \lceil B(\app,\hgt)/3 \rceil_2$ for the per-instance
+base. The charge per default lifetime is
+\[
+A(\app,\ninst,\hgt) \;\defeq\;
+\begin{cases}
+\beta, & \ninst = 1 \text{ or } \hgt < \num{1890000},\\[2pt]
+\beta + 0.5\,(\ninst - 1), & \beta < 0.5 \text{ and } \ninst > 3,\\[2pt]
+\bigl\lceil \beta\,(\ninst - 1)\bigr\rceil_2 + \beta, & \text{otherwise,}
+\end{cases}
+\]
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}appUtilities.js}{123--134}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{306}; the USD-minimum branch that follows it, gated by
+\texttt{apply\allowbreak{}Minimum\allowbreak{}Price\allowbreak{}On3Instances} \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}appUtilities.js}{136--138},
+is inert on the FLUX path, since no row of the FLUX rate table carries \texttt{minUSDPrice}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}chainUtilities.js}{22--36}. The price of a fresh
+registration is
+\[
+\price(\app,\ninst,\dur,\hgt) \;=\;
+\max\Bigl\{\,p_{\min}(\hgt),\;
+\Bigl\lceil\; \frac{\dur}{L^{\ast}(\hgt)} \cdot A(\app,\ninst,\hgt) \;\Bigr\rceil_2 \Bigr\} ,
+\qquad
+L^{\ast}(\hgt) \defeq \begin{cases}
+\blockslasting, & \hgt < \hpon,\\[2pt]
+4\,\blockslasting, & \hgt \ge \hpon,
+\end{cases}
+\]
+with $\blockslasting = \num{22000}$ blocks \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{285} and
+$\hpon = \num{2020000}$ \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{293}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMessaging/\allowbreak{}messageVerifier.js}{736--745}. An \emph{update} is
+priced at $\max\{p_{\min},\, 0.9\,(\price - \varpi\,\price_{\mathrm{prev}})\}$, where
+$\varpi = (\dur_{\mathrm{prev}} - (\hgt - \hgt_{\mathrm{prev}}))/\dur_{\mathrm{prev}}$ is the unused
+fraction of the previous term
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMessaging/\allowbreak{}messageVerifier.js}{797--828}.
+\end{definition}
+
+\noindent\textbf{Bounds and constants.}
+$\blockslasting = \num{22000}$ blocks, which at the pre-\PoN{} \qty{2}{\minute} spacing is
+\qty{30.6}{\day} \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{285};
+$k_{\min} = 3$ in general and $1$ for \specv{8} applications from height \num{2176519}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{257--259}; $k_{\max} = 100$
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{260}; the post-PoN duration ceiling is \num{1056000} blocks
+($\approx$ \qty{367}{\day} at \qty{30}{\second}) \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{292} and
+the floor $d_{\min}(\hgt)$ is height-gated by the validator: \num{5000} blocks, then \num{100} from height
+\num{1630040}, then \num{1} from height \num{1964447}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{852--862},
+while the live endpoint still reports \num{5000}
+\srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} (conflict C33).
+The payment sink is the transparent address \texttt{t3Nryf\allowbreak{}AQLGe\allowbreak{}Fs9j\allowbreak{}Eoeqsxm\allowbreak{}BN2QLRa\allowbreak{}RKFLUX} from height
+\num{1670000}, preceded by \texttt{t3a\allowbreak{}GJvdtd8NR6Grnqn\allowbreak{}Ru\allowbreak{}VEz\allowbreak{}H6Mbr\allowbreak{}Xu\allowbreak{}JFLUX} and, at any height, the
+legacy \texttt{t1LUs6quf7TB2z\allowbreak{}VZmexq\allowbreak{}PQdnqmr\allowbreak{}FMGZGj\allowbreak{}V6}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{241--245}. All application revenue therefore lands at a
+single transparent address by policy, which Section~2 records as a centralization surface and
+Section~7 replaces with a consensus-enforced split. Measured, \num{439} of \num{1195} deployed
+applications (\qty{36.7}{\percent}) sit at the three-instance floor and the maximum observed instance
+count is exactly $k_{\max}$ \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}.
+The minimum is re-applied \emph{after} the duration
+scaling \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMessaging/\allowbreak{}messageVerifier.js}{740--745},
+so no registration settles below $p_{\min}$, which is why the floor sits outside the duration factor
+in Definition~\ref{def:price}.
+
+\begin{definition}[Expiry and entitlement]
+\label{def:expiry}
+Let $\hgt_0$ be the height of the block carrying the confirmed payment that promotes $\app$'s
+temporary message to a permanent one, and $\dur$ its requested duration. The paid-through height is
+\[
+e_\app \;\defeq\;
+\begin{cases}
+\hgt_0 + \dur, & \hgt_0 \ge \hpon,\\[2pt]
+\hpon + 4\,(\hgt_0 + \dur - \hpon), & \hgt_0 < \hpon \le \hgt_0 + \dur,
+\end{cases}
+\]
+the second case being the post-fork recomputation applied to applications straddling PoN activation
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMessaging/\allowbreak{}messageVerifier.js}{711--724}. Entitlement is the
+predicate $\mathrm{Ent}(\app, \hgt) \defeq \indic{\hgt \le e_\app}$, evaluated independently by every
+node.
+\end{definition}
+
+\subsubsection{The property that makes direct settlement the default}
+
+\begin{property}[No standing obligation]
+\label{prop:nostanding}
+\shipped. Under direct settlement, for every application $\app$ and every height $\hgt$, the value
+$\mathrm{Ent}(\app,\hgt)$ is a function of the confirmed chain prefix at or before $\hgt$ alone.
+Consequently: (i) the network holds no forward-looking claim against the tenant --- there exists no
+height $\hgt' > \hgt$ at which the tenant owes anything; (ii) for all $\hgt' > \hgt$, the value of
+$\mathrm{Ent}(\app,\hgt')$ is already determined at $\hgt$ up to the arrival of a further payment,
+and is non-increasing in $\hgt'$ absent one; (iii) tenant and operator cannot hold divergent views of
+the entitlement except by holding divergent views of the chain.
+\end{property}
+
+\begin{proof}
+By Definition~\ref{def:expiry}, $e_\app$ is determined by $(\hgt_0, \dur)$, both of which are fields
+of, or the height of, a block at or before $\hgt$; by Definition~\ref{def:price}, the promotion test
+$v^{\mathrm{obs}} \ge \price(\app,\ninst,\dur,\hgt_0)$ is evaluated at promotion time against the
+rate row $\iota(\hgt_0)$, and $\iota$ is monotone in height, so no later block changes it. Hence
+$\mathrm{Ent}(\app,\cdot)$ factors through the prefix, giving (i) and (ii). For (iii): under
+Assumption~\ref{asm:settle}(i) two honest nodes agree on the prefix, and $e_\app$ is computed by the
+same integer arithmetic on both, so any disagreement is a disagreement about the chain and surfaces
+as such.
+\end{proof}
+
+Property~\ref{prop:nostanding} is the reason this paper recommends direct settlement to autonomous
+software. An agent needs no account, no stored credential and no relationship that outlives the
+deployment; there is no balance to track, no charge to authorise, and no reconciliation step that can
+fail while the agent is not watching. It is also the reason this path carries no grace, suspension or
+eviction machinery: expiry is arithmetic, not a decision, so there is nothing for a policy to decide
+and no state a policy could get wrong.
+
+\begin{corollary}
+\label{cor:noeviction}
+No grace or suspension state is required on this path. Any such state would be keyed on a balance
+or an outstanding obligation, and by Property~\ref{prop:nostanding}(i) neither exists.
+\end{corollary}
+
+\begin{construction}[\textsc{settle-direct} --- registration, payment, promotion, \shipped]
+\label{alg:settle}
+\emph{Inputs.} A formatted specification $\app$; a signature over it by the owner's ZelID; a duration
+$\dur$; a funded wallet.\quad
+\emph{State.} Per node: a temporary-message store (TTL \qty{3600}{\second}), a permanent-message
+store, and the chain.
+\begin{enumerate}\setlength{\itemsep}{1pt}
+\item The tenant reads $\pricevec(\hgt)$ from \texttt{/\allowbreak{}apps/\allowbreak{}deploymentinformation} and computes
+      $\price$ by Definition~\ref{def:price}.
+\item The tenant \texttt{POST}s the signed message to any node's \texttt{/\allowbreak{}apps/\allowbreak{}appregister}; the node
+      verifies the signature, the timestamp window ($\le$ \qty{1}{\hour} old, $\le$ \qty{5}{\minute}
+      ahead), the schema for the declared specification version, and its own peer counts
+      ($\ge 8$ outgoing, $\ge 4$ incoming), then broadcasts the message and returns only its hash
+      \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appDatabase/\allowbreak{}registryManager.js}{1714--1888}.
+\item The tenant broadcasts one transaction paying $v^{\mathrm{obs}} \ge \price$ to the sink address,
+      carrying that hash in an \texttt{OP\_RETURN}.
+\item Each node's explorer loop recognises the payment by output address, sums \texttt{valueSat}
+      across matching outputs, decodes the hash, and calls the promotion routine
+      \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}explorerService.js}{309--345,444}.
+\item Promotion stores the permanent message, recomputes $e_\app$ (Definition~\ref{def:expiry}), and
+      admits the application to global state iff $v^{\mathrm{obs}} \ge \price$
+      \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMessaging/\allowbreak{}messageVerifier.js}{619--897}.
+\end{enumerate}
+\emph{Invariant.} After promotion, global state contains $\app$ with paid-through height $e_\app$
+computed from the chain alone; before promotion it contains nothing about $\app$ that survives the
+temporary-message TTL.\quad
+\emph{Failure modes.} (a) The hash is not resolvable from peers within three attempts spaced
+\qty{60}{\second}: the registration never promotes and the tenant sees a client-side error at step~2.
+(b) $v^{\mathrm{obs}} < \price$: see Property~\ref{prop:silentunderpay} --- the payment is spent and
+the tenant is told nothing.
+\end{construction}
+
+\subsubsection{\CumulusVPN: the worked example}
+
+The second deployed instance of direct settlement is not an application-hosting charge at all, and it
+is the more important of the two for this paper's thesis. \CumulusVPN is a WireGuard exit-gateway
+product whose gateways run as ordinary \Flux applications. Its entitlement mechanism is this: the
+client generates a WireGuard keypair on the device, derives a payment code
+$\mathsf{code} = \mathsf{base58}\bigl(\mathrm{sha256}(pk)[0{:}20]\bigr)$ from its own public key, and
+sends FLUX to a fixed address with the \texttt{OP\_RETURN} memo $\texttt{CVPN1:}\,\mathsf{code}$.
+Gateway and client compute the code byte-identically
+\srccode{cumulusvpn/\allowbreak{}gateway/\allowbreak{}internal/\allowbreak{}entitle/\allowbreak{}entitle.go}{99--108}
+\srccode{cumulusvpn/\allowbreak{}clients/\allowbreak{}core-ts/\allowbreak{}src/\allowbreak{}paymentCode.ts}{17--23}. Every gateway then scans the chain
+by itself and derives the map $\mathsf{paidUntil}[\mathsf{code}]$ from confirmed, correctly-memoed
+payments, with no gateway-to-gateway coordination of any kind
+\srccode{cumulusvpn/\allowbreak{}gateway/\allowbreak{}internal/\allowbreak{}entitle/\allowbreak{}entitle.go}{1--5,218--287}.
+
+\textbf{There is no account, no token and no server-issued credential.} The WireGuard public key
+\emph{is} the credential: the gateway checks the key it already sees on the tunnel against the map it
+derived from the chain \srccode{cumulusvpn/\allowbreak{}gateway/\allowbreak{}internal/\allowbreak{}api/\allowbreak{}api.go}{246,374}. Authentication runs
+in the other direction only --- the control API signs every response body with an ed25519 key derived
+from the gateway's own WireGuard private key, so a client that learned the public key through
+discovery can verify the responder without a TLS certificate
+\srccode{cumulusvpn/\allowbreak{}gateway/\allowbreak{}internal/\allowbreak{}api/\allowbreak{}api.go}{563--585}. One payment covers every gateway,
+including both hops of a multi-hop path, because entitlement is keyed by the client's key on all of
+them \srcdoc{cumulusvpn/docs/11-multihop.md:47--58}. This is a deployed instance of ``payment is the
+account'', which the roadmap lists as a future item \srcroadmap{Q4 2026}; it is not a plan, it is
+running (conflict C19).
+
+\begin{construction}[\textsc{derive-entitlement} --- the gateway chain scanner, \shipped]
+\label{alg:cvpn}
+\emph{Inputs.} A transaction source exposing \texttt{BlockCount} and \texttt{AddressTxs} (the host
+node's daemon proxy, falling back to a public explorer); the payment address $A$; the price $P$ in
+FLUX per \qty{30}{\day} period; an optional snapshot at \texttt{/\allowbreak{}data/\allowbreak{}entitle.\allowbreak{}state}.\quad
+\emph{State.} $\mathsf{paidUntil} : \mathsf{code} \to \text{time}$, plus a scan cursor.
+\begin{enumerate}\setlength{\itemsep}{1pt}
+\item Backfill from the stored cursor, or from height $0$ if there is none.
+\item Every \qty{15}{\second}, read \texttt{BlockCount}; on a new height, fetch the new transactions
+      paying $A$.
+\item Accept a transaction iff it carries exactly one \texttt{CVPN1:} memo and
+      $30\,(v + 10^{-9}) \ge P$, i.e.\ at least one day's worth
+      \srccode{cumulusvpn/\allowbreak{}gateway/\allowbreak{}internal/\allowbreak{}entitle/\allowbreak{}entitle.go}{270--287,296--323}.
+\item Grant $\lfloor 30 v / P \rfloor$ days, stacking onto any existing
+      $\mathsf{paidUntil}[\mathsf{code}]$, capped at $\text{now} + \qty{720}{\day}$
+      \srccode{cumulusvpn/\allowbreak{}gateway/\allowbreak{}internal/\allowbreak{}entitle/\allowbreak{}entitle.go}{34--36,218--268}.
+\item Checkpoint immediately on a real grant, otherwise at most once per \qty{60}{\second}; treat the
+      snapshot as pure cache and discard it on any version, address or price mismatch
+      \srccode{cumulusvpn/\allowbreak{}gateway/\allowbreak{}internal/\allowbreak{}entitle/\allowbreak{}snapshot.go}{14,29--31}.
+\item Every \qty{15}{\second}, re-derive each enrolled peer's tier and retune its rate limiter in
+      place, so a payment takes effect on in-flight flows with no reconnect
+      \srccode{cumulusvpn/\allowbreak{}gateway/\allowbreak{}internal/\allowbreak{}limiter/\allowbreak{}limiter.go}{105--123}.
+\end{enumerate}
+\emph{Invariant.} $\mathsf{paidUntil}$ is a pure function of the confirmed transaction history of $A$;
+two gateways with the same view of the chain and the same $(A,P)$ derive identical maps without
+exchanging a message. Changing $P$ invalidates every cached snapshot by construction (step~5).\quad
+\emph{Failure modes.} If the route to chain data is absent, the engine distinguishes ``route absent''
+from ``no payments'' and retains the previous map rather than demoting every paying peer
+\srcdoc{cumulusvpn/docs/03-gateway.md:135--138}. If \texttt{/data} is unwritable, the snapshot and the
+peer table are lost on restart; a statically issued configuration then cannot re-enroll
+\srccode{cumulusvpn/\allowbreak{}gateway/\allowbreak{}internal/\allowbreak{}wg/\allowbreak{}peercache.go}{17--24,47--51}. A migration of the gateway
+instance to another node changes the server key and address, which invalidates an already-issued
+configuration --- unavoidably so \srcdoc{cumulusvpn/docs/03-gateway.md:95--97}.
+\end{construction}
+
+\paragraph{The caveat that travels with it.}
+Payment and usage are \textbf{linkable}. The memo is a one-way hash of the public key, but the
+gateway a user enrolls with learns the real public key, recomputes the hash, and can then find the
+paying address on a public chain. The repository states this itself as a known, unmitigated gap, with
+payment-key indirection and blind-signature vouchers named as the intended fixes
+\srcdoc{cumulusvpn/docs/04-payments.md:81--87}. \CumulusVPN is therefore simultaneously the best
+existing demonstration of direct settlement and a concrete, shipped instance of the problem
+Section~21 takes up: the network must be convinced that a workload is funded while learning neither
+payer nor workload. Section~21 is written against this system, not against a hypothetical one.
+
+\subsubsection{The defect on this path, stated as a requirement}
+
+\begin{property}[Silent underpayment]
+\label{prop:silentunderpay}
+\shipped. If a registration's confirmed payment satisfies $v^{\mathrm{obs}} < \price$, the promotion
+routine emits a log warning and drops the registration. No error is surfaced to the payer, no retry
+is scheduled, and no refund path exists in the code
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMessaging/\allowbreak{}messageVerifier.js}{735--763}; the update path
+behaves identically \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMessaging/\allowbreak{}messageVerifier.js}{797--828}.
+The funds are spent and the deployment does not exist.
+\end{property}
+
+\begin{proof}[Proof sketch]
+By inspection of the promotion routine: the price comparison is the last gate before
+\texttt{insert\allowbreak{}App\allowbreak{}Specifications}, and its false branch is a \texttt{log.warn} with no message emitted
+on the P2P channel and no HTTP response outstanding to write to --- the tenant's only synchronous
+interaction ended at step~2 of Construction~\ref{alg:settle}. From the payer's side the observable
+state is indistinguishable from ``the message never propagated''.
+\end{proof}
+
+For a human tenant this is a support ticket. For an autonomous agent with nobody to escalate to it is
+an unrecoverable silent failure, and it sits on exactly the path this paper recommends agents use.
+That asymmetry, not the size of the loss, is what makes it the most important correctness gap in
+Part~A.
+
+\begin{remark}[Requirement R16.1 --- signed negative acknowledgement]
+\label{req:nack}
+Any node that declines to promote a registration or update for insufficient payment shall emit a
+signed message
+$\mathsf{nack} = (\mathsf{hash}, \hgt, \mathsf{txid}, \price^{\mathrm{req}}, v^{\mathrm{obs}},
+\mathsf{reason})$
+over the existing signed-envelope P2P channel, retrievable by hash from any node's read API. Three
+properties are required and one is explicitly \emph{not}: the message must be verifiable against the
+deterministic node list under the same rule as every other broadcast; it must carry both the computed
+price and the observed payment, so the tenant can locate the discrepancy without a second round trip;
+and it must be emitted on the same condition that triggers the drop, so that absence of a
+\textsf{nack} is informative. Quorum is \emph{not} required: because $\price$ is a deterministic
+public function of the chain (Definition~\ref{def:price}), a single valid \textsf{nack} from any
+confirmed node is actionable evidence that the tenant can re-derive itself. The construction is
+cheap; its absence is what makes Invariant~\ref{inv:nosilent} below fail on Part~A today.
+\end{remark}
+
+% =====================================================================
+\subsection{Part B --- A service built on \Flux, and the credits layer that lives outside it}
+\label{sec:paying:credits}
+
+This part contains two kinds of object, a reader must not merge them, and \textbf{neither of them is
+part of \Flux}. Section~\ref{sec:paying:facilitator} is \shipped and is written in the present tense
+because it runs: a centralized payment service, operated by InFlux Technologies
+\srcintent{08-answers-round-2.md, round 3}, through which a person signs in with an email address,
+pays by card, and has a deployment registered, funded and renewed for them. It is not a credit
+account. It holds no user balance, offers no withdrawal, and keeps no record for longer than six
+days; what it does hold is both of the user's private keys, which the user never sees
+\srcintent{08-answers-round-2.md, round 5}, and that is the subject of the subsection. Nearly every
+fact stated there carries code provenance and the one that does not says so; and every one of them is
+a fact about the operator's service rather than about the network, because the chain cannot observe
+the service and does not depend on it (Property~\ref{prop:chainindifferent}). Section~\ref{sec:paying:creditspec} is \planned and is
+written in the conditional: the deposited balance and lifecycle state machine a credits layer would
+require, retained here as a specification because it is the object Section~\ref{sec:migration}'s dependency list waits
+on, and marked throughout as unimplemented. Nothing in the second subsection describes the first.
+
+\begin{remark}[Requirement R16.2 --- inherited from Section~7]
+\label{req:pnr}
+Section~7 exports one hard requirement to this section: after PNR activation at $\hpa$, every
+application-hosting charge, \emph{whatever the payment channel}, must settle as exactly one PNR
+transaction on L1, or the consensus-enforced split is void. A credit balance may therefore not become
+an off-chain ledger of hosting charges; each charge it authorises must appear on-chain as one
+settlement. This constrains the construction below at every point and is the reason
+Invariant~\ref{inv:conservation} is stated as a conservation law rather than as bookkeeping. A second
+requirement runs the other way: any balance forfeited on eviction must not be routed into the fee
+pool $\pool$, or evicting a tenant becomes directly profitable for the fleet that votes (Section~23).
+The operator's service already satisfies the first requirement by construction --- it settles each
+card charge as exactly one transaction to the sink address (Construction~\ref{alg:prepay}, step~4)
+--- which is worth recording, because it means a convenience layer of this shape does not obstruct
+PNR. That is a statement about one operator's implementation, not a guarantee the protocol extracts
+from any service built over it; the requirement binds the settlement shape, and any service that
+violates it simply fails to produce a funded deployment.
+\end{remark}
+
+\subsubsection{What runs on top: a third-party prepay-and-forward payment facilitator}
+\label{sec:paying:facilitator}
+
+\begin{assumption}[Environment of a third-party payment service]
+\label{asm:custodial}
+In addition to Assumption~\ref{asm:settle}: (i) the facilitator is a single administrative party
+operating server-side infrastructure outside the \FluxNode set, so Section~2's adversary model does
+not cover it --- a node honest under that model stays honest while the facilitator misbehaves, and
+the converse; (ii) the facilitator authenticates users by email PIN or by Google/Apple OAuth through
+a hosted identity provider \srccode{console-api/\allowbreak{}src/\allowbreak{}services/\allowbreak{}auth/\allowbreak{}pin.ts}{4--7}
+\srccode{fluxos-frontend/\allowbreak{}src/\allowbreak{}utils/\allowbreak{}firebase.js}{53--142}, and that authentication is orthogonal to
+every key the network verifies; (iii) no consensus rule, on-chain record or contract binds the
+facilitator's behaviour --- all of it is server-side code and operational discipline; (iv) the
+network is not a party to the arrangement and takes no view of it: the accept/reject decision of
+Construction~\ref{alg:settle} is invariant under the substitution of the facilitator for the tenant,
+so no node can tell that a service was involved (Property~\ref{prop:chainindifferent}, proved below).
+Clause (iii) is a trust assumption of exactly the kind Section~2 inventories, and it is carried in
+Section~23 as a centralization surface \emph{of this service}; clause (iv) is why it is not a
+centralization surface of the network.
+\end{assumption}
+
+\begin{definition}[Third-party custodial payment facilitator]
+\label{def:facilitator}
+Write $\mathrm{addr}(\cdot)$ for the address derived from a public key and $\mathrm{owner}(\app)$ for
+the address carried in $\app$'s \texttt{owner} field. A \emph{facilitator} $\mathcal{F}$ is a
+commercial operator --- here InFlux Technologies \srcintent{08-answers-round-2.md, round 3} ---
+running server-side infrastructure outside the \FluxNode set and holding, for each user $u$ it
+serves, two private keys generated server-side at account creation and never disclosed to $u$
+\srccode{console-api/\allowbreak{}src/\allowbreak{}services/\allowbreak{}flux/\allowbreak{}keypair.ts}{20--27}
+\srcintent{08-answers-round-2.md, round 5}:
+\begin{itemize}\setlength{\itemsep}{1pt}
+\item an \emph{identity} key $sk^{\mathrm{id}}_u$ over secp256k1, whose P2PKH address
+$\mathrm{addr}(pk^{\mathrm{id}}_u)$ --- the user's ZelID --- is written into the \texttt{owner} field
+of every specification $\mathcal{F}$ registers for $u$, and which signs the off-chain register
+message;
+\item a \emph{payment} key $sk^{\mathrm{pay}}_u$ on the \Flux transparent network, used to build and
+broadcast on-chain transactions.
+\end{itemize}
+Write $K_u = (sk^{\mathrm{id}}_u, sk^{\mathrm{pay}}_u)$. $K_u$ is held \emph{in trust}: it is
+generated by the operator, it stays with the operator, and $u$ is never shown either member of it
+\srcintent{08-answers-round-2.md, round 5}. Both members are stored
+AES-256-GCM-encrypted at rest and WIF-encoded, and both are decrypted in the serving process
+whenever a signature or a transaction is required
+\srccode{console-api/\allowbreak{}src/\allowbreak{}db/\allowbreak{}models/\allowbreak{}FluxIdentity.ts}{13--28}; at most one active identity exists per
+account, enforced by a unique index \srccode{console-api/\allowbreak{}src/\allowbreak{}db/\allowbreak{}models/\allowbreak{}FluxIdentity.ts}{40--43}.
+$\mathcal{F}$ additionally holds a set $\mathcal{H} = \{h_{\mathrm{fiat}}, h_{\mathrm{free}},
+h_{\mathrm{ren}}\}$ of three operator hot wallets, from which every registration and renewal it
+performs is funded. Its durable per-payment record is
+\[
+r \;=\; \bigl(H(m_\app),\; v^{\mathrm{sat}},\; v^{\mathrm{usd}},\; t\bigr)
+\;\in\; \{0,1\}^{256} \times \mathbb{Z}_{\ge 0} \times \mathbb{Q}_{\ge 0} \times \mathbb{N},
+\]
+keyed by \emph{application-message hash} rather than by user, carrying the satoshi amount settled on
+chain and the USD amount charged to the card, and subject to a time-to-live index
+$T_{\mathrm{rec}} = \qty{518400}{\second} = \qty{6}{\day}$ on every collection
+\srccode{appsmonitor/\allowbreak{}config/\allowbreak{}default.js}{33}
+\srccode{appsmonitor/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appsFreeUpdatesMonitor.js}{67--71}. \textbf{There is no further
+state.} In particular the record carries no user-held quantity, and the balance $b_u$ and lifecycle
+label of Definition~\ref{def:creditstate} below have no referent here
+(Property~\ref{prop:nobalance}).
+\end{definition}
+
+\begin{definition}[Prepay-and-forward settlement]
+\label{def:prepayforward}
+Let $\mathrm{bal} : \mathcal{H} \to \mathbb{Z}_{\ge 0}$ give the operator wallets' balances in
+$\sat$. For a registration or renewal of $\app$ for user $u$ at height $\hgt$, the settlement action
+of $\mathcal{F}$ is: charge $u$'s card instrument, held at the payment processor and not at \Flux,
+for the corresponding USD amount; then broadcast one transaction from some $h \in \mathcal{H}$,
+\[
+\mathrm{Pay}_{\mathcal{F}}(u,\app,\hgt):\quad
+\mathrm{bal}(h) \;\longmapsto\; \mathrm{bal}(h) - \price(\app,\ninst_\app,\dur_\app,\hgt);
+\]
+then acknowledge the charge to the processor as fulfilled. The debit falls on the \emph{operator's}
+wallet. No user-held quantity is decremented, because none exists. This is the precise sense in
+which the service is a \emph{prepay-and-forward payment facilitator} rather than a credit
+account: value moves card~$\to$~operator and operator~$\to$~chain, never
+card~$\to$~user~balance~$\to$~chain. Only the second leg is visible on chain, and it is visible as an
+ordinary payment from an ordinary key.
+\end{definition}
+
+\begin{definition}[Discretionary free hosting]
+\label{def:freehosting}
+$\mathcal{F}$ also funds some applications from $\mathcal{H}$ with no card charge at all. Eligibility
+is a predicate $\mathrm{Free}$ on the set of deployed applications, evaluated by the operator's own
+daemon and by nothing else,
+\[
+\mathrm{Free}(\app) \;\defeq\;
+\indic{\app \in \mathsf{A}_{\mathrm{orb}}} \;\vee\;
+\indic{\mathrm{owner}(\app) \in \mathsf{A}_{\mathrm{ren}}} \;\vee\;
+\indic{\mathrm{owner}(\app) \in \mathsf{A}_{\mathrm{paid}}} \;\vee\;
+\mathrm{Cap}(\app),
+\]
+where $\mathsf{A}_{\mathrm{orb}}$ is a hardcoded list of nine grandfathered application names
+\srccode{appsmonitor/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appsMonitor.js}{36--46}; $\mathsf{A}_{\mathrm{ren}}$ a hardcoded
+owner allowlist whose applications are renewed from $h_{\mathrm{ren}}$ once the adjusted expiry
+falls within four days \srccode{appsmonitor/\allowbreak{}config/\allowbreak{}default.js}{60--72}
+\srccode{appsmonitor/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appsMonitor.js}{308,437--445}; $\mathsf{A}_{\mathrm{paid}}$ a
+hardcoded two-address allowlist whose applications are subsidised in full and indefinitely
+\srccode{appsmonitor/\allowbreak{}config/\allowbreak{}default.js}{92--94}
+\srccode{appsmonitor/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appsPaidForOwnersMonitor.js}{78--90}; and $\mathrm{Cap}(\app)$
+holds iff $\app$ runs the single image \texttt{runonflux/\allowbreak{}orbit:latest} in one component at one
+instance with $r^{\mathrm{cpu}} \le 0.5$ vCPU, $r^{\mathrm{ram}} \le \qty{1000}{\mega\byte}$ and
+$r^{\mathrm{hdd}} \le \qty{5}{\giga\byte}$, and its owner runs no other such application
+\srccode{appsmonitor/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appsMonitor.js}{137--148,159--180}. A separate rule funds a
+zero-price update --- one whose price delta is zero and whose requested expiry extension is at most
+11 blocks --- at a flat \num{0.02}\flux from $h_{\mathrm{free}}$, after a \qty{2}{\minute} settle
+delay \srccode{appsmonitor/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appsFreeUpdatesMonitor.js}{133--137,157,174}
+\srccode{appsmonitor/\allowbreak{}src/\allowbreak{}services/\allowbreak{}fluxService.js}{364--367}; and a further rule pays one month for
+applications matching a marketplace listing
+\srccode{appsmonitor/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appsMarketplaceFreeFirstMonth.js}{342--344}. Every set and
+constant above is operator-side configuration: none is on chain, none is user-settable, and no
+appeal path exists.
+\end{definition}
+
+\begin{construction}[\textsc{prepay-forward} --- custodial registration, payment and renewal, \shipped]
+\label{alg:prepay}
+\emph{Inputs.} A user $u$ authenticated to $\mathcal{F}$ under Assumption~\ref{asm:custodial}(ii); a
+specification $\app$; a card instrument, either a one-off checkout session or a stored
+subscription.\quad
+\emph{State.} $K_u$ and $\mathcal{H}$ as in Definition~\ref{def:facilitator}; the per-payment records
+under $T_{\mathrm{rec}}$; the chain.
+\begin{enumerate}\setlength{\itemsep}{1pt}
+\item $\mathcal{F}$ decrypts $sk^{\mathrm{id}}_u$ in process and signs $m_\app$, whose \texttt{owner}
+      field is $\mathrm{addr}(pk^{\mathrm{id}}_u)$
+      \srccode{console-api/\allowbreak{}src/\allowbreak{}db/\allowbreak{}models/\allowbreak{}FluxIdentity.ts}{13--28}. In the legacy stack the
+      equivalent step is a remote call that returns both a ZelID address and a signature over a
+      network-issued login phrase, which \FluxOS's own \texttt{verifylogin} then accepts
+      \srccode{fluxos-frontend/\allowbreak{}src/\allowbreak{}@core/\allowbreak{}components/\allowbreak{}Login.vue}{1039--1104}.
+\item The signed message is submitted to a node exactly as in step~2 of
+      Construction~\ref{alg:settle}; the node returns $H(m_\app)$ and nothing else.
+\item The card is charged in USD.
+\item A polling loop enumerates message hashes for which a card charge exists and an on-chain
+      payment does not, computes $\price$ by Definition~\ref{def:price}, broadcasts \emph{one}
+      transaction from $h_{\mathrm{fiat}}$ to the deployment sink carrying $H(m_\app)$ in
+      \texttt{OP\_RETURN}, and acknowledges the charge
+      \srccode{appsmonitor/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appsPaidWithFiatMonitor.js}{93--190}
+      \srccode{appsmonitor/\allowbreak{}src/\allowbreak{}services/\allowbreak{}fluxService.js}{345--362}.
+\item Promotion proceeds exactly as in steps~4--5 of Construction~\ref{alg:settle}. No node
+      distinguishes this payment from any other.
+\item \emph{Renewal.} Every \qty{3600}{\second} the facilitator reads each active subscription's
+      application from global state, computes the \PoN-adjusted remaining lifetime, and when
+      $e_\app - \hgt < \Delta_{\mathrm{adv}} = \num{8640}$ blocks ($\approx$ \qty{3}{\day} at
+      \qty{30}{\second}) triggers a card charge; the pending-payment loop then repeats steps~4--5
+      every \qty{60}{\second}
+      \srccode{appsmonitor/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appsSubscriptionRenewalMonitor.js}{112--368,379--460,566--568}.
+      The renewed term defaults to \num{88000} blocks and is capped at \num{1056000}
+      \srccode{appsmonitor/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appsSubscriptionRenewalMonitor.js}{18,213}.
+\end{enumerate}
+\emph{Invariant.} At every height, $\mathrm{Ent}(\app,\hgt)$ (Definition~\ref{def:expiry}) is the
+same function of the confirmed chain prefix as on Part~A. The facilitator changes \emph{who signs}
+and \emph{who pays}; it does not change how the network decides, and it cannot, because every step
+above is a step of Construction~\ref{alg:settle} executed by a different party
+(Property~\ref{prop:chainindifferent}).\quad
+\emph{Failure modes.} (a) The card charge fails: a loop reads the processor's failure list every
+\qty{21600}{\second} and, with a per-subscription cooldown of \qty{24}{\hour}, emails the
+application's contact address; that is the entire remedy, and no code path revives an application
+once expired \srccode{appsmonitor/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appsSubscriptionRenewalMonitor.js}{19,463--575}.
+(b) A renewal loop stops or is stopped: it fails closed to \emph{unrenewed}, and the application
+expires by Definition~\ref{def:expiry} exactly as an unfunded direct-settlement one would.
+(c) $t > T_{\mathrm{rec}}$: the on-chain payment persists and is public, but the operator-side
+association between a card charge and an application ceases to exist.
+(d) Underpayment: Property~\ref{prop:silentunderpay} applies unchanged, with the loss falling on
+$h_{\mathrm{fiat}}$ rather than on the user \srcinferred.
+\end{construction}
+
+\begin{property}[Custodial signing and spending authority]
+\label{prop:custody}
+\shipped. For every user $u$ served by $\mathcal{F}$, the facilitator can (i) produce a valid
+signature under $pk^{\mathrm{id}}_u$ over any message --- including any \texttt{appregister},
+\texttt{appupdate} or expire message naming $u$'s address in the \texttt{owner} field --- and
+(ii) spend any output controlled by $pk^{\mathrm{pay}}_u$; in both cases without a counter-signature
+from $u$ and without $u$ being online. No threshold, policy engine, hardware element or second
+factor stands between the serving process and either key. The correct description of $u$'s position
+is therefore not that $u$ delegates authority to $\mathcal{F}$, but that \textbf{$\mathcal{F}$ is
+the key holder and $u$ authenticates to it.}
+\end{property}
+
+\begin{proof}[Proof sketch]
+For the current stack, by direct inspection: both private keys live in one record, encrypted under a
+service-held master key with associated data the service itself supplies, and are decrypted in the
+same worker that signs and broadcasts
+\srccode{console-api/\allowbreak{}src/\allowbreak{}db/\allowbreak{}models/\allowbreak{}FluxIdentity.ts}{13--28}. Encryption at rest binds use of the key
+to possession of the master key, not to any act of $u$; a key-provider abstraction with a
+self-hosted KMS backend exists and hardens that binding without changing it \inprogress
+\srccode{console-api/\allowbreak{}src/\allowbreak{}lib/\allowbreak{}crypto/\allowbreak{}keys.ts}{63--286}. For the legacy stack the conclusion follows
+from the observed protocol rather than from a read of the signer, which is not in the corpus: the
+login path sends a network-issued login phrase to a remote service and receives back both a ZelID
+address and a signature over that phrase which \texttt{verifylogin} accepts
+\srccode{fluxos-frontend/\allowbreak{}src/\allowbreak{}@core/\allowbreak{}components/\allowbreak{}Login.vue}{1039--1104}; producing that signature
+requires the corresponding private key, so the service holds it \srcinferred.
+\end{proof}
+
+\begin{corollary}[There is nothing to delegate from, so Section~17 does not reach this path]
+\label{cor:nodelegation}
+\shipped. On this path the delegation object of Section~17 --- a principal $\principal$ granting an
+agent $\agent$ a scope $\scopeset$ under a budget $\budget$ --- has no instantiation, because
+$\principal$ never holds the key from which authority would be delegated. The correct reading is not
+that Section~17's mechanism is present but unenforced here; it is that the mechanism has nowhere to
+attach, and no certificate construction can bound an authority its putative grantor does not hold.
+Section~19 identifies the same architecture behind its operator-signing path and observes that a
+bearer token there is bounded by nothing; Property~\ref{prop:custody} sharpens that: the token does
+not confer authority, it authenticates the user to the party that already holds it. Whatever bounds
+that path is therefore operator-side policy, not a protocol mechanism, and this paper specifies none
+for it. Section~19's local-signing path --- \SSP and Zelcore, where the signature is produced on the
+user's own device --- is the path Section~17 is written for, and every property proved there
+continues to hold there.
+\end{corollary}
+
+\begin{property}[No balance, no withdrawal, no durable record]
+\label{prop:nobalance}
+\shipped. In the deployed facilitator: (i) no field of the data model denotes a user-held quantity
+of FLUX or of fiat, the record being keyed per application-message hash rather than per user
+(Definition~\ref{def:facilitator}); (ii) every collection carries a TTL index of
+$T_{\mathrm{rec}} = \qty{6}{\day}$, so no payment record older than six days exists
+\srccode{appsmonitor/\allowbreak{}config/\allowbreak{}default.js}{33}; (iii) a targeted search of the three repositories that
+implement the path found no code path returning FLUX or fiat to a user, hence no withdrawal
+\srccode{appsmonitor, fluxos-frontend, console-api}{targeted search, no match}; (iv) the newer
+stack's billing endpoint aggregates an on-chain wallet balance with two read-only legacy sources and
+marks unconfirmed deposits \texttt{shadow:\allowbreak{}true, credited:\allowbreak{}false} so that they are never summed into a
+spendable balance, and exposes no write path at all \inprogress
+\srccode{console-api/\allowbreak{}src/\allowbreak{}routes/\allowbreak{}billing.ts}{44--61,63--165}. Consequently $b_u$ of
+Definition~\ref{def:creditstate} has no deployed referent, and neither has any state in
+$\{\textsf{funded},\textsf{grace},\textsf{suspended},\textsf{evicted}\}$.
+\end{property}
+
+\unsupported{A repository named \texttt{withdrawalservice} exists, with a generic claim-intake schema
+(\texttt{coin}, \texttt{network}, \texttt{address}, optional \texttt{fluxid}) that reads as a
+multi-product claim path rather than as this layer's ledger
+\srccode{withdrawalservice/\allowbreak{}src/\allowbreak{}controllers/\allowbreak{}claimController.js}{1--58}. Whether it is wired to the
+facilitator at all was not determined. Property~\ref{prop:nobalance}(iii) is the result of a negative
+search across the three implementing repositories and must be re-checked against that service before
+publication.}
+
+\begin{property}[Payer and owner are independent]
+\label{prop:payersep}
+\shipped. The promotion test of Construction~\ref{alg:settle} is a function of the paying
+transaction's \emph{outputs} only: recognition is by output address and by the temporary-message
+hash decoded from \texttt{OP\_RETURN}, and the amount is the sum of \texttt{valueSat} over matching
+outputs \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}explorerService.js}{309--345}. No input, and no property
+of the spending key, is examined. Hence for any application $\app$, the party that pays
+$\price(\app,\ninst,\dur,\hgt)$ need not be the party whose key signs $m_\app$ and appears in the
+\texttt{owner} field.
+\end{property}
+
+\begin{proof}[Proof sketch]
+The register message is authenticated by the owner's signature at step~2 of
+Construction~\ref{alg:settle} and carries no payer field; the payment is authenticated by nothing
+beyond being confirmed on chain, and is bound to the message only through the hash in its
+\texttt{OP\_RETURN}. The two authentications are therefore over disjoint objects, and the promotion
+routine composes them without a cross-check. The converse capability --- a third party altering an
+owner's expiry --- exists only through the separate hardcoded \texttt{usersToExtend} allowlist
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{229}, which is a distinct mechanism and is not needed here.
+\end{proof}
+
+Property~\ref{prop:payersep} is why the custody of Property~\ref{prop:custody} is not forced by the
+protocol. Fronting the FLUX for a tenant --- the economically useful half of what $\mathcal{F}$ does
+--- requires only the ability to broadcast one transaction naming a message hash. Holding the
+tenant's identity key --- the half that carries the trust --- is what card checkout and email login
+currently require, not what payment requires. The two halves are separable in the deployed protocol
+today; nothing in the corpus separates them. The same fact, read the other way, gives the property
+that fixes this subsection's place in the paper.
+
+\begin{property}[The chain is indifferent to the service]
+\label{prop:chainindifferent}
+\shipped. Fix an application $\app$, a duration $\dur$ and a height $\hgt_0$. Consider two executions
+of Construction~\ref{alg:settle}: one in which $u$ signs $m_\app$ on their own device and broadcasts
+the paying transaction, and one in which $\mathcal{F}$ signs under $K_u$ and broadcasts from
+$h_{\mathrm{fiat}} \in \mathcal{H}$ (Construction~\ref{alg:prepay}). If both signatures verify
+against $\mathrm{owner}(\app)$ and both payments satisfy $v^{\mathrm{obs}} \ge \price$, then every
+node's observable behaviour is identical in the two executions: the same message is stored, the same
+$e_\app$ is computed, and $\mathrm{Ent}(\app,\cdot)$ is the same function. Consequently, across the
+registration, promotion, pricing and entitlement paths --- which are the whole of what a node does
+with an application payment --- no consensus rule, no \FluxOS validation step and no piece of node
+state distinguishes a registration made through a payment service from one made by a tenant alone.
+The service is invisible to the protocol, and the protocol's guarantees neither improve nor degrade
+in its presence.
+\end{property}
+
+\begin{proof}[Proof sketch]
+Three inputs, each already established. (a) Promotion is a function of the paying transaction's
+outputs only --- recognition by output address, amount by summing \texttt{valueSat} over matching
+outputs, binding by the hash decoded from \texttt{OP\_RETURN} --- and examines no input and no
+property of the spending key (Property~\ref{prop:payersep}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}explorerService.js}{309--345}). So the identity of the broadcaster
+is not an input to any node's decision. (b) The register message is admitted on verification of a
+signature against the address in the \texttt{owner} field
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appDatabase/\allowbreak{}registryManager.js}{1714--1888}; signature
+verification is a predicate on $(\text{message}, \text{signature}, \text{address})$ and takes no
+argument describing who holds the corresponding private key, so it cannot separate the two
+executions. (c) $\price$ and $e_\app$ are functions of $(\app, \ninst, \dur, \hgt_0)$ alone
+(Definitions~\ref{def:price} and~\ref{def:expiry}), and none of those four is a property of the payer
+or the signer. The two executions therefore agree on every input to every node-side decision, hence
+on every output. The argument is a statement about what the deployed code reads, not about what it
+intends to permit; it would be falsified by any node-side branch on payer identity, and none exists
+in the cited paths.
+\end{proof}
+
+This is the property that fixes what the rest of the subsection is about. The service of
+Definition~\ref{def:facilitator} is not a \Flux capability with a trust caveat attached; it is a
+company's product sitting on top of a settlement path that would work exactly the same way if the
+company shut it down tomorrow. Everything enumerated below is therefore a fact about that product.
+None of it is a fact about \Flux, and a reader assessing the network's trust model should discount
+all of it.
+
+\paragraph{The trust surface of the operator's service, enumerated.}
+Each item is a property of the operator's service only. None of it is a property of \Flux, and none
+of it applies to Part~A. Items~1--5 are \shipped on code provenance; item~6 rests on a stated
+behaviour and says so.
+
+\begin{enumerate}\setlength{\itemsep}{2pt}
+\item \textbf{The operator can sign and spend as the user.} Property~\ref{prop:custody}. There is no
+counter-signature, no bound on what may be signed, and no user-side revocation --- revoking would
+require holding a key the user does not have.
+
+\item \textbf{The operator decides unilaterally who is hosted for free.}
+Definition~\ref{def:freehosting}: three hardcoded allowlists and one resource-cap rule, all in
+operator-side configuration. A user cannot read the lists, cannot appeal an exclusion, and cannot
+determine from the chain why one application renews for free and another does not; no appeal path
+exists in code \srccode{appsmonitor}{targeted search, no match}.
+
+\item \textbf{On payment failure the only remedy is email.} Construction~\ref{alg:prepay}, failure
+mode (a): a message to the application's contact address, rate-limited to one per \qty{24}{\hour} per
+subscription, with no in-band signal, no user override, and no path that revives an expired
+application \srccode{appsmonitor/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appsSubscriptionRenewalMonitor.js}{19,463--575}.
+
+\item \textbf{The record of what was paid does not survive a week.}
+$T_{\mathrm{rec}} = \qty{6}{\day}$ on every collection \srccode{appsmonitor/\allowbreak{}config/\allowbreak{}default.js}{33}.
+The on-chain leg is permanent and public; the association between it and a card charge is neither.
+
+\item \textbf{Every owner-keyed capability runs through the custodian.} Because
+$\mathrm{addr}(pk^{\mathrm{id}}_u)$ is the specification's \texttt{owner}
+(Definition~\ref{def:facilitator}), update, expire, and any future mechanism that reads the owner
+field are exercisable by $\mathcal{F}$ and not by $u$.
+
+\item \textbf{A lapse destroys the data, and only the operator can avert it.} Application data at
+expiry is always deleted: expiry removes the application from the network and nothing --- volumes
+included --- is retained past $e_\app$ \srcintent{08-answers-round-2.md, round 5}. That behaviour is
+the network's and is the same on Part~A, where a tenant can always avert it by signing one more
+message and paying for it. Here they cannot: a renewal requires a signature under
+$pk^{\mathrm{id}}_u$ (Construction~\ref{alg:settle}, step~2), which only $\mathcal{F}$ can produce
+(Property~\ref{prop:custody}), so a declined card and an unread dunning email are together sufficient
+to destroy a tenant's data with no action the tenant can take. That composition of item~3 with
+deletion, rather than deletion itself, is the trust surface.
+\end{enumerate}
+
+\noindent The deletion behaviour in item~6 is stated by the team as current and unconditional
+\srcintent{08-answers-round-2.md, round 5}; no file in this extraction was read that establishes it
+independently, so it carries intent provenance and is not tagged \shipped. It is nonetheless a
+definite answer and it replaces the \emph{Unclear} this list previously carried. Note that
+Invariant~\ref{inv:datasurvives} (``data survives suspension'') remains a property of the
+unimplemented layer of Section~\ref{sec:paying:creditspec} alone and must not be read across: on
+every deployed path, expiry deletes.
+
+\paragraph{A consequence for Section~23.}
+This is the one place where a service outside the protocol leaves a mark inside it. Because
+$\mathrm{addr}(pk^{\mathrm{id}}_u)$ is written into the specification's \texttt{owner} field
+(Definition~\ref{def:facilitator}), some fraction of the network's nominal application owners are
+operator-held keys standing for many unrelated users rather than end users. The measured owner
+distribution is consistent with this: one owner identity holds \num{246} of the \num{1195} deployed
+applications, \qty{20.6}{\percent} of the set
+\srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}. The measurement cannot
+distinguish a custodian from a single large tenant, and this paper does not claim which it is. What
+follows regardless is a constraint on every mechanism keyed on ``the owner'': the
+owner-concentration statistics of Section~23, moderation standing, and the delegation object of
+Section~17 all read a field that may name a service rather than a party, and each must say which it
+means. For Section~17 the resolution is already fixed by Corollary~\ref{cor:nodelegation}: wherever
+that field names an operator, there is no principal-held key, and the delegation object does not
+apply rather than applying weakly.
+
+\paragraph{Whose service this is.}
+The framing used throughout this subsection is the team's own, and it is both cleaner and more
+accurate than treating custody as a \Flux option with a caveat: \textbf{the user never sees the key;
+it is server-held in trust; and this is a centralized service run by a third-party operator, not a
+feature of the chain} \srcintent{08-answers-round-2.md, round 5}. The paper adopts it without apology
+and without criticism, because it is what makes the central claim precise rather than defensive.
+Part~A is the protocol's settlement path: trustless, shipping today in two independent forms, and an
+autonomous agent uses it and meets none of the trust surface above --- no account, no card, no email
+address, no operator (Property~\ref{prop:nostanding}, Invariant~\ref{inv:pathindep}). What the
+service buys is card payment and the removal of key management for humans; it buys no access that
+direct settlement does not already give, and by Property~\ref{prop:chainindifferent} the network
+cannot tell whether it exists. The team describes it as a good middle step until an on-chain
+mechanism exists \srcintent{08-answers-round-2.md, round 3}.
+
+The observable direction of travel inside the operator's own stack is currently toward consolidating
+custody rather than away from it, and the paper records that beside the stated intent rather than in
+place of it: one identity per account, one unified read-only balance view, and a key-provider
+abstraction that hardens how the held key is protected without removing custody \inprogress
+\srccode{console-api/\allowbreak{}src/\allowbreak{}lib/\allowbreak{}crypto/\allowbreak{}keys.ts}{63--286}
+\srccode{console-api/\allowbreak{}src/\allowbreak{}routes/\allowbreak{}billing.ts}{63--165}.
+
+\begin{remark}[The operator's option, which is not a protocol matter]
+\label{rem:operatoroption}
+The operator may choose to expose $K_u$ to users --- that is, to stop being a custodian --- and
+states that it may \srcintent{08-answers-round-2.md, round 5}. That would be a change to one
+company's product and to nothing else: no consensus rule, no \FluxOS release and no \appspec field
+would move, and by Property~\ref{prop:chainindifferent} the network could not observe the difference
+either before or after. This paper records the option, attributes the decision to the operator, and
+does not track it. Nothing in Part~A, in Section~17 or in Section~19 depends on which way it goes.
+\end{remark}
+
+\settlednote{A non-custodial construction offering the same convenience is not designed here, and
+after \Cref{rem:no-protocol-renewal} it is not a gap in this paper's scope: the protocol offers no
+recurring authorisation at all, so there is no protocol object a non-custodial alternative would be an
+alternative \emph{to}. What is not open, and is worth restating: the direct settlement path of
+Part~A is already non-custodial, already deployed, and already usable by an autonomous agent. What
+custody buys is card payment and the removal of key management for humans --- convenience, not
+capability (Property~\ref{prop:chainindifferent}).}
+
+\subsubsection{The credits layer, and why it is a service object rather than a protocol one}
+\label{sec:paying:creditspec}
+
+\textbf{Nothing in this subsection is a consensus mechanism.} By \Cref{rem:balance-location} the
+deposited balance lives in a third-party operator's backend, and by \Cref{rem:no-protocol-renewal}
+the protocol offers no automatic renewal to attach it to. What follows is therefore the
+specification an \emph{operator} would implement --- the state it carries, the transitions it takes,
+and the cost of the one guarantee that distinguishes a credit balance from plain expiry --- and not
+a proposal for what nodes should evaluate. It is retained at this depth for two reasons: the
+lifecycle is genuinely intricate and no public description of it exists, and a reader evaluating such
+a service should be able to check it against a written specification. Every statement is \planned and
+written in the conditional, and none of it describes the facilitator of
+Section~\ref{sec:paying:facilitator}, which holds no balance and has no lifecycle state
+(Property~\ref{prop:nobalance}).
+
+\begin{definition}[Credit state --- \planned, no implementation exists]
+\label{def:creditstate}
+For a tenant $u$, let $b_u \in \mathbb{Z}_{\ge 0}$ denote a deposited balance in $\sat$; no deployed
+system maintains such a quantity (Property~\ref{prop:nobalance}). For each
+application $\app$ owned by $u$, let $e_\app \in \mathbb{N}$ denote the paid-through height as in
+Definition~\ref{def:expiry} and let
+\[
+\mathrm{st}(\app, \hgt) \;\in\; \{\textsf{funded},\ \textsf{grace},\ \textsf{suspended},\
+\textsf{evicted}\}
+\]
+denote the lifecycle state at height $\hgt$. Let $\price^{\mathrm{ren}}(\app,\hgt) \defeq
+\price(\app, \ninst_\app, \dur_\app, \hgt)$ be the cost of one renewal period under
+Definition~\ref{def:price}, $\price^{\mathrm{res}}$ a resumption charge, and $G_{\mathrm{g}},
+G_{\mathrm{s}}, \Delta_{\mathrm{pre}} \in \mathbb{N}$ the grace window, suspension window and
+pre-authorisation lead, all in blocks. Transitions would be as in Table~\ref{tab:transitions}; every
+transition would be evaluated by the operator from chain state plus its own balance store
+(\Cref{rem:balance-location}).
+\end{definition}
+
+\begin{table}[H]
+\centering\small
+\caption{Specified transitions of $\mathrm{st}(\app,\hgt)$. \planned --- no implementation exists.}
+\label{tab:transitions}
+\begin{tabular}{@{}llp{0.27\linewidth}p{0.19\linewidth}p{0.15\linewidth}@{}}
+\toprule
+from & to & condition & effect on workload & effect on data \\
+\midrule
+\textsf{funded} & \textsf{funded} &
+$\hgt = e_\app - \Delta_{\mathrm{pre}}$ and $b_u \ge \price^{\mathrm{ren}}$; then
+$b_u \mathrel{-}= \price^{\mathrm{ren}}$, $e_\app \mathrel{+}= \dur_\app$ &
+none & none \\
+\textsf{funded} & \textsf{grace} &
+$\hgt \ge e_\app$ and $b_u < \price^{\mathrm{ren}}$ &
+keeps running & retained \\
+\textsf{grace} & \textsf{funded} &
+$b_u \ge \price^{\mathrm{ren}}$ while $\hgt \le e_\app + G_{\mathrm{g}}$ &
+none & none \\
+\textsf{grace} & \textsf{suspended} &
+$\hgt > e_\app + G_{\mathrm{g}}$ &
+containers stopped, not removed & \textbf{retained}, volumes intact \\
+\textsf{suspended} & \textsf{funded} &
+$b_u \ge \price^{\mathrm{ren}} + \price^{\mathrm{res}}$ while
+$\hgt \le e_\app + G_{\mathrm{g}} + G_{\mathrm{s}}$ &
+restarted in place & intact \\
+\textsf{suspended} & \textsf{evicted} &
+$\hgt > e_\app + G_{\mathrm{g}} + G_{\mathrm{s}}$ &
+removed & \textbf{destroyed} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The design commitment that matters here is the separation of \emph{stopping} from \emph{deleting}.
+Suspension would halt compute without destroying state, so that a lapse recoverable in hours would
+not cost the tenant their data; only eviction, after $G_{\mathrm{g}} + G_{\mathrm{s}}$ blocks, would
+destroy anything. That guarantee has a price, and the price is quantifiable in the same units as
+everything else in this section.
+
+\begin{property}[Bounded suspension subsidy]
+\label{prop:subsidy}
+\planned. A suspended application would consume disk but neither CPU nor bandwidth, because its
+containers would be stopped rather than removed and its volumes retained
+(Table~\ref{tab:transitions}). The revenue forgone by the network over the suspension window
+(after grace, during which the workload still runs at full reservation),
+valued at the list rates of Definition~\ref{def:price}, would therefore be bounded above by
+\[
+\Delta^{\mathrm{sub}} \;\le\; \ninst_\app \cdot p_{\mathrm{hdd}}(\hgt) \cdot
+\resvec^{\mathrm{hdd}}(\app) \cdot \frac{G_{\mathrm{s}}}{L^{\ast}(\hgt)}
+\quad \text{FLUX},
+\]
+which is linear in the declared disk footprint and in the window, and independent of the tenant's CPU
+and RAM reservation.
+\end{property}
+
+\begin{proof}[Proof sketch]
+By Table~\ref{tab:transitions}, from the entry into \textsf{suspended} the workload contributes no CPU or
+network load once stopped, and the only resource held is the volume, whose declared size is
+$\resvec^{\mathrm{hdd}}(\app)$ per instance. Definition~\ref{def:price} prices that footprint at
+$p_{\mathrm{hdd}}\resvec^{\mathrm{hdd}}$ per default lifetime $L^{\ast}$, so a window of
+$G_{\mathrm{s}}$ blocks costs that fraction of it. The bound is an over-estimate
+because compute is not consumed during the window, because the surcharge terms of $B$ do not
+apply, and because $B$ is quoted per three instances while the bound charges it per instance. It is
+exact only in the sense that the network cannot re-let the disk while it is held.
+\end{proof}
+
+The operational reading is that the guarantee ``a lapse does not delete your data'' costs the network
+a disk reservation for a bounded, computable number of blocks after grace, and nothing else beyond the
+full reservation already conceded during grace. That is why the
+choice of $G_{\mathrm{s}}$ is a genuine parameter with a trade-off rather than a matter of taste
+(Section~\ref{sec:paying:open}).
+
+\subsubsection{What would authorise a recurring charge}
+
+A recurring charge needs an authority that outlives the tenant's presence. Three constructions are
+available and their costs differ sharply.
+
+\begin{enumerate}\setlength{\itemsep}{2pt}
+\item \textbf{Custody.} The simplest construction, and the one the third-party service uses today ---
+in a form that does not even require a balance. It is not a protocol mechanism and the network takes
+no part in it (Property~\ref{prop:chainindifferent}): the operator holds the tenant's identity and
+payment keys and fronts the on-chain payment (Section~\ref{sec:paying:facilitator}), so no
+authorisation object is needed at all, there being nothing to authorise when the authoriser already
+holds the key. \texttt{usersToExtend}
+separately lets one hardcoded address submit expire-only extensions on behalf of any owner
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{229}. The cost is the trust surface enumerated in
+Section~\ref{sec:paying:facilitator} and a key set whose compromise is a fleet-wide event.
+\item \textbf{On-chain allowance.} A consensus-level primitive under which the tenant authorises a
+bounded draw. Not available on the \Flux L1, for the reason given in Section~17; it would require an
+L1 consensus change, which places it in the same class as the header change of Section~22.
+\item \textbf{Standing signature or session key.} The tenant pre-signs a bounded renewal authority:
+exactly the delegation object specified in Section~17, with $\agent$ instantiated as a renewal
+service and $\scopeset$ restricted to \emph{renew this application at no more than this price}, under
+budget $\budget$.
+\end{enumerate}
+
+\noindent\textbf{Recommendation: option (3)}, because it makes credits a special case of the
+delegation of Section~17 rather than a second, parallel mechanism, and because it is the only option
+that removes the custodian rather than relocating it. It inherits the enforcement limits of that
+section unchanged --- in particular, a delegation is only as bounded as the party that checks the
+bound, and Section~17 states where that check would live and where it currently does not exist at
+all. One consequence is worth naming: because payer and owner are already independent in the
+deployed protocol (Property~\ref{prop:payersep}), option~(3) plus a third-party payer would reproduce
+the card-payment convenience of Section~\ref{sec:paying:facilitator} without reproducing its custody.
+The obstacle is the authorisation object, not the payment rail.
+\begin{remark}[Recurring authorisation is out of protocol scope --- settled]
+\label{rem:no-protocol-renewal}
+This paper previously carried the choice among custody, an on-chain allowance and a standing
+signature as an open construction blocking a credits specification. It is settled, and settled by
+exclusion rather than by selection: \textbf{the protocol offers no automatic renewal at all}. A
+tenant renews by signing and paying for each period, or delegates that to a third-party operator who
+does it on their behalf \srcintent{08-answers-round-2.md, round 9} (\planned).
+
+The consequence is worth stating plainly rather than treating as a gap. There is no consensus-level
+allowance object, no session-key construction in the protocol, and no standing authority a node
+evaluates. The recurring-payment problem is moved wholly into the service layer described in
+\S\ref{sec:paying:facilitator}, where it is solved by custody --- and where its trust surface is
+already enumerated. This is a smaller protocol, not a deferred one, and it removes an entire class of
+consensus change from the target architecture. What it costs is stated in
+\Cref{rem:agent-must-hold-keys}: an autonomous tenant that wants to renew without a human must hold
+a key and sign, or accept a custodian.
+\end{remark}
+
+\subsubsection{Metering, billing accuracy and dispute}
+
+The central design fact is easy to state and easy to underrate: \textbf{\Flux prices reservation, not
+consumption.} The charge of Definition~\ref{def:price} is a function of the \emph{requested} resource
+vector and duration, never of what the workload actually used. There is consequently no metering on
+the application path at all --- no counter to read, no counter to attest, and no counter to dispute.
+This is the same reasoning that Section~7 applies one layer down: PNR pays all nodes through the PoN
+rotation rather than the hosting node precisely so that settlement carries no metering or attestation
+dependency (requirement P7 there). The two choices are the same choice made twice, and the
+consequence is worth stating plainly: reservation pricing eliminates an entire class of
+operator-versus-tenant dispute, because there is no usage record for the two parties to disagree
+about.
+
+What remains disputable is a single binary fact --- \emph{did the application run} --- and that fact
+is observable by third parties: \FluxOS location records, \FDM health checks, and the tenant's own
+probes all speak to it independently. The dispute surface is small by construction. This paper does
+not invent an arbitration mechanism, because none exists and none is required to make the above true.
+
+Where metering does exist in the wider stack, it is already inexact, and any future
+consumption-priced product would inherit the problem.
+
+\begin{property}[FluxAI metering overdraft]
+\label{prop:overdraft}
+\shipped. FluxAI gates each request on $\texttt{api\_credit} > 0$ and returns HTTP 402 otherwise, but
+deducts usage asynchronously: increments accumulate in Redis under a per-user key with a TTL of
+\qty{300}{\second}, and a separate scheduled command applies them to the durable balance inside a
+locked transaction and deletes the key
+\srccode{fluxai/\allowbreak{}api/\allowbreak{}v1/\allowbreak{}api\_client.py}{1210--1214}
+\srccode{fluxai/\allowbreak{}api/\allowbreak{}cache.py}{9--32}
+\srccode{fluxai/\allowbreak{}api/\allowbreak{}management/\allowbreak{}commands/\allowbreak{}process\_token\_usage.py}{41--99}.
+Two consequences follow. (i) A caller can consume beyond their balance for the whole interval between
+flushes, since the gate reads only the durable balance --- a real overdraft window. (ii) If the flush
+interval ever exceeds the key TTL, the accumulated usage expires and is never billed at all. The
+bound on (i) is the flush cadence, which is \emph{not} determinable from source: the dispatcher runs
+per minute, but the job's schedule is stored in the database rather than in the repository
+\srcdoc{fluxai/setup/crons/django\_cron:1}.
+\end{property}
+
+\begin{proof}[Proof sketch]
+The admission check and the deduction read and write different stores, and the only synchronisation
+between them is the scheduled flush; therefore the interval between flushes bounds the divergence.
+The TTL is set on the accumulator key, not on the durable row, so expiry of the key discards the
+pending debit rather than deferring it. Both follow directly from the two cited code paths; neither
+requires an adversarial caller.
+\end{proof}
+
+The honest statement for a future consumption-priced product is therefore that the overdraft bound is
+a scheduling parameter, not a cryptographic one, and that it must be pinned in code before it can be
+quoted.
+
+\subsubsection{Service levels and refunds}
+
+No refund or credit mechanism exists in any repository in this corpus. The deployed behaviour on node
+failure is \emph{redeployment}, not compensation: when an instance disappears, other nodes observe
+that the application is below its declared instance count and one of them installs it, subject to the
+broadcast-and-wait collision rule
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{152--247,666--703}; a node that loses
+confirmation has its locations evicted from global state by every other node independently
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMonitoring/\allowbreak{}nodeStatusMonitor.js}{78--141}. Stated plainly:
+\textbf{the remedy is replacement, not refund.}
+
+This is a coherent position rather than an omission, and the reason is the one above. An SLA credit
+is a function of measured availability, so paying one would require exactly the metering the design
+has deliberately avoided --- and it would reintroduce the attestation dependency that Section~7
+removed. Promising a refund path that nothing implements would be worse than saying so.
+\begin{remark}[No protocol availability remedy --- settled]
+\label{rem:no-sla}
+Whether the target architecture should acquire an availability remedy --- a refund or credit when a
+node fails to serve a paid deployment --- is settled: \textbf{it should not, at the protocol layer}.
+Any such remedy is a service-layer product, offered commercially by an operator if at all
+\srcintent{08-answers-round-2.md, round 16} (\planned).
+
+This is the consistent choice rather than a gap, and it follows from a fact this section already
+establishes: \Flux{} prices \emph{reservation}, not consumption (\S\ref{sec:paying:open}). A
+tenant buys reserved capacity, so there is no delivered-uptime quantity for a remedy to be computed
+against, and no third-party-observable availability signal exists from which one could be. Building
+that signal would mean building the attestation network first --- which \S\ref{sec:feasibility}
+classes as Research --- and then defining an oracle that decides when a deployment was unserved.
+Deciding not to have a protocol remedy avoids inventing both.
+
+It composes with the settled positions on credits and renewal (\Cref{rem:balance-location},
+\Cref{rem:no-protocol-renewal}): convenience, custody and commercial guarantees all sit in the
+service layer, and the protocol keeps one job --- deciding whether a deployment was paid for.
+\end{remark}
+
+\subsubsection{Invariants}
+\label{sec:paying:invariants}
+
+Stated for all three objects --- the protocol's direct settlement (Part~A), the operator's deployed
+service (Section~\ref{sec:paying:facilitator}), and the unimplemented credits layer
+(Section~\ref{sec:paying:creditspec}). Where an invariant holds on one and not another, that is said.
+Only the first is a claim about \Flux; the second is a claim about one company's product and binds
+nobody else who builds over Part~A.
+
+\begin{enumerate}\setlength{\itemsep}{3pt}
+\item\label{inv:conservation} \textbf{Conservation.} $b_u$ decreases only by renewals actually
+applied, and every debit corresponds to exactly one extension of exactly one $e_\app$ and, after
+$\hpa$, to exactly one PNR transaction on L1 (Requirement~\ref{req:pnr}). No debit exists without an
+on-chain settlement; no settlement exists without a debit. \planned as stated, since $b_u$ has no
+deployed referent (Property~\ref{prop:nobalance}). On Part~A it holds trivially, the payment and the
+extension being the same event; on the operator's service it holds in the degenerate form that each card
+charge is settled by exactly one transaction to the sink and no ledger stands between them
+(Construction~\ref{alg:prepay}, step~4).
+
+\item\label{inv:nosilent} \textbf{No silent expiry.} Every transition out of \textsf{funded} shall be
+observable by the tenant before it takes effect. On Part~A the \emph{expiry} half holds by
+Property~\ref{prop:nostanding} --- $e_\app$ is public and computable in advance by anyone --- but the
+\emph{entry} half fails: an underpaid registration never becomes \textsf{funded} and the tenant is
+not told (Property~\ref{prop:silentunderpay}). Requirement~\ref{req:nack} is what would repair it,
+and it is a requirement on every path. On the operator's service the impending lapse \emph{is} signalled,
+but by email only, on the operator's schedule, at most once per \qty{24}{\hour}, with no in-band
+channel and no user override (Construction~\ref{alg:prepay}, failure mode (a)); that is weaker than
+this invariant asks and is recorded as such rather than counted as satisfying it.
+
+\item\label{inv:datasurvives} \textbf{Data survives suspension.} \planned, and a property of
+Section~\ref{sec:paying:creditspec} alone. No transition into \textsf{suspended} destroys tenant
+data; only \textsf{evicted} does, and only after $G_{\mathrm{g}} + G_{\mathrm{s}}$ blocks. By
+construction of Table~\ref{tab:transitions}; the cost is bounded by Property~\ref{prop:subsidy}. The
+deployed network has no suspension state at all, and application data at expiry is always deleted
+\srcintent{08-answers-round-2.md, round 5}; this invariant must not be read across to it. The
+contrast is the point: on every deployed path expiry is destructive, so ``data survives suspension''
+would be a guarantee a credits layer \emph{introduces}, not one it preserves.
+
+\item\label{inv:pathindep} \textbf{Path independence.} For every deployment reachable through the
+operator's service or through a credits layer, the same deployment is reachable through direct
+payment with an explicit transaction.
+\emph{Proof.} \textbf{Deployed case.} By the invariant of Construction~\ref{alg:prepay}, the
+facilitator's whole action reduces to (a) a signature over $m_\app$ under the key named in the
+specification's \texttt{owner} field and (b) one transaction paying $\price$ to the sink carrying
+$H(m_\app)$ --- that is, exactly steps~2 and~3 of Construction~\ref{alg:settle}. A tenant holding
+their own key performs both and obtains the identical $e_\app$ by Definition~\ref{def:expiry}.
+\textbf{Specified case.} A credit-path renewal at height $\hgt$ debits
+$\price^{\mathrm{ren}}(\app,\hgt)$ and extends $e_\app$ by $\dur_\app$; by
+Requirement~\ref{req:pnr} it does so through one L1 settlement of that amount, which the tenant may
+broadcast themselves at the same height for the identical $e_\app$, since the promotion test depends
+only on $(v^{\mathrm{obs}}, \hgt, \app)$ and on no property of the payer
+(Property~\ref{prop:payersep}). Hence the reachable sets coincide in both cases. $\square$
+\textbf{Neither the operator's service nor a credits layer adds capability}, and a user who uses
+neither loses none. Together with Property~\ref{prop:chainindifferent} --- the network cannot see the
+service --- this is what places the service strictly on top of \Flux rather than inside it: it adds
+no reach downward and imposes no requirement upward. It is the load-bearing item in this list, and
+the reason the framing of Section~\ref{sec:paying:facilitator} is a description rather than a
+defence.
+
+\item\label{inv:monotone} \textbf{Monotone expiry.} $e_\app$ is non-decreasing while
+$\mathrm{st}(\app,\hgt) \ne \textsf{evicted}$. Immediate from Table~\ref{tab:transitions}, in which
+the only writes to $e_\app$ are increments. Note that the deployed system does \emph{not} satisfy the
+analogous property under the expire-only update path, where a Foundation-held key can submit a
+\emph{reducing} expire value with no ``new expire must be larger'' check
+\srccode{appsmonitor/\allowbreak{}fixOverExtendedAppExpiry.js}{1--24}; that is an operational tool, and any
+credits implementation must not inherit the exemption.
+\end{enumerate}
+
+\subsubsection{Open parameters}
+\label{sec:paying:open}
+
+These are service-layer parameters by \Cref{rem:balance-location}: an operator chooses them, and
+nothing in consensus depends on them. The paper nonetheless recommends values, because an operator
+building this needs a defensible starting point and because the trade-offs are the same whoever
+implements them. Each was proposed by this paper and has been confirmed by the author
+(Table~\ref{tab:credit-params}).
+
+\begin{table}[H]
+\centering\footnotesize
+\caption{Lifecycle parameters for a credits operator. Proposed by this paper and \textbf{confirmed
+by the author} \srcintent{08-answers-round-2.md, round 11}. Block counts assume the
+\SI{30}{\second} post-\PoN target, i.e.\ \num{2880} blocks per day
+\srccode{fluxd/src/chainparams.cpp}{105}. \planned.}
+\label{tab:credit-params}
+\begin{tabular}{@{}llll@{}}
+\toprule
+Parameter & Domain & \textbf{Recommended} & Reasoning \\
+\midrule
+$G_{\mathrm{g}}$ grace & $[240, 2880]$ & \textbf{\num{2880}} (\SI{24}{\hour}) & covers a full
+business day \\
+$G_{\mathrm{s}}$ suspension & $[2880, 43200]$ & \textbf{\num{20160}} (\SI{7}{\day}) & one week of
+stored, unpaid data \\
+$\Delta_{\mathrm{pre}}$ pre-auth lead & $[20, \infty)$ & \textbf{\num{120}} (\SI{1}{\hour}) &
+$\gg$ confirmation depth \\
+$\price^{\mathrm{res}}$ resumption & $[0, \infty)$ & \textbf{one renewal period} & prices the
+subsidy exactly \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Why these values.}
+$G_{\mathrm{g}} = \num{2880}$ blocks, one day, is chosen so that a funding failure occurring at any
+hour is recoverable within one business day without the tenant losing service. The shorter end of the
+domain (\SI{2}{\hour}) converts an overnight bridge delay into a suspension, which is the routine
+failure this window exists to absorb; the cost of the longer setting is one day of unpaid load at
+full occupancy, i.e.\ $G_{\mathrm{g}}/L^{\ast}$ of one renewal period, which lies outside the disk-only
+bound of Property~\ref{prop:subsidy}.
+
+$G_{\mathrm{s}} = \num{20160}$ blocks, seven days, is the willingness-to-subsidise statement. The
+question this parameter really asks is how long the network stores data nobody is paying for. A week
+is long enough that a tenant returning from an outage, a holiday or a payment-method failure finds
+their deployment intact, and short enough that the storage subsidy stays bounded at one week per
+evicted application rather than accumulating indefinitely. Note that the fifteen-day end of the
+domain doubles the subsidy to buy little: recovery that has not happened within a week is
+overwhelmingly abandonment rather than delay.
+
+$\Delta_{\mathrm{pre}} = \num{120}$ blocks, one hour, sits an order of magnitude above the binding
+constraint. The floor is confirmation depth plus specification propagation; propagation in
+Construction~\ref{alg:settle} is seconds and confirmation dominates. One hour leaves room for a
+congested mempool and a re-sent transaction without approaching the upper risk, which is that a
+renewal authorised too far ahead is priced against a stale segment of
+Definition~\ref{def:price}.
+
+$\price^{\mathrm{res}}$ equal to \emph{one renewal period at the application's own price} is the
+only anchor that is correct by construction rather than by taste. Property~\ref{prop:subsidy} prices
+the suspension window as a subsidy; charging exactly one period on resumption returns that subsidy
+from the tenant who consumed it, scales automatically with the resources the application actually
+reserved, and needs no separate schedule to maintain. Zero would make the suspension window free cold
+storage, which is the abuse the property identifies; a flat fee would misprice small and large
+applications in opposite directions.
+
+\begin{remark}[Where a deposited balance lives --- settled: nowhere on the chain]
+\label{rem:balance-location}
+The location of a deposited balance was the architectural choice this section could not make. It is
+now settled, and the answer is that the object is not a protocol object at all. Credit balances are
+held \textbf{off-chain, per user, in the backend of a third-party operator} --- the team names InFlux
+Technologies, building on Flux Cloud, as such an operator. That service is account-based: a user may
+sign in with SSO or email, the backend derives a ZelID for them, they are logged in under it, and the
+operator holds a per-user balance which the user tops up and authorises spend from
+\srcintent{08-answers-round-2.md, round 9} (\planned).
+
+Three consequences follow, and the paper states them rather than the convenience.
+\begin{enumerate}
+  \item \textbf{Invariant~\ref{inv:conservation} is enforced by the operator's bookkeeping.} Not by
+  consensus, not by a node quorum, not by the tenant's device. A credit balance is a claim against an
+  operator, redeemable at that operator's discretion and subject to its solvency.
+  \item \textbf{The chain cannot see it, and by Property~\ref{prop:chainindifferent} does not need
+  to.} What reaches the chain is an ordinary payment for a deployment, indistinguishable from one a
+  tenant signs directly. Credits are therefore invisible to \PNR, to the fee pool, and to every
+  property proved in \S\ref{sec:pnr}.
+  \item \textbf{The specification below is retained as a description of the service-layer object},
+  not as a protocol proposal. Its state machine is what such an operator must implement correctly;
+  it is not what nodes evaluate.
+\end{enumerate}
+\end{remark}
+
+\begin{remark}[\specv{9} replaces \texttt{blocksLasting} with \texttt{duration} --- settled from source]
+\label{rem:v9-duration}
+This was carried as an open question. It is answered by the schema itself: in the \specv{9} schema
+\texttt{duration} is a \textbf{top-level required} property --- \texttt{\{"type":"integer",\allowbreak{}
+"minimum":1\}}, documented as ``requested deployment duration in seconds (first-class in v9; the
+foundation the subscription and auto-renew work builds on)'' --- and \textbf{\texttt{blocksLasting}
+does not appear in the \specv{9} schema at all}, nor does \texttt{expire}
+\srcbranch{flux}{feat/appspec-v9}{ZelBack/src/services/appRequirements/schemas/v9.json}.
+
+Two consequences follow. \emph{First}, $L^{\ast}(\hgt)$ in Definition~\ref{def:price} becomes a unit
+conversion rather than a fork-dependent constant, and the post-\PoN{} $4\times$ recomputation of
+Definition~\ref{def:expiry} becomes dead code on the \specv{9} path --- lifetime is expressed in
+seconds, so it no longer moves when block spacing changes. That is a simplification, and it removes
+a class of error the $4\times$ branch has already caused once (\S\ref{sec:pnr}).
+
+\emph{Second, and this is the caveat that keeps the claim honest}: the field is declared and required
+but \textbf{not yet consumed}. A search of \texttt{app\allowbreak{}Requirements/\allowbreak{}} and \texttt{appLifecycle/} on the
+same branch finds \texttt{duration} only in comments; \texttt{blocksLasting} is still what the
+deployed v8 install path reads \srcbranch{flux}{feat/appspec-v9}{ZelBack/src/services/appLifecycle/appInstaller.js}.
+So \specv{9} \emph{specifies} the replacement and does not yet \emph{implement} it --- the same
+declared-but-inert pattern \S\ref{sec:one-platform} documents for \texttt{paymentMemo},
+\texttt{referralCode} and \texttt{machineType}, and the reason \Cref{rem:v9-timing} constrains
+$\hstar$ to follow the implementation rather than precede it.
+\end{remark}
+
+\subsubsection{Comparison}
+
+\textbf{Akash} escrows a lease account and streams payment per block, closing the lease when the
+escrow empties \citep{akash}; that is the closest analogue to the credits layer specified in
+Section~\ref{sec:paying:creditspec}, with the balance on-chain and the state machine in consensus
+rather than in an orchestrator or in a custodian's database. Its answer to ``where does the balance
+live'' is the opposite of the one settled here --- off-chain, in an operator's backend
+(\Cref{rem:balance-location}) --- and it pays for that answer with a consensus-level
+account primitive the \Flux L1 does not have. \textbf{Filecoin} deals prepay and collateralise, with
+provider slashing for failure \citep{filecoin2017}; \Flux has no equivalent slashing on the
+application path, which is precisely why its remedy is replacement rather than compensation --- there
+is no bonded party to take value from. \textbf{Hyperscaler billing} is post-paid,
+consumption-metered, and correspondingly dispute-heavy; reservation pricing is the deliberate
+opposite, trading utilisation efficiency for verifiability, and Property~\ref{prop:overdraft} is a
+small demonstration of what the metered path costs even inside \Flux's own stack.
+\textbf{Lightning invoices} are the closest match to Part~A's ``the payment is the entitlement''
+property \citep{poon2016lightning}: a payment preimage is the proof of settlement and no account
+mediates it. \CumulusVPN's memo-derived entitlement is effectively an on-chain invoice with a public
+settlement record --- which is exactly the property that makes it work without a server and exactly
+the property that makes it the problem statement for Section~21.
+
+%% Drain this section's float queue before the next begins.
+\FloatBarrier

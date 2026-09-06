@@ -1,0 +1,232 @@
+%% ---------------------------------------------------------------------------
+%% notation.tex — canonical names, symbols, units and theorem environments.
+%% EVERY drafter uses these macros and NO others. Naming conflicts across the
+%% Flux repositories are decided here, once, and nowhere else.
+%% ---------------------------------------------------------------------------
+
+%% ======================= theorem environments =============================
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\newtheorem{assumption}[definition]{Assumption}
+\newtheorem{property}[definition]{Property}
+\newtheorem{construction}[definition]{Construction}
+\theoremstyle{plain}
+\newtheorem{lemma}[definition]{Lemma}
+\newtheorem{theorem}[definition]{Theorem}
+\newtheorem{proposition}[definition]{Proposition}
+\newtheorem{corollary}[definition]{Corollary}
+\newtheorem{conjecture}[definition]{Conjecture}
+\theoremstyle{remark}
+\newtheorem{remark}[definition]{Remark}
+\newtheorem{openproblem}[definition]{Open Problem}
+
+%% ======================= maturity and provenance tags =====================
+%% Every substantive claim carries one maturity tag and one provenance tag.
+\newcommand{\shipped}{\textsc{\small shipped}\xspace}
+\newcommand{\inprogress}{\textsc{\small in-progress}\xspace}
+\newcommand{\planned}{\textsc{\small planned}\xspace}
+\newcommand{\vision}{\textsc{\small vision}\xspace}
+%% Provenance. Only \srccode or \srcbranch may support \shipped for a claim about behaviour;
+%% \srcmeasured may support \shipped for a fact about the live network (a count, a balance, a price).
+%% Round 18, G06 (evidence/design/08-answers-round-2.md).
+\newcommand{\srccode}[2]{\textsf{\footnotesize[#1:#2]}}      % repo/file, line
+\newcommand{\srcbranch}[3]{\textsf{\footnotesize[#1@#2:#3]}} % repo, branch, file:line
+\newcommand{\srcdoc}[1]{\textsf{\footnotesize[doc:~#1]}}
+\newcommand{\srcroadmap}[1]{\textsf{\footnotesize[roadmap:~#1]}}
+\newcommand{\srcintent}[1]{\textsf{\footnotesize[intent:~#1]}}
+\newcommand{\srcmeasured}[2]{\textsf{\footnotesize[measured:~#1,~#2]}} % endpoint, date
+\newcommand{\srcinferred}{\textsf{\footnotesize[inferred]}}
+
+%% ======================= canonical component names ========================
+%% Decisions recorded in plan/conflicts.md C3, C11, and the PoN/PNR hazard below.
+\newcommand{\Flux}{Flux\xspace}
+\newcommand{\fluxd}{\texttt{fluxd}\xspace}              % the L1 daemon (Zcash fork)
+\newcommand{\FluxOS}{FluxOS\xspace}                     % per-node orchestration daemon (repo: flux)
+\newcommand{\fluxbench}{\texttt{fluxbench}\xspace}      % benchmarking daemon (daemon: fluxbenchd)
+\newcommand{\FluxNode}{FluxNode\xspace}                 % never "ZelNode" outside historical notes
+\newcommand{\ArcaneOS}{ArcaneOS\xspace}
+\newcommand{\SAS}{SAS\xspace}                           % System Attestation Service (repo: fluxsas)
+\newcommand{\fluxsas}{\texttt{fluxsas}\xspace}
+\newcommand{\FDM}{FDM\xspace}                           % Flux Domain Manager
+\newcommand{\PDNS}{PDNS\xspace}                         % the PowerDNS-backed zone service
+\newcommand{\fluxdnsd}{\texttt{flux-dnsd}\xspace}       % per-node mesh DNS resolver
+\newcommand{\FluxCloud}{FluxCloud\xspace}
+\newcommand{\FluxEdge}{FluxEdge\xspace}
+\newcommand{\FluxCore}{FluxCore\xspace}
+\newcommand{\FluxAI}{FluxAI\xspace}
+\newcommand{\SSP}{SSP\xspace}                           % the 2-of-2 wallet/key pair
+\newcommand{\CumulusVPN}{CumulusVPN\xspace}             % product name; NEVER the Cumulus tier
+\newcommand{\Fusion}{Fusion\xspace}                     % incumbent custodial bridge (ZelCore-io/fusion)
+\newcommand{\FusionX}{FusionX\xspace}                   % user-facing exchange/redemption product
+\newcommand{\VPON}{VPON\xspace}                         % private deployment / private overlay network
+
+%% ======================= the two "PoN"-shaped names =======================
+%% TERMINOLOGY HAZARD. These are different mechanisms in different layers and
+%% are trivially confused. Both expansions are given on first use in the text.
+\newcommand{\PoN}{PoN\xspace}   % Proof of Node — block production, consensus layer, SHIPPED
+\newcommand{\PNR}{PNR\xspace}   % Progressive Node Rewards — revenue sharing, PLANNED
+\newcommand{\PoW}{PoW\xspace}
+
+%% ======================= the "v9" disambiguation ==========================
+%% "v9" is overloaded. In this paper it means the FluxOS APPLICATION
+%% SPECIFICATION version and nothing else. fluxd's client version 9.1.0 is
+%% unrelated and is written out in full wherever it appears.
+\newcommand{\appspec}{application specification\xspace}
+\newcommand{\specv}[1]{\textsc{spec}\,v#1\xspace}       % \specv{8}, \specv{9}
+\newcommand{\daemonversion}{\fluxd client version 9.1.0\xspace}
+
+%% ======================= chain and consensus symbols ======================
+\newcommand{\hgt}{\ensuremath{h}}                                     % block height
+\newcommand{\hpon}{\ensuremath{h_{\PoN}}}                             % PoN activation height
+\newcommand{\hpa}{\ensuremath{h_{\mathrm{PA}}}}                       % PA-Depletion height (PNR activation)
+\newcommand{\hstar}{\ensuremath{\hgt^{\star}}}                        % spec v9 enforcement height (round 17: 3,050,000); introduced in \S10. Round 18, G25.
+\newcommand{\hshield}{\ensuremath{h_{\mathrm{shield}}}}               % shielded-pool sunset height (round 11: 4,517,830 = \hpa + 1,051,200); introduced in \S20. Round 18, G25.
+\newcommand{\hsnap}{\ensuremath{h_{\mathrm{snap}}}}                   % migration snapshot height, announced in advance (round 9), no later than \hpa - 259,200; introduced in \S22. Round 18, G25.
+\newcommand{\tslot}{\ensuremath{\tau}}                                % PoN slot index
+\newcommand{\spacingpon}{\ensuremath{\Delta_{\PoN}}}                  % PoN target spacing
+\newcommand{\spacingpow}{\ensuremath{\Delta_{\PoW}}}                  % legacy PoW target spacing
+\newcommand{\blocksyear}{\ensuremath{B_{\mathrm{yr}}}}                % blocks per year
+\newcommand{\redint}{\ensuremath{I_{\mathrm{red}}}}                   % PoN subsidy reduction interval
+\newcommand{\redmax}{\ensuremath{N_{\mathrm{red}}}}                   % max number of reductions
+\newcommand{\redfac}{\ensuremath{\gamma}}                             % per-reduction factor (9/10)
+
+%% ======================= tiers ============================================
+\newcommand{\tiers}{\ensuremath{\mathcal{T}}}                        % the tier set: Cumulus, Nimbus, Stratus
+\newcommand{\tC}{\ensuremath{\mathsf{C}}}                             % Cumulus
+\newcommand{\tN}{\ensuremath{\mathsf{N}}}                             % Nimbus
+\newcommand{\tS}{\ensuremath{\mathsf{S}}}                             % Stratus
+\newcommand{\coll}[1]{\ensuremath{c_{#1}}}                            % collateral required by tier
+\newcommand{\ncount}[1]{\ensuremath{n_{#1}}}                          % number of nodes in tier
+\newcommand{\rot}[1]{\ensuremath{R_{#1}}}                             % rotation length of tier, in blocks
+\newcommand{\tbase}[1]{\ensuremath{\beta_{#1}}}                       % PoN tier base, in FLUX
+
+%% ======================= emission and supply ==============================
+\newcommand{\subsidy}{\ensuremath{\sigma}}                            % block subsidy, FLUX
+\newcommand{\subsidypon}{\ensuremath{\subsidy_{\PoN}}}
+\newcommand{\subsidypow}{\ensuremath{\subsidy_{\PoW}}}
+\newcommand{\devfund}{\ensuremath{\delta}}                            % consensus dev-fund remainder
+\newcommand{\supply}{\ensuremath{S}}                                  % cumulative issued supply
+\newcommand{\premine}{\ensuremath{\Pi}}
+\newcommand{\maxmoney}{\textsc{max\_money}\xspace}       % per-transaction sanity bound, NOT a cap
+\newcommand{\flux}{\ensuremath{\,\mathrm{FLUX}}\xspace}
+\newcommand{\sat}{\ensuremath{\,\mathrm{sat}}\xspace}
+
+%% ======================= applications and pricing =========================
+\newcommand{\app}{\ensuremath{a}}                                     % an application
+\newcommand{\resvec}{\ensuremath{\mathbf{r}}}                         % resource vector (cpu, ram, hdd)
+\newcommand{\pricevec}{\ensuremath{\mathbf{p}}}                       % price vector at a height
+\newcommand{\dur}{\ensuremath{d}}                                     % duration, in blocks
+\newcommand{\ninst}{\ensuremath{k}}                                   % instance count
+\newcommand{\price}{\ensuremath{\Pcal}}                               % price of a deployment
+\newcommand{\Pcal}{\ensuremath{\mathcal{P}}}
+\newcommand{\blockslasting}{\ensuremath{L}}                           % default lifetime, in blocks
+
+%% ======================= PNR: fee pool and settlement =====================
+\newcommand{\pool}{\ensuremath{\Phi}}                                 % fee pool balance (consensus state)
+\newcommand{\drip}{\ensuremath{K}}                                    % drip constant, in blocks
+\newcommand{\nodeshare}{\ensuremath{\rho}}                            % operator share of application revenue
+\newcommand{\foundshare}{\ensuremath{(1-\nodeshare)}}                 % Foundation share
+\newcommand{\nodesharecap}{\ensuremath{\rho_{\max}}}                  % ceiling on the operator share
+\newcommand{\rampstep}{\ensuremath{\Delta\nodeshare}}                 % per-reduction increase in operator share
+\newcommand{\payees}{\ensuremath{\mathcal{W}}}                        % the set of nodes paid in a block
+\newcommand{\tierratio}[1]{\ensuremath{\lambda_{#1}}}                 % tier split of the drip
+
+%% ======================= moderation quorum ================================
+\newcommand{\vweight}[1]{\ensuremath{w_{#1}}}                         % voting weight of an identity
+\newcommand{\vtotal}{\ensuremath{W}}                                  % total voting weight
+\newcommand{\vthresh}{\ensuremath{\theta}}                            % removal threshold, fraction of \vtotal
+\newcommand{\reporters}{\ensuremath{\mathcal{R}}}
+\newcommand{\bond}{\ensuremath{\beta_{\mathrm{rep}}}}                 % refundable report bond
+
+%% ======================= privacy and value ================================
+\newcommand{\taddr}{\ensuremath{\mathsf{t}}\text{-addr}\xspace}
+\newcommand{\zaddr}{\ensuremath{\mathsf{z}}\text{-addr}\xspace}
+\newcommand{\note}{\ensuremath{\mathsf{note}}}
+\newcommand{\nf}{\ensuremath{\mathsf{nf}}}                            % nullifier
+\newcommand{\cm}{\ensuremath{\mathsf{cm}}}                            % note commitment
+\newcommand{\tree}{\ensuremath{\mathsf{NCT}}}                         % note commitment tree
+\newcommand{\zkproof}{\ensuremath{\pi}}
+\newcommand{\viewkey}{\ensuremath{\mathsf{ivk}}}
+
+%% ======================= agents and delegation ============================
+\newcommand{\principal}{\ensuremath{\mathcal{U}}}                     % the human principal
+\newcommand{\agent}{\ensuremath{\mathcal{A}}}                         % an autonomous agent
+\newcommand{\budget}{\ensuremath{\mathcal{B}}}                        % delegated spending budget
+\newcommand{\scopeset}{\ensuremath{\Sigma}}                           % scope of delegated authority
+
+%% ======================= adversary ========================================
+\newcommand{\adv}{\ensuremath{\mathcal{Z}}}                           % the adversary
+\newcommand{\advbudget}{\ensuremath{\mathcal{C}_{\adv}}}              % adversary's capital budget
+
+%% ======================= small helpers ====================================
+\newcommand{\defeq}{\ensuremath{\vcentcolon=}}
+\newcommand{\indic}[1]{\mathbf{1}\!\left[#1\right]}
+\newcommand{\floorfrac}[2]{\left\lfloor \frac{#1}{#2} \right\rfloor}
+%% \unsupported is retained as an alias of \notestablished: same meaning, no todo machinery.
+\newcommand{\unsupported}[1]{\notestablished{#1}}
+%% \opennote is retired: the paper carries no unresolved markers.
+%% Their roles are now served by \settlednote (a decision taken), \notestablished (a fact this
+%% survey could not establish) and \proposednote (a construction this paper proposes).
+%% A decision that has been taken. Deliberately NOT a todonote: it records an outcome,
+%% not an outstanding item, and must not read as one.
+%% A callout: a coloured left rule, a tinted panel, a bold lead-in. One shape,
+%% three colours, so the reader learns the vocabulary once.
+%% Inside a table cell (\currentgrouptype 6 is an alignment group) the display
+%% form's \par skips and stacked minipages cannot be measured by the row, so the
+%% box spills over its neighbours. Render a single measurable \colorbox there.
+\newcommand{\fluxcallout}[3]{%
+  \ifnum\currentgrouptype=6
+    \colorbox{#1!12!white}{%
+      \begin{minipage}[t]{\dimexpr\linewidth-2\fboxsep\relax}%
+        \small\textcolor{#1!62!black}{\textbf{#2}}~#3\strut
+      \end{minipage}}%
+  \else
+    \fluxcalloutdisplay{#1}{#2}{#3}%
+  \fi}
+
+\newcommand{\fluxcalloutdisplay}[3]{%
+  \par\smallskip\noindent
+  \begingroup\small
+  \setlength{\fboxsep}{0pt}%
+  \colorbox{#1!55!white}{\rule{2.2pt}{0pt}\rule{0pt}{0pt}}%
+  \hspace{-2.2pt}%
+  \begin{minipage}[t]{\linewidth}%
+    \colorbox{#1!12!white}{%
+      \begin{minipage}[t]{\dimexpr\linewidth-2\fboxsep-12pt\relax}%
+        \vspace{5pt}\hspace{6pt}%
+        \begin{minipage}[t]{\dimexpr\linewidth-12pt\relax}%
+          \textcolor{#1!62!black}{\textbf{#2}}~#3%
+        \end{minipage}%
+        \vspace{5pt}%
+      \end{minipage}}%
+  \end{minipage}%
+  \endgroup\par\smallskip}
+
+\definecolor{FluxSettled}{HTML}{2E7D32}
+\definecolor{FluxGap}{HTML}{5F6368}
+\definecolor{FluxProposed}{HTML}{1565C0}
+
+%% Round 22: the author adopted the paper's proposed constructions, so neither a
+%% "Settled" nor a "Proposed" callout is an exception to the text any more — both are
+%% ordinary content. They keep a bold lead-in because the bodies are written as
+%% decision fragments rather than as flowing sentences; the coloured box is gone.
+\newcommand{\decided}[1]{%
+  \par\smallskip\noindent\textbf{Decided.}~#1\par\smallskip}
+\newcommand{\settlednote}[1]{\decided{#1}}
+\newcommand{\proposednote}[1]{\decided{#1}}
+\newcommand{\notestablished}[1]{\fluxcallout{FluxGap}{Not established by this survey.}{#1}}
+
+
+%% ======================= bridge (§22) ====================================
+%% These four are deliberately distinct from \subsidy, \nodeshare, \pool and
+%% \blockslasting, which are already bound to emission and PNR quantities.
+\newcommand{\bslack}{\ensuremath{\varsigma}}                          % reserve slack: R - sum of minted supply
+\newcommand{\brate}[1]{\ensuremath{\varrho_{#1}}}                     % per-chain sliding-window mint rate limit
+\newcommand{\bcap}[1]{\ensuremath{\overline{M}_{#1}}}                  % per-chain contract constant, defence-in-depth (global cap is enforced by reserve dominance)
+\newcommand{\breserve}{\ensuremath{R}}                                % main-chain reserve held for the bridge
+\newcommand{\bminted}[1]{\ensuremath{M_{#1}}}                         % minted supply on chain #1
+\newcommand{\bflow}[1]{\ensuremath{F_{#1}}}                           % cumulative flow, subscripted by leg
+\newcommand{\bvalue}[1]{\ensuremath{V_{#1}}}                          % value released, subscripted by leg
+\newcommand{\bquorum}[1]{\ensuremath{k_{#1}}}                         % signing threshold, subscripted by role
+
+\newcommand{\FluxNodes}{FluxNodes\xspace}

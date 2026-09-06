@@ -1,0 +1,204 @@
+\section{Notation index}
+\label{sec:app-notation}
+
+Every symbol shared across this paper's sections is defined in \texttt{paper/\allowbreak{}notation.\allowbreak{}tex} and
+nowhere else; symbols local to one section are defined in the section that introduces them.
+Naming conflicts across the Flux repositories are decided there, once. This index lists the
+symbols by domain; tag macros are omitted.
+
+\subsection*{Canonical Component Names}
+\begin{longtable}{@{}p{0.22\linewidth}p{0.72\linewidth}@{}}
+\toprule
+Symbol & Meaning \\
+\midrule
+\endhead
+$\fluxd$ \quad {\ttfamily\footnotesize\textbackslash fluxd} & the L1 daemon (Zcash fork) \\
+$\FluxOS$ \quad {\ttfamily\footnotesize\textbackslash FluxOS} & per-node orchestration daemon (repo: flux) \\
+$\fluxbench$ \quad {\ttfamily\footnotesize\textbackslash fluxbench} & benchmarking daemon (daemon: fluxbenchd) \\
+$\FluxNode$ \quad {\ttfamily\footnotesize\textbackslash FluxNode} & never ``ZelNode'' outside historical notes \\
+$\SAS$ \quad {\ttfamily\footnotesize\textbackslash SAS} & System Attestation Service (repo: fluxsas) \\
+$\FDM$ \quad {\ttfamily\footnotesize\textbackslash FDM} & Flux Domain Manager \\
+$\PDNS$ \quad {\ttfamily\footnotesize\textbackslash PDNS} & the PowerDNS-backed zone service \\
+$\fluxdnsd$ \quad {\ttfamily\footnotesize\textbackslash fluxdnsd} & per-node mesh DNS resolver \\
+$\SSP$ \quad {\ttfamily\footnotesize\textbackslash SSP} & the 2-of-2 wallet/key pair \\
+$\CumulusVPN$ \quad {\ttfamily\footnotesize\textbackslash CumulusVPN} & product name; NEVER the Cumulus tier \\
+$\Fusion$ \quad {\ttfamily\footnotesize\textbackslash Fusion} & incumbent custodial bridge (ZelCore-io/fusion) \\
+$\FusionX$ \quad {\ttfamily\footnotesize\textbackslash FusionX} & user-facing exchange/redemption product \\
+$\VPON$ \quad {\ttfamily\footnotesize\textbackslash VPON} & private deployment / private overlay network \\
+\bottomrule
+\end{longtable}
+
+\subsection*{The Two ``PoN''-Shaped Names}
+\begin{longtable}{@{}p{0.22\linewidth}p{0.72\linewidth}@{}}
+\toprule
+Symbol & Meaning \\
+\midrule
+\endhead
+$\PoN$ \quad {\ttfamily\footnotesize\textbackslash PoN} & Proof of Node — block production, consensus layer, SHIPPED \\
+$\PNR$ \quad {\ttfamily\footnotesize\textbackslash PNR} & Progressive Node Rewards — revenue sharing, PLANNED \\
+\bottomrule
+\end{longtable}
+
+\subsection*{The ``v9'' Disambiguation}
+\begin{longtable}{@{}p{0.22\linewidth}p{0.72\linewidth}@{}}
+\toprule
+Symbol & Meaning \\
+\midrule
+\endhead
+$\specv{\cdot}$ \quad {\ttfamily\footnotesize\textbackslash specv} & \specv{8}, \specv{9} \\
+\bottomrule
+\end{longtable}
+
+\subsection*{Chain And Consensus Symbols}
+\begin{longtable}{@{}p{0.22\linewidth}p{0.72\linewidth}@{}}
+\toprule
+Symbol & Meaning \\
+\midrule
+\endhead
+$\hgt$ \quad {\ttfamily\footnotesize\textbackslash hgt} & block height \\
+$\hpon$ \quad {\ttfamily\footnotesize\textbackslash hpon} & PoN activation height \\
+$\hpa$ \quad {\ttfamily\footnotesize\textbackslash hpa} & PA-Depletion height (PNR activation) \\
+$\hstar$ \quad {\ttfamily\footnotesize\textbackslash hstar} & \specv{9} enforcement height \\
+$\hshield$ \quad {\ttfamily\footnotesize\textbackslash hshield} & shielded-pool sunset height \\
+$\hsnap$ \quad {\ttfamily\footnotesize\textbackslash hsnap} & migration snapshot height \\
+$\tslot$ \quad {\ttfamily\footnotesize\textbackslash tslot} & PoN slot index \\
+$\spacingpon$ \quad {\ttfamily\footnotesize\textbackslash spacingpon} & PoN target spacing \\
+$\spacingpow$ \quad {\ttfamily\footnotesize\textbackslash spacingpow} & legacy PoW target spacing \\
+$\blocksyear$ \quad {\ttfamily\footnotesize\textbackslash blocksyear} & blocks per year \\
+$\redint$ \quad {\ttfamily\footnotesize\textbackslash redint} & PoN subsidy reduction interval \\
+$\redmax$ \quad {\ttfamily\footnotesize\textbackslash redmax} & max number of reductions \\
+$\redfac$ \quad {\ttfamily\footnotesize\textbackslash redfac} & per-reduction factor (9/10) \\
+\bottomrule
+\end{longtable}
+
+\subsection*{Tiers}
+\begin{longtable}{@{}p{0.22\linewidth}p{0.72\linewidth}@{}}
+\toprule
+Symbol & Meaning \\
+\midrule
+\endhead
+$\tiers$ \quad {\ttfamily\footnotesize\textbackslash tiers} & {Cumulus, Nimbus, Stratus} \\
+$\tC$ \quad {\ttfamily\footnotesize\textbackslash tC} & Cumulus \\
+$\tN$ \quad {\ttfamily\footnotesize\textbackslash tN} & Nimbus \\
+$\tS$ \quad {\ttfamily\footnotesize\textbackslash tS} & Stratus \\
+$\coll{\cdot}$ \quad {\ttfamily\footnotesize\textbackslash coll} & collateral required by tier \\
+$\ncount{\cdot}$ \quad {\ttfamily\footnotesize\textbackslash ncount} & number of nodes in tier \\
+$\rot{\cdot}$ \quad {\ttfamily\footnotesize\textbackslash rot} & rotation length of tier, in blocks \\
+$\tbase{\cdot}$ \quad {\ttfamily\footnotesize\textbackslash tbase} & PoN tier base, in FLUX \\
+\bottomrule
+\end{longtable}
+
+\subsection*{Emission And Supply}
+\begin{longtable}{@{}p{0.22\linewidth}p{0.72\linewidth}@{}}
+\toprule
+Symbol & Meaning \\
+\midrule
+\endhead
+$\subsidy$ \quad {\ttfamily\footnotesize\textbackslash subsidy} & block subsidy, FLUX \\
+$\devfund$ \quad {\ttfamily\footnotesize\textbackslash devfund} & consensus dev-fund remainder \\
+$\supply$ \quad {\ttfamily\footnotesize\textbackslash supply} & cumulative issued supply \\
+$\maxmoney$ \quad {\ttfamily\footnotesize\textbackslash maxmoney} & per-transaction sanity bound, NOT a cap \\
+\bottomrule
+\end{longtable}
+
+\subsection*{Applications And Pricing}
+\begin{longtable}{@{}p{0.22\linewidth}p{0.72\linewidth}@{}}
+\toprule
+Symbol & Meaning \\
+\midrule
+\endhead
+$\app$ \quad {\ttfamily\footnotesize\textbackslash app} & an application \\
+$\resvec$ \quad {\ttfamily\footnotesize\textbackslash resvec} & resource vector (cpu, ram, hdd) \\
+$\pricevec$ \quad {\ttfamily\footnotesize\textbackslash pricevec} & price vector at a height \\
+$\dur$ \quad {\ttfamily\footnotesize\textbackslash dur} & duration, in blocks \\
+$\ninst$ \quad {\ttfamily\footnotesize\textbackslash ninst} & instance count \\
+$\price$ \quad {\ttfamily\footnotesize\textbackslash price} & price of a deployment \\
+$\blockslasting$ \quad {\ttfamily\footnotesize\textbackslash blockslasting} & default lifetime, in blocks \\
+\bottomrule
+\end{longtable}
+
+\subsection*{PNR: Fee Pool and Settlement}
+\begin{longtable}{@{}p{0.22\linewidth}p{0.72\linewidth}@{}}
+\toprule
+Symbol & Meaning \\
+\midrule
+\endhead
+$\pool$ \quad {\ttfamily\footnotesize\textbackslash pool} & fee pool balance (consensus state) \\
+$\drip$ \quad {\ttfamily\footnotesize\textbackslash drip} & drip constant, in blocks \\
+$\nodeshare$ \quad {\ttfamily\footnotesize\textbackslash nodeshare} & operator share of application revenue \\
+$\foundshare$ \quad {\ttfamily\footnotesize\textbackslash foundshare} & Foundation share \\
+$\nodesharecap$ \quad {\ttfamily\footnotesize\textbackslash nodesharecap} & ceiling on the operator share \\
+$\rampstep$ \quad {\ttfamily\footnotesize\textbackslash rampstep} & per-reduction increase in operator share \\
+$\payees$ \quad {\ttfamily\footnotesize\textbackslash payees} & the set of nodes paid in a block \\
+$\tierratio{\cdot}$ \quad {\ttfamily\footnotesize\textbackslash tierratio} & tier split of the drip \\
+\bottomrule
+\end{longtable}
+
+\subsection*{Moderation Quorum}
+\begin{longtable}{@{}p{0.22\linewidth}p{0.72\linewidth}@{}}
+\toprule
+Symbol & Meaning \\
+\midrule
+\endhead
+$\vweight{\cdot}$ \quad {\ttfamily\footnotesize\textbackslash vweight} & voting weight of an identity \\
+$\vtotal$ \quad {\ttfamily\footnotesize\textbackslash vtotal} & total voting weight \\
+$\vthresh$ \quad {\ttfamily\footnotesize\textbackslash vthresh} & removal threshold, fraction of \vtotal \\
+$\bond$ \quad {\ttfamily\footnotesize\textbackslash bond} & refundable report bond \\
+\bottomrule
+\end{longtable}
+
+\subsection*{Privacy And Value}
+\begin{longtable}{@{}p{0.22\linewidth}p{0.72\linewidth}@{}}
+\toprule
+Symbol & Meaning \\
+\midrule
+\endhead
+$\nf$ \quad {\ttfamily\footnotesize\textbackslash nf} & nullifier \\
+$\cm$ \quad {\ttfamily\footnotesize\textbackslash cm} & note commitment \\
+$\tree$ \quad {\ttfamily\footnotesize\textbackslash tree} & note commitment tree \\
+\bottomrule
+\end{longtable}
+
+\subsection*{Agents And Delegation}
+\begin{longtable}{@{}p{0.22\linewidth}p{0.72\linewidth}@{}}
+\toprule
+Symbol & Meaning \\
+\midrule
+\endhead
+$\principal$ \quad {\ttfamily\footnotesize\textbackslash principal} & the human principal \\
+$\agent$ \quad {\ttfamily\footnotesize\textbackslash agent} & an autonomous agent \\
+$\budget$ \quad {\ttfamily\footnotesize\textbackslash budget} & delegated spending budget \\
+$\scopeset$ \quad {\ttfamily\footnotesize\textbackslash scopeset} & scope of delegated authority \\
+\bottomrule
+\end{longtable}
+
+\subsection*{Adversary}
+\begin{longtable}{@{}p{0.22\linewidth}p{0.72\linewidth}@{}}
+\toprule
+Symbol & Meaning \\
+\midrule
+\endhead
+$\adv$ \quad {\ttfamily\footnotesize\textbackslash adv} & the adversary \\
+$\advbudget$ \quad {\ttfamily\footnotesize\textbackslash advbudget} & adversary's capital budget \\
+\bottomrule
+\end{longtable}
+
+\subsection*{Bridge (§22)}
+\begin{longtable}{@{}p{0.22\linewidth}p{0.72\linewidth}@{}}
+\toprule
+Symbol & Meaning \\
+\midrule
+\endhead
+$\bslack$ \quad {\ttfamily\footnotesize\textbackslash bslack} & reserve slack: R - sum of minted supply \\
+$\brate{\cdot}$ \quad {\ttfamily\footnotesize\textbackslash brate} & per-chain sliding-window mint rate limit \\
+$\bcap{\cdot}$ \quad {\ttfamily\footnotesize\textbackslash bcap} & per-chain contract constant, a defence-in-depth backstop; the global cap is enforced by reserve dominance \\
+$\breserve$ \quad {\ttfamily\footnotesize\textbackslash breserve} & main-chain reserve held for the bridge \\
+$\bminted{\cdot}$ \quad {\ttfamily\footnotesize\textbackslash bminted} & minted supply on chain $c$ \\
+$\bflow{\cdot}$ \quad {\ttfamily\footnotesize\textbackslash bflow} & cumulative flow, subscripted by leg \\
+$\bvalue{\cdot}$ \quad {\ttfamily\footnotesize\textbackslash bvalue} & value released, subscripted by leg \\
+$\bquorum{\cdot}$ \quad {\ttfamily\footnotesize\textbackslash bquorum} & signing threshold, subscripted by role \\
+\bottomrule
+\end{longtable}
+
+%% Drain this section's float queue before the next begins.
+\FloatBarrier

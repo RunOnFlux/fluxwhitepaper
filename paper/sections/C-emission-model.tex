@@ -1,0 +1,102 @@
+\section{Emission model: derivation, discrepancy, and reproduction}
+\label{sec:app-emission}
+
+Every emission figure in this paper is produced by one model, and this appendix states what that
+model is, where its constants come from, one place where it disagrees with its own documentation,
+and how to reproduce every number.
+
+\subsection{Provenance}
+
+The model is \texttt{supply/\allowbreak{}emission\_model.\allowbreak{}py} in the \texttt{flux-roadmap} repository. It is not a
+reimplementation written for this paper: it is the team's own model, and it carries source citations
+to \texttt{chainparams.\allowbreak{}cpp}, \texttt{main.cpp} and \texttt{amount.h} for each constant it uses. Those
+citations were checked independently against the daemon source during the preparation of
+\S\ref{sec:monetary-policy}, and \S\ref{sec:app-constants} reproduces the constants with their
+locations.
+
+\subsection{Arithmetic conventions, which are load-bearing}
+
+All arithmetic is over integers in satoshi, matching \fluxd's \texttt{CAmount} (\texttt{int64}).
+Division is floor division, matching C++ integer division for non-negative operands, and \texttt{>>}
+is an arithmetic right shift. This is not pedantry: the \PoN reduction applies
+$s_{k+1} = \lfloor 9 s_k / 10 \rfloor$ once per interval, and because each step truncates
+independently, the result is \emph{not} in general equal to $\lfloor s_0 \cdot 0.9^{r} \rfloor$. Any
+reimplementation using floating-point arithmetic will diverge from consensus.
+
+\subsection{The two modes, and the discrepancy}
+
+The model runs in two modes. \texttt{code} transcribes \texttt{Get\allowbreak{}Block\allowbreak{}Subsidy} literally.
+\texttt{observed} reproduces what mainnet actually paid over blocks 1--4999, where the deployed
+behaviour differs from a literal reading of the slow-start branch by one block of offset. The two
+per-block subsidies converge for every height at or above 5{,}000.
+
+The model's own docstring states that the two modes differ by \SI{0.06}{\flux}. Executing it shows an
+exact and persistent difference in cumulative supply of \textbf{\num{150.00000000}\flux} at every height at or above
+\num{5000}, arising from the one-block index shift itself, which lowers every ramp block's payout
+rather than block 2's alone as the docstring's figure assumes. This is a
+discrepancy in the published model's documentation, not in consensus: neither mode changes what the
+chain paid, and the difference is confined to the first 5{,}000 blocks of a chain that is now past
+2.9 million. This paper uses \texttt{observed} throughout, and reports supply as
+\num{429466823.9700}\flux at height \num{2912015}.
+
+\begin{remark}[Status of this discrepancy]
+\label{rem:emission-discrepancy}
+The \num{150.00000000}\flux{} figure and its root cause --- the index shift acting on every ramp
+block, not only on block 2 --- were established by executing the published model, and are
+reproducible by anyone who runs it \shipped
+\srccode{flux-roadmap/\allowbreak{}supply/\allowbreak{}emission\_model.py}{207--229}
+\srcmeasured{flux-roadmap/\allowbreak{}supply/\allowbreak{}emission\_model.py, both modes}{2026-09-03}. \textbf{This is
+recorded, not outstanding, so far as this paper is concerned}: nothing here depends on the model's
+docstring being right, every figure this paper reports comes from \texttt{observed} mode, and the
+difference is confined to the first \num{5000} blocks of a chain now past \num{2.9} million. It has
+no consensus consequence.
+
+What remains is an upstream housekeeping item for the model's own maintainers rather than a gap in
+this document: the docstring says \SI{0.06}{\flux} where execution gives \num{150}\flux, and the fix
+is to the docstring's figure, since the closed-form sums agree with the per-block function in both
+modes. It is recorded here so that a reader who runs the model and
+sees a different number than the docstring promises knows why, and so that the correction does not
+depend on this paper being read.
+\end{remark}
+
+\subsection{The functions}
+
+\S\ref{sec:monetary-policy} states $\subsidypow$, $\subsidypon$ and $\supply$ in full. This appendix
+adds only the two facts a reimplementer needs and the body omits: the model computes cumulative
+supply as a sum of six independently-triggered step components rather than by iterating over blocks,
+so it is exact at any height without a loop; and it treats the dev-fund remainder as a
+\emph{remainder} of the reduced subsidy, never as a fixed \SI{0.5}{\flux}, so the dev fund declines
+on the same schedule as the tier bases.
+
+\subsection{Reproduction}
+
+\begin{lstlisting}[caption={Reproducing every emission figure in this paper.},captionpos=b]
+# Model report (mode=observed is the default)
+python3 repos/flux-roadmap/supply/emission_model.py
+
+# Regenerate the plotted data: emission.dat, tier_income.dat, pon_reductions.dat
+python3 repos/flux-roadmap/supply/_gen_dat.py
+
+# Live measurements (fleet, applications, pricing, value pools)
+bash   scripts/04-measure.sh
+python3 scripts/05-network-analysis.py
+
+# PNR settlement analysis: drip trade-off and crossover series
+python3 scripts/07-pnr-settlement.py
+\end{lstlisting}
+
+Every generated \texttt{.dat} file under \texttt{paper/data/} begins with \texttt{\#} comment lines
+recording the generating command, the date, the source model, and the assumptions in force --- in
+particular that future-height projections hold block spacing at the \SI{30}{\second} target, which
+real spacing may not do.
+
+\subsection{What the model does not do}
+
+It does not model demand, revenue, or price. The \PNR crossover series in \S\ref{sec:pnr} and
+\S\ref{sec:evaluation} are produced by a separate script under explicitly stated demand-growth
+assumptions, with price exogenous and never forecast. The model also assumes the schedule as
+currently written in consensus: it does not anticipate the \PNR activation, the parallel-asset cut,
+or any future change to the reduction grid.
+
+%% Drain this section's float queue before the next begins.
+\FloatBarrier

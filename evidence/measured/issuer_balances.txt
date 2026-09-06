@@ -1,0 +1,38 @@
+# FLUX issuer-held balances and outstanding liability
+# retrieved 2026-09-03T11:23:06Z
+# issuer-held = SNAPSHOT + MINING + SWAP + LOCKED + LOCKED-SNAPSHOT + LOCKED-MINING
+#   (current/post-rotation addresses from balance-checker/config/default.js)
+# FEES address is queried but NOT included (not present in balance-checker)
+
+== ethereum ==
+   contract: 0x720cd16b011b987da3518fbf38c3071d4f0d1495
+   rpc:      https://ethereum-rpc.publicnode.com
+   issuer-held (sum of 6 roles) = 283,782,657.21951687 FLUX
+   FEES addr (unverified, not counted) = 0.00000000 FLUX
+   totalSupply                  = 440,000,000.00000000 FLUX
+   outstanding liability         = 156,217,342.78048313 FLUX
+
+== bsc ==
+   contract: 0xaff9084f2374585879e8b434c399e29e80cce635
+   rpc:      https://bsc-dataseed.binance.org
+   issuer-held (sum of 6 roles) = 379,416,462.37025207 FLUX
+   FEES addr (unverified, not counted) = 0.00000000 FLUX
+   totalSupply                  = 440,000,000.00000000 FLUX
+   outstanding liability         = 60,583,537.62974790 FLUX
+
+== avalanche ==
+   contract: 0xc4B06F17ECcB2215a5DBf042C672101Fc20daF55
+   rpc:      https://api.avax.network/ext/bc/C/rpc
+   issuer-held (sum of 6 roles) = 439,371,417.37793958 FLUX
+   FEES addr (unverified, not counted) = 0.00000000 FLUX
+   totalSupply                  = 440,000,000.00000000 FLUX
+   outstanding liability         =   628,582.62206042 FLUX
+
+== base ==
+   contract: 0xb008bdcf9cdff9da684a190941dc3dca8c2cdd44
+   rpc:      https://mainnet.base.org
+   issuer-held (sum of 6 roles) = 437,471,141.57008934 FLUX
+   FEES addr (unverified, not counted) = 0.00000000 FLUX
+   totalSupply                  = 440,000,000.00000000 FLUX
+   outstanding liability         = 2,528,858.42991062 FLUX
+

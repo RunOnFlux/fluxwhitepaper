@@ -1,0 +1,146 @@
+\section{Feasibility and distance to target}
+\label{sec:feasibility}
+
+The position this paper has been asked to test is that Flux's substrate is already good and the
+remaining work is extension rather than invention. That is a testable claim, and this section tests
+it rather than repeating it. The result is mixed in a specific and useful way: the cloud layer
+largely supports the claim, and four mechanisms do not.
+
+\subsection{Method}
+
+Every mechanism tagged \planned or \vision elsewhere in this paper appears below with what exists
+today (cited), what is missing, the hardest unsolved sub-problem, and a risk class. Classes are
+assigned from the evidence gathered in Parts II--IV, not from schedule optimism:
+
+\begin{description}
+  \item[Extension] composes components that exist, on paths that already run.
+  \item[Engineering] a substantial new build, with no unsolved research problem.
+  \item[Research] an open problem with no known good answer, or a property that cannot be obtained
+    without a new trust assumption.
+\end{description}
+
+A note on what an honest assignment costs. If every row came out \emph{Extension}, the exercise would
+have failed. Four rows are \emph{Research}, and three of those four are load-bearing for the thesis in
+\S\ref{sec:introduction}.
+
+\subsection{The table}
+
+{\footnotesize
+\begin{longtable}{@{}p{0.5cm}p{3.0cm}p{3.3cm}p{3.3cm}p{2.0cm}@{}}
+\toprule
+\# & Mechanism & Exists today & Hardest sub-problem & Class \\
+\midrule
+\endhead
+1 & \PNR settlement and fee pool & \PoN payment rotation, deterministic and \emph{measured} to equalise within one rotation per tier; consensus-enforced coinbase splits already exist & Pool as consensus state with a reorg-exact serialisation (settled: coinbase-committed) and $\drip$ (settled: 86{,}400 blocks) --- \S\ref{sec:pnr} & Engineering \\
+2 & Parallel-asset consolidation & Ten deployed contracts; audited Schnorr \mbox{ERC-4337} account on seven EVM chains & Reaching holders of retired assets and handling unclaimed balances --- coordination, not code & Engineering \\
+3 & Bounded, publicly verifiable bridge & Audited Schnorr account; Solana multisig live on mainnet & Keeping administrative control decentralized \emph{and} bounded & Engineering \\
+4 & Bonded attestation network & Measured boot, dm-verity, LUKS, fail-closed \texttt{fes}; \texttt{purpose=\allowbreak{}mesh} implemented with no consumer & The attestation key is not machine-bound, so a bond would secure a signature anyone with the software can produce & Research $\rightarrow$ Engineering \\
+5 & \appspec \specv{9} & 932 files changed, 7{,}763 test cases per push, draining and per-app-CA TLS wired & Migrating 322 deployed applications across six legacy versions without evicting any & Extension \\
+6 & Main-chain pruning & \texttt{-prune} fully wired and inherited; \FluxNode registry already in a separate store & Retaining registry and collateral UTXOs across pruning depth & Extension \\
+7 & Collateral maturity & Coinbase-maturity precedent; registry enumerable & Defining ``continued participation'' so upgrades stay instant while exits wait & Engineering \\
+8 & Post-quantum migration & Nothing: a repo-wide search returns zero hits & Primitive unchosen; residue classes outside collateral. Collateral path designed (\S\ref{sec:pq-frontier}) & Research \\
+9 & Moderation quorum & Node owner keys and collateral weights; a \mbox{GitHub-file} blocklist as today's mechanism & Four owner identities (three under linkage) reach the 25\% threshold; no mechanism change fixes concentration & Research \\
+10 & Direct per-deployment payment & \emph{Shipped twice}: application registration, and \CumulusVPN's memo-derived entitlement & None; this is the mature path & Extension \\
+11 & Deposited credits and renewal & \texttt{appsmonitor} auto-renewal with Foundation-held keys & Authorising a recurring charge without a custodian and without an allowance primitive --- placed outside protocol scope: the protocol offers no auto-renewal, and credits are a third-party custodial service built on \Flux{} \srcintent{08-answers-round-2.md, round 9} & Engineering \\
+12 & Agent deployment authority & \FluxOS validates owner signatures over specifications on every node & None; it composes with existing validation & Extension \\
+13 & Agent \emph{spending} authority, bounded & \mbox{ERC-4337} session-key substrate on EVM chains; scoped revocable FluxEdge tokens (action-bounded) & Not possible on the \Flux L1 without a new trusted party or new consensus state & Research \\
+14 & Agent-native provisioning API & Shipped MCP tools; OpenAPI 3.1.1 FluxEdge API with scoped tokens and auto-revocation & Inherits row 13 for its bounds & Extension \\
+15 & Natural-language deployment & \texttt{DeploymentYAML}: retrieval-augmented generation producing Kubernetes YAML; Orbit specification generation & Whether a human can meaningfully audit a generated specification before signing & Engineering \\
+16 & Shielded value & Sapling notes, encryption, commitment tree, nullifiers, Groth16 --- all deployed and inherited & None; it runs & Extension \\
+17 & Shielded payment for deployments & The primitives above & \emph{Withdrawn}: both pools are to be retired \srcintent{08-answers-round-2.md, round 10} & --- \\
+18 & Proving a shielded payment funds a \emph{specific} deployment unlinkably & Note commitments and nullifiers & An application address is itself a workload identifier; at 35.4 renewals/day a payment is a singleton in its block & Research (moot after retirement) \\
+19 & Orchard/Halo2 migration & Sapling/Groth16 deployed; no Orchard present & Consensus change plus audit scoping; now a future option rather than a migration & Engineering \\
+19b & Shielded-pool retirement & Both pools live, closed to entry, 96{,}479.94\,FLUX & Sunset height, outreach, and removal of the Rust proving stack & Engineering \\
+20 & GPU tenancy & Whole-device passthrough via Kubernetes & No MIG, vGPU or time-slicing; requests silently stripped on contention & Engineering \\
+21 & \FluxCloud/\FluxEdge convergence & Two runtimes and two products & Organisational as much as technical & Engineering \\
+22 & Decentralizing the reachability path & \FDM, \PDNS, gateway and certificates all working & \texttt{api.\allowbreak{}runonflux.\allowbreak{}io} is the sole application-discovery source, with no on-chain or P2P fallback & Engineering \\
+\bottomrule
+\caption{Distance from the deployed system to the target architecture. Citations for every ``exists
+today'' entry are given in the section that describes it.}
+\label{tab:feasibility}
+\end{longtable}
+}
+
+\noindent Tally: \textbf{Extension 6, Engineering 11, Research$\rightarrow$Engineering 1, Research 4.}
+
+\subsection{The four Research items, which are not equally hard}
+
+\paragraph{Post-quantum migration (row 8).}
+Hard for everyone, and \Flux{} starts from a \emph{worse} position than Bitcoin on one axis and a
+better one on another. Worse: \SI{20.61}{\percent} of supply sits in \FluxNode{} collateral whose
+public keys are published by protocol mandate, not by user behaviour
+(\Cref{rem:pq-collateral-exposed}) --- and BIP-360's remedy, an output type that hides the key in the
+scriptPubKey \citep{bip360}, does not reach it, because the exposure is in the registration
+transaction rather than the output script.
+
+Better, and it is the axis that decides the disposition: collateral is a \emph{registered} set with a
+mandatory recurring transaction, so \Flux{} has an authenticated channel to exactly the exposed
+population. That is what makes eligibility-forced migration possible
+(\Cref{rem:pq-disposition}, adopted) and what lets \Flux{} avoid the freeze-or-tolerate-theft dilemma
+BIP-361 must resolve for Bitcoin \citep{bip361}. The row stays \textbf{Research} because the
+primitive is unchosen and the residue classes are unsolved, not because the collateral path is
+undesigned --- that path is specified in \S\ref{sec:pq-frontier}.
+
+\paragraph{Bounded agent spending on the \Flux L1 (row 13).}
+Hard for a precise and stateable reason established in \S\ref{sec:agent-identity}: script validation
+is a pure function of the spending transaction and the outputs it consumes, so no rule can enforce a
+rate limit or a cumulative cap. The deployable answer --- fund a dedicated key, and the budget is the
+balance --- is honest and unglamorous. Everything richer requires a co-signer, which is a new trusted
+party, or new consensus state.
+
+\paragraph{Unlinkable payment for a specific deployment (row 18).}
+The paper's most interesting problem, and the one whose difficulty is easiest to overstate. It must
+be classed in three parts and never collapsed: the shielded primitives are inherited and shipped
+(Extension); applying them to deployment payment is Engineering, gated on row 17; and proving a
+shielded payment funds a \emph{particular} deployment without linking payer to workload is Research.
+Crucially, \textbf{it applies only to the optional credit path and to shielded funding proofs}. The
+default direct-payment path is unaffected, because the payment \emph{is} the renewal and there is no
+standing obligation to prove --- so the agent-native argument of \S\ref{sec:agent-native} survives
+even with this problem open. That limitation of blast radius is a real result and not a consolation.
+
+\paragraph{The moderation quorum (row 9).}
+Classed Research not because the mechanism is hard to build --- it is straightforward --- but because
+\textbf{the property it is meant to provide cannot be obtained by building it}. Four owner identities
+--- three under the strongest linkage computable from public data --- clear the 25\% threshold at the
+measured distribution. No bond, rate limit or eligibility gate changes
+that. The open question is whether a two-chamber rule requiring both a weight threshold and a
+distinct-identity count can preserve Sybil resistance while adding censorship resistance, and that is
+genuinely open.
+
+\subsection{Where the claim holds, and where it does not}
+
+For the cloud layer the claim holds well. \specv{9}, pruning, deployment authority, direct payment and
+the provisioning API are all Extension, and the \specv{9} substrate is demonstrably built and tested.
+The proposition that \Flux can extend rather than invent its way to an agent-serving cloud is
+\emph{largely correct, for everything except payment bounds and payment privacy}.
+
+Where it does not hold, row 4 is the load-bearing case. The roadmap treats the bonded attestation
+network as an extension of an existing attestation service, but the existing service does not provide
+the property the bonded design needs to build on: an attestation demonstrates possession of a value
+shipped in every copy of the software, not that a given machine booted a given image
+(\S\ref{sec:attested-execution}). That is a prerequisite, not an increment, and it should be sequenced
+as one.
+
+\subsection{The dependency that reorders the schedule}
+
+One edge in the dependency graph deserves to be lifted out of the table, because it changes what
+should ship first.
+
+\PNR pays all nodes from a shared pool, so a node's income does not depend on hosting; marginal
+hosting income is exactly zero and free-riding dominates at every parameter value
+(\S\ref{sec:pnr}). What compels hosting is therefore the eligibility gate --- and rows 4 and 9
+establish that the gate is neither operator-bound nor machine-bound. \textbf{\PNR raises the payoff to
+passing that gate without doing the work, by exactly what it pays.} Hardening attestation is thus a
+\emph{precondition} for \PNR activation rather than a parallel workstream; sequencing it afterwards
+would deploy an incentive to fake eligibility before the mechanism that detects faking exists. This
+single edge raises the practical difficulty of row 1 above its own construction class, and
+\S\ref{sec:migration} treats it as the schedule's binding constraint.
+
+A second, milder dependency: rows 1, 5, 11, 14 and 21 all wait on \specv{9} fields that currently have
+no consumers --- \texttt{paymentMemo}, \texttt{referralCode} and \texttt{machineType}
+(\S\ref{sec:appspec-v9}). \specv{9} is therefore the critical path for most of Part IV, and its
+enforcement height, since settled at $\hstar = \num{3050000}$ (\S\ref{sec:appspec-v9}), is the
+single most schedule-relevant date in this document.
+
+%% Drain this section's float queue before the next begins.
+\FloatBarrier

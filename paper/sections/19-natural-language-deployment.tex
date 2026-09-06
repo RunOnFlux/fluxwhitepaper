@@ -1,0 +1,333 @@
+\section{Natural-language deployment: who holds the signing key}
+\label{sec:nl-deployment}
+
+A user can already describe what they want running in a sentence and a short paragraph
+of configuration, and something on \Flux will turn that description into a running
+application. What differs sharply, and matters to anyone deciding how much to trust the
+result, is which of two \emph{different systems} turns the description into a signed,
+on-chain transaction. One is the protocol's own path: the string to be signed goes to a
+device the user holds, the user's key signs it there, and a fully compromised assistant
+is limited to proposing something bad. The other is a third-party operator's service:
+the operator holds the key, the operator signs, and what stands between an autonomous
+caller and a live deployment is a bearer token that authenticates the caller to the party
+already holding the key (\S\ref{sec:paying:facilitator}). These are not two modes of one
+product, and this section does not present them as a choice the protocol offers — the
+protocol offers exactly one of them and is indifferent to the existence of the other
+(Property~\ref{prop:chainindifferent}). The section states each precisely, gives each its
+own security property rather than one property for ``the system,'' and argues that for
+the protocol's path the open problem is not custody at all — it is whether the artifact
+placed in front of the signer can actually be understood before it is signed.
+
+\subsection{What ships today}
+
+Three pieces of tooling turn a natural-language or near-natural-language description into
+a deployment. All three are \shipped.
+
+\textbf{Orbit.} A wizard (React front end plus an Express server, publicly reachable at
+\texttt{orbit.\allowbreak{}runonflux.\allowbreak{}com} per its own configuration) walks a user through a Git
+repository URL, a resource plan and a small number of deployment options, then emits a
+\specv{8} application specification whose single compose component runs the shared image
+\texttt{runonflux/\allowbreak{}orbit:latest} \shipped
+\srccode{deploy-with-git-frontend/\allowbreak{}config/\allowbreak{}defaults.js}{3}
+\srccode{deploy-with-git-frontend/\allowbreak{}src/\allowbreak{}services/\allowbreak{}deployService.js}{453--490}.
+That specification is not a pointer to a build the Flux team performs on the user's
+behalf: once FluxOS places it on a node, the container itself clones the target
+repository, auto-detects its language and framework by an ordered set of file-presence
+checks, installs dependencies, builds and runs it, and continues to manage releases,
+rollback and webhook-triggered redeploys from inside the running instance \shipped
+\srccode{orbit/\allowbreak{}README.md}{5,20} \srccode{orbit/\allowbreak{}entrypoint.sh}{6--9}
+\srccode{orbit/\allowbreak{}lib/\allowbreak{}build.sh}{304--431}. Orbit is not a separate build farm; the
+container \emph{is} the workload, running on whichever node FluxOS happens to place that
+application instance on \shipped \srccode{orbit/\allowbreak{}entrypoint.sh}{1--9}
+\srccode{orbit/\allowbreak{}README.md}{39--57}.
+
+\textbf{Deploy-from-Git.} The end-to-end path from a repository to a running application
+is: a user or agent supplies a Git URL and configuration; the frontend server analyzes
+the repository (provider, public/private access, branches, a detected port, monorepo
+layout, an imported \texttt{flux.json}\slash\texttt{flux.yaml}) \shipped
+\srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}orbit/\allowbreak{}repositoryService.js}{16--53}; a \specv{8}
+specification is built around the Orbit image \shipped
+\srccode{deploy-with-git-frontend/\allowbreak{}src/\allowbreak{}services/\allowbreak{}deployService.js}{453--489}; the
+specification is sent to Flux's own \texttt{POST /\allowbreak{}apps/\allowbreak{}verifyap\allowbreak{}pregistr\allowbreak{}ationspe\allowbreak{}cificati\allowbreak{}ons}
+for normalization \shipped
+\srccode{deploy-with-git-frontend/\allowbreak{}src/\allowbreak{}services/\allowbreak{}deployService.js}{521--539}; it is signed
+(mechanism below); and the signed transaction is submitted directly to
+\texttt{api.\allowbreak{}runonflux.\allowbreak{}io} via \texttt{POST /\allowbreak{}apps/\allowbreak{}appregister} \shipped
+\srccode{deploy-with-git-frontend/\allowbreak{}src/\allowbreak{}services/\allowbreak{}deployService.js}{547--565}. Neither the
+frontend server nor Orbit itself ever clones or builds the user's code before that point
+— that work happens later, inside the Orbit container, once placement has occurred.
+
+\textbf{\texttt{DeploymentYAML}.} A gRPC method,
+\texttt{DeploymentYAML(YAMLPrompt) $\to$ YAMLResponse}, generates Kubernetes YAML from a
+natural-language prompt \shipped
+\srccode{pouwbackend/\allowbreak{}grpc\_server/\allowbreak{}market\_place/\allowbreak{}deployment.go}{1784--1812}. The
+generator first vector-searches existing marketplace application YAMLs for
+retrieval-augmented context \shipped
+\srccode{pouwbackend/\allowbreak{}ai/\allowbreak{}fluxai.go}{188--191,241--244}, then issues a chat-completion
+request against a hard-coded system preamble instructing the model to emit only raw YAML,
+with the model pinned to ``Llama 3.1 8B'' and dispatched either to FluxAI's own
+\texttt{/\allowbreak{}v1/\allowbreak{}chat/\allowbreak{}completions} endpoint or to Google AI \shipped
+\srccode{pouwbackend/\allowbreak{}ai/\allowbreak{}yaml.go}{30--41} \srccode{pouwbackend/\allowbreak{}ai/\allowbreak{}fluxai.go}{101,116,212,219--225,266,278--284}.
+Natural-language deployment, in other words, is not hypothetical; a form of it ships
+today as a retrieval-augmented, LLM-backed generator. What the extraction did
+\emph{not} find is a code path chaining that generated YAML directly into
+\texttt{/\allowbreak{}deployment/\allowbreak{}start} — whether the output is ever auto-submitted or always
+requires a human or agent to copy it forward is unresolved from the evidence available,
+and the claim made here is limited to generation, not to confirmed unattended
+submission \srcinferred.
+
+\subsection{Two signing paths, belonging to two systems}
+\label{sec:nl:paths}
+
+The three pieces of tooling above all converge on one signing step, and that step does
+not have one answer — it depends on how the caller authenticated, and therefore on which
+system produces the signature.
+
+\begin{definition}[Local signing and operator signing]
+\label{def:nl:paths}
+A \emph{local-signing path} is one on which the string to be signed is built by a
+frontend and relayed to a device that holds the private key, with the signature
+computed and returned by that device. An \emph{operator-signing path} is one on which a
+remote service that itself holds the private key computes the signature and returns it,
+authorized by a bearer credential that authenticates the caller to that service. The word
+\emph{delegated} does not fit the second and this paper does not use it as a description
+of authority there: delegation presupposes a principal holding the authority being
+delegated, and on this path the user never holds the key
+(\S\ref{sec:paying:facilitator}, Property~\ref{prop:custody},
+Corollary~\ref{cor:nodelegation}).
+\end{definition}
+
+The first is a path of the protocol: \Flux verifies a signature against an address and
+takes no view of where the corresponding key sits, so a key on a user's own device is
+exactly what the network expects and requires no service anywhere. The second is a path
+of a company's product; the network cannot see it and does not depend on it
+(Property~\ref{prop:chainindifferent}). The remainder of this subsection states each
+separately, and it does not average them.
+
+On the local-signing path, a user connected through the \SSP wallet extension or through
+ZelCore has the frontend build the string-to-sign and relay it to \texttt{window.ssp.request('sign', \ldots)}
+or to a ZelCore deep link plus a WebSocket channel; the private key never leaves the
+user's own device, and the frontend only ever sees the resulting signature \shipped
+\srccode{deploy-with-git-frontend/\allowbreak{}src/\allowbreak{}services/\allowbreak{}deployService.js}{697--706,717--772}.
+Here the trust boundary really is the signing step: a fully compromised assistant can
+construct and propose an arbitrary specification, but it cannot produce a valid signature
+over it, and therefore cannot deploy or spend. That is the property this section's opening
+claims for the protocol's path, and here it holds.
+
+On the operator-signing path — a \FluxCore SSO login authenticated by Firebase — the
+frontend server does not hold or see a Flux private key at any point. It POSTs the message
+and the user's Firebase ID token to a remote service,
+\texttt{https:/\allowbreak{}/\allowbreak{}service.\allowbreak{}fluxcore.\allowbreak{}ai/\allowbreak{}api/\allowbreak{}signMessage},
+and receives a signature back; the service signs \emph{on the user's behalf} \shipped
+\srccode{deploy-with-git-frontend/\allowbreak{}src/\allowbreak{}services/\allowbreak{}deployService.js}{677--691}
+\srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}flux/\allowbreak{}fluxSession.js}{60--73}. That remote service
+is the third-party payment facilitator of \S\ref{sec:paying:facilitator}: the same
+architecture, in which the operator generates and holds both of a user's private keys and
+the user never sees either \srcintent{08-answers-round-2.md, round 5}
+\srccode{console-api/\allowbreak{}src/\allowbreak{}db/\allowbreak{}models/\allowbreak{}FluxIdentity.ts}{13--28}; the identification of the two
+services follows from the observed protocol rather than from a read of this signer, which
+is not in the corpus \srcinferred. This is the path
+every server-side call uses, including registration
+(\texttt{DeploymentService.\allowbreak{}register()} calling \texttt{sessions.\allowbreak{}signMessage(session, message)},
+authenticated only by the caller's bearer token) and updates
+(\texttt{UpdateService.\allowbreak{}submit()}) \shipped
+\srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}orbit/\allowbreak{}deploymentService.js}{158--173}
+\srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}orbit/\allowbreak{}updateService.js}{68--79}. It is also the
+path the shipped Model Context Protocol (MCP) tools \texttt{deploy\_app},
+\texttt{update\_app} and \texttt{renew\_app} use \shipped
+\srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}mcp/\allowbreak{}createServer.js}{13--53,66--266}
+\srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}mcp/\allowbreak{}router.js}{13--44}. The \texttt{deploy\_app}
+tool's own description states the mechanism plainly: ``Revalidate, Firebase-sign,
+register, and test-install an Orbit app'' \shipped
+\srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}mcp/\allowbreak{}createServer.js}{174--177}. These tools, along
+with \texttt{control\_instance} and \texttt{trigger\_build}, are marked
+\texttt{destructive\allowbreak{}Hint:\allowbreak{}true} and execute against live Flux state given only a valid
+bearer token \shipped \srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}mcp/\allowbreak{}createServer.js}{170--266}.
+Given such a token, an agent can construct, sign and submit a deployment end to end with
+no human in the loop and no separate signing step \shipped
+\srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}mcp/\allowbreak{}createServer.js}{66--266}
+\srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}orbit/\allowbreak{}services.js}{91--104}.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{p{2.7cm}p{4.6cm}p{5.2cm}}
+\hline
+\textbf{Path, and whose it is} & \textbf{Who produces the signature} & \textbf{Bound on a fully compromised signing credential} \\
+\hline
+Local signing (\SSP, ZelCore)\newline\emph{the protocol's path} &
+The user's own device; the frontend only builds the string-to-sign and relays the
+resulting signature. \shipped\newline
+\srccode{deploy-with-git-frontend/\allowbreak{}src/\allowbreak{}services/\allowbreak{}deployService.js}{697--706,717--772} &
+A compromised assistant can propose a bad specification; it cannot deploy or spend,
+because it never holds a key capable of producing a valid signature over it. \shipped\newline
+\srccode{deploy-with-git-frontend/\allowbreak{}src/\allowbreak{}services/\allowbreak{}deployService.js}{697--706,717--772} \\
+\hline
+Operator signing (\FluxCore SSO)\newline\emph{a third party's service, built on \Flux} &
+A remote service, \texttt{service.\allowbreak{}fluxcore.\allowbreak{}ai/\allowbreak{}api/\allowbreak{}signMessage}, which holds the key and
+is authorized only by a Firebase bearer token. \shipped\newline
+\srccode{deploy-with-git-frontend/\allowbreak{}src/\allowbreak{}services/\allowbreak{}deployService.js}{677--691}
+\srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}flux/\allowbreak{}fluxSession.js}{60--73} &
+Nothing: no per-transaction cap, no rate limit, no budget, no scope, and no revocation
+beyond invalidating the token itself. \srcinferred\newline
+\srcintent{plan/mech-agent-identity.md \S0} \\
+\hline
+\end{tabular}
+\caption{The bound on a fully compromised signing credential, by path. The two rows are
+properties of two different systems and do not compose into a property of ``the system''.}
+\end{table}
+
+Non-custody is a property of the protocol's path. It is not a property of the operator's
+service, and the operator's service is not part of \Flux. Stating the claim at the level
+of ``the assistant configures, the user signs, therefore a compromised assistant cannot
+spend'' would be false as a description of the operator path, because there an assistant
+holding a Firebase bearer token \emph{is} the signer, indirectly, through a service that
+will sign whatever it is asked to sign.
+
+Two consequences, and the second is the one readers get wrong. First, the bound on that
+token today is nothing at all, and nothing in the protocol could have made it otherwise:
+the token is not a delegation and confers no authority — it authenticates a caller to the
+party that already holds the key (\S\ref{sec:paying:facilitator},
+Property~\ref{prop:custody}). Second, and therefore, \textbf{\S17's construction does not
+apply to this path.} A delegation certificate bounds an authority a principal holds and
+grants; here the principal holds nothing, so there is no grant to bound and the
+certificate has nowhere to attach (Corollary~\ref{cor:nodelegation}). What would bound the
+operator path is operator-side policy — rate limits, per-token caps, an approval step —
+which is a product decision belonging to the operator, and this paper specifies none of it
+and does not track it. \S17 is written for the other case: a principal \(\principal\) who
+holds a key on the protocol's path and grants an agent \(\agent\) a scope \(\scopeset\)
+under a budget \(\budget\) — where \S17 also states why enforcing \(\budget\) on the
+\Flux L1 as deployed is not currently possible without a new trusted party or a consensus
+change.
+
+The operator may choose to hand users the keys it holds for them — \(K_u\) in the notation
+of \S\ref{sec:paying:facilitator} — at which point its path becomes a local-signing one;
+it states that it may
+\srcintent{08-answers-round-2.md, round 5}. That is the operator's decision and not a
+protocol change — no consensus rule, no \FluxOS release and no \appspec field moves either
+way — and this paper records it without tracking it
+(\S\ref{sec:paying:facilitator}, Remark~\ref{rem:operatoroption}).
+
+\subsection{Reviewability: the question that remains}
+
+On the protocol's path the security boundary is exactly the signing step, and
+that boundary is only as strong as the signer's ability to understand what is being
+signed. Everything in this subsection is about that path; on the operator's service the
+question does not arise, because the party that reviews and the party that signs are the
+same party and it is not the user. For that review to be a meaningful check rather than a formality, the interface
+would need to surface, at minimum: the total cost and duration of the deployment; every
+port the specification exposes; the provenance of every image \emph{by content digest,
+not by mutable tag}; the resource commitments (cpu, memory, storage) the specification
+requests; the data-retention consequences of eviction or non-renewal (\S16); and any
+node-targeting or geolocation constraint the specification carries. \planned. These are
+not arbitrary — they are structurally the same fields \S17's delegation scope
+\(\scopeset = (\mathcal{N}, \resvec^{\max}, \ninst^{\max}, \mathcal{I}, \dur^{\max}, \mathcal{G})\)
+already names, because a human reviewing a specification before signing it and a
+delegation certificate bounding an agent's authority to construct one are answering the
+same question. \planned \srcintent{plan/mech-agent-identity.md \S1.3}.
+
+The concrete failure this addresses is not hypothetical. The deployed tooling emits
+\texttt{runonflux/\allowbreak{}orbit:latest} — a mutable tag, not a content digest — with nothing in
+the specification-construction code pinning a \texttt{sha256:} digest \shipped
+\srccode{deploy-with-git-frontend/\allowbreak{}src/\allowbreak{}services/\allowbreak{}deployService.js}{453--490}. A user
+signing that specification is not reviewing the code that will run; they are reviewing
+a name that resolves to whatever the tag currently points to at the moment a Flux node
+pulls it. The review surface itself compounds this: the wizard's final confirmation step
+renders a reconstructed summary object — name, ports, domain, polling interval, runtime,
+geolocation, environment-variable \emph{keys} only — and not the literal \specv{8}
+payload that gets signed, which omits the image reference, owner, contacts, expiry and
+the full environment-variable array present in the actual signed string
+\shipped \srccode{deploy-with-git-frontend/\allowbreak{}src/\allowbreak{}components/\allowbreak{}wizard/\allowbreak{}Step4Review.jsx}{280--338}.
+The literal artifact signed is only ever visible as the \texttt{dataToSign} string passed
+to the signer, and nothing in the extraction found it rendered to the user anywhere
+\shipped \srccode{deploy-with-git-frontend/\allowbreak{}src/\allowbreak{}services/\allowbreak{}deployService.js}{667--670}. An
+unreviewable specification presented for signature reduces the security boundary to
+theatre: the signing step still cryptographically binds the signer to \emph{something},
+but not demonstrably to the thing the signer believes they approved.
+
+It is worth noting, briefly, that the draft \specv{9} application specification already
+carries several of the fields a meaningful review would need — a required top-level
+\texttt{duration} field, per-component \texttt{cpu}\slash\texttt{memory}\slash\texttt{rootFsGb}, and
+an explicit \texttt{ports} map — none of which existed as required fields in \specv{8}
+\inprogress \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{62--66,103--117,129--150}. What that draft
+does not yet specify, as of this writing, is any signature field at all: its
+canonicalization and fingerprint recipe is described only as ``recommended,'' not
+enforced, and no signature or signer-identity field appears anywhere in the schema
+\inprogress \srccode{flux-spec/\allowbreak{}validation/\allowbreak{}canonicalization.md}{53--63}. The reviewability
+question this section raises is therefore not one \specv{9} answers by construction; it
+is a gap the next specification version inherits along with the fields it would need to
+close it.
+
+\begin{property}
+The signing step is a meaningful trust boundary if and only if the signer can, from the
+artifact presented for signature alone, determine (i) the set of programs that may
+execute as a result of that signature, and (ii) the maximum value that may be spent as a
+result of it.
+\end{property}
+
+The deployed interface fails condition (i) outright: the image reference a signed
+specification authorizes is a mutable tag rather than a fixed digest, so two signatures
+over ``the same'' specification, at different times, can authorize different code
+\shipped \srccode{deploy-with-git-frontend/\allowbreak{}src/\allowbreak{}services/\allowbreak{}deployService.js}{453--490}, and
+the object rendered for review is a reconstruction rather than the literal payload being
+signed \shipped \srccode{deploy-with-git-frontend/\allowbreak{}src/\allowbreak{}components/\allowbreak{}wizard/\allowbreak{}Step4Review.jsx}{280--338}.
+Condition (ii) fares somewhat better in structure — plan, resource ceiling and billing
+period are concrete fields the tooling computes before submission, including an explicit
+blocks-from-months expiry calculation \shipped
+\srccode{deploy-with-git-frontend/\allowbreak{}src/\allowbreak{}services/\allowbreak{}deployService.js}{102,108--110} — but
+because the rendered review is, again, a reconstruction, a signer confirms the wizard's
+arithmetic rather than reading the number that will actually be signed. Digest pinning
+is the cheapest available remedy for condition (i), because it requires no protocol
+change, no consensus change and no new specification field: it only requires
+substituting a resolved digest for a mutable tag at the point where the tooling already
+constructs the specification, which is a change confined entirely to the tooling that
+already runs today.
+
+\subsection{Self-hosting}
+
+The tooling that performs natural-language deployment does not sit outside the network
+it targets. Orbit is deployed as an ordinary \Flux application and performs its own
+clone/build/run cycle inside that application's own container, on whichever node
+FluxOS happens to place it — it is explicitly not a separate, team-operated build farm
+\shipped \srccode{orbit/\allowbreak{}README.md}{5,20} \srccode{orbit/\allowbreak{}entrypoint.sh}{1--9}. The
+language model behind \texttt{DeploymentYAML} is served from FluxAI's own inference
+capacity, and that capacity is itself deployed as workloads onto \FluxEdge nodes through
+the same GitOps pipeline used for any other model \shipped
+\srccode{fluxai-fluxedge/\allowbreak{}custom-workflow-fluxone.yaml}{1--52}. An assistant that deploys
+applications on \Flux is, in this narrow sense, expected to run as an ordinary tenant of
+the network rather than as privileged infrastructure. That is a pleasing property, worth
+stating once — but it is not a security property, and it should not be dressed up as
+one. Nothing about running as an ordinary tenant bounds what a compromised
+operator-signing credential can do; the bound in \S\ref{sec:nl:paths} is unaffected by
+where the assistant itself happens to run.
+
+\subsection{Toward bounded automation}
+
+A principal \emph{who holds a key} and explicitly delegates under \S17's certificate
+construction would obtain automation whose worst case is bounded rather than open-ended:
+the certificate fixes a scope \(\scopeset\) — permitted application names, a resource
+ceiling, a digest-pinned image set, a maximum duration and permitted geolocation
+constraints — and, where enforceable, a spending budget \(\budget\). \planned
+\srcintent{plan/mech-agent-identity.md \S1.3,\S1.5}. The qualifier is load-bearing and is
+the reason this paragraph sits under the protocol's path: the construction presupposes a
+principal-held key, so it is available to a user on the local-signing path and to
+autonomous software holding its own key, and it is not available on the operator-signing
+path at all (Corollary~\ref{cor:nodelegation}). This section does not restate that
+construction; it only notes the relationship — that construction is what would let a
+natural-language deployment flow run end to end without the two open failures described
+above, an unpinned image and an unbounded bearer token, both being in force at once.
+
+\subsection{What would make the boundary real}
+
+Three changes, taken together, would make the trust boundary on the protocol's path
+correspond to what it is presented as being — and, incidentally, would give an operator
+that chose to bound its own service something worth enforcing: digest pinning by default,
+so that \(\mathcal{I}\)
+names fixed content rather than a mutable tag; a specification diff presented before
+signature, so the artifact a signer reviews is the literal payload being signed rather
+than a reconstructed summary of it; and a cost estimate the signer can check against the
+specification's own fields rather than trust from a wizard screen. \planned \srcinferred.
+None of the three requires a consensus change or a new trusted party; all three are
+changes to tooling that already runs today.
+
+%% Drain this section's float queue before the next begins.
+\FloatBarrier

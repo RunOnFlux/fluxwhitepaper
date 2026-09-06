@@ -1,0 +1,17 @@
+# FLUX parallel-asset liability, retrieved 2026-09-03T10:12:02Z
+ethereum   totalSupply= 440,000,000.00  locked= 279,000,000.00  shared_reserve=4,782,657.22
+           circulating per flux-supply-tracker =  156,217,342.78
+           circulating per fluxstats           =  435,217,342.78
+           AMBIGUITY (the disputed amount)     =  279,000,000.00
+bsc        totalSupply= 440,000,000.00  locked=           0.00  shared_reserve=        0.00
+           circulating per flux-supply-tracker =  440,000,000.00
+           circulating per fluxstats           =  440,000,000.00
+           AMBIGUITY (the disputed amount)     =            0.00
+avalanche  totalSupply= 440,000,000.00  locked=           0.00  shared_reserve=        0.00
+           circulating per flux-supply-tracker =  440,000,000.00
+           circulating per fluxstats           =  440,000,000.00
+           AMBIGUITY (the disputed amount)     =            0.00
+base       totalSupply= 440,000,000.00  locked=           0.00  shared_reserve=        0.00
+           circulating per flux-supply-tracker =  440,000,000.00
+           circulating per fluxstats           =  440,000,000.00
+           AMBIGUITY (the disputed amount)     =            0.00

@@ -1,0 +1,23 @@
+# Work units for finishing the Flux v9 whitepaper. Read by .claude/commands/finish-paper.md
+# and by scripts/30-finish.sh — the single source of truth for scope and per-unit effort.
+#
+# Format: <unit-id> <TAB> <effort> <TAB> <section basenames under paper/sections/>
+#
+# Effort is set per unit by what the work actually is, not by how important the section is:
+#   xhigh — proofs, invariants, adversary analysis, mechanism design. Reasoning-bound.
+#   high  — citation verification and consistency checking. Tool-bound; depth buys little.
+# Escalate a unit to max only after its first report shows the model running out of depth
+# (many PLAUSIBLE findings it could not resolve): EFFORT=max bash scripts/30-finish.sh u09-bridging
+u01-foundations		xhigh	00-abstract 01-introduction 02-system-model 03-deployed-today
+u02-chain-money		xhigh	04-consensus 05-monetary-policy 06-parallel-assets
+u03-pnr			xhigh	07-pnr 08-chain-evolution
+u04-cloud-core		high	09-fluxos 10-appspec-v9 11-one-platform
+u05-cloud-infra		high	12-networking 13-managed-services 14-attested-execution
+u06-agents		xhigh	15-accelerated-compute 16-paying-for-capacity 17-agent-identity
+u07-agent-cloud		xhigh	18-agent-native-cloud 19-natural-language-deployment 20-shielded-value
+u08-private-payment	xhigh	21-private-payment
+u09-bridging		xhigh	22-bridging
+u10-governance		xhigh	23-governance
+u11-end-to-end		xhigh	23b-end-to-end
+u12-assessment		high	24-feasibility 25-evaluation 26-migration 27-related-work 28-limitations 29-conclusion
+u13-appendices		high	A-constants B-interfaces C-emission-model D-notation-index E-roadmap-timeline

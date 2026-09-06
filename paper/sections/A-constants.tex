@@ -1,0 +1,771 @@
+\section{Complete Constant Tables}
+\label{app:constants}\label{sec:app-constants}\label{sec:A-constants}
+
+This appendix collects, without rounding or normalisation, every consensus, policy, and
+operational constant cited elsewhere in this paper, plus the constants that did not fit
+in the main text. Every row carries a provenance column: \srccode{repo/\allowbreak{}file}{line} for a
+constant read directly from source, or \srcmeasured{endpoint}{date} for a value read from
+a live API response. Identifiers are reproduced exactly as they appear in source,
+including capitalisation and underscores. Where two evidence sources disagree, or where a
+single named constant takes different effective values at different chain heights, both
+values are given and the disagreement is marked rather than resolved silently. Maturity
+tags (\shipped/\inprogress/\planned/\vision) are omitted from this appendix: every row is
+a fact about shipped code or a live measurement, not a claim about product maturity.
+
+%% =====================================================================
+\subsection{Chain identity and network}
+
+\Cref{tab:chain-identity} covers \fluxd's magic bytes, P2P/RPC ports, pruning height, and
+client-version fields across mainnet, testnet, and regtest.
+
+\begin{longtable}{@{}p{0.34\linewidth}p{0.22\linewidth}p{0.36\linewidth}@{}}
+\caption{Chain identity and network constants (\fluxd).}\label{tab:chain-identity}\\
+\toprule
+\textbf{Constant} & \textbf{Value} & \textbf{Provenance} \\
+\midrule
+\endfirsthead
+\caption[]{\itshape continued from previous page}\\
+\toprule
+\textbf{Constant} & \textbf{Value} & \textbf{Provenance} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\texttt{pch\allowbreak{}Message\allowbreak{}Start} (mainnet) & \texttt{\{0x24,\allowbreak{}0xe9,\allowbreak{}0x27,\allowbreak{}0x64\}} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{175--178} \\
+\texttt{pch\allowbreak{}Message\allowbreak{}Start} (testnet) & \texttt{\{0xfa,\allowbreak{}0x1a,\allowbreak{}0xf9,\allowbreak{}0xbf\}} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{407--410} \\
+\texttt{pch\allowbreak{}Message\allowbreak{}Start} (regtest) & \texttt{\{0xaa,\allowbreak{}0xe8,\allowbreak{}0x3f,\allowbreak{}0x5f\}} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{626--629} \\
+P2P port (mainnet) & 16125 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{180} \\
+P2P port (testnet) & 26125 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{414} \\
+P2P port (regtest) & 26126 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{631} \\
+RPC port (mainnet) & 16124 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparamsbase.cpp}{21} \\
+RPC port (testnet) & 26124 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparamsbase.cpp}{34} \\
+RPC port (regtest) & 26124 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparamsbase.cpp}{48} \\
+\texttt{n\allowbreak{}Prune\allowbreak{}After\allowbreak{}Height} (mainnet) & 100000 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{181} \\
+\texttt{n\allowbreak{}Prune\allowbreak{}After\allowbreak{}Height} (testnet) & 1000 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{416} \\
+\texttt{n\allowbreak{}Prune\allowbreak{}After\allowbreak{}Height} (regtest) & 1000 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{632} \\
+\texttt{CLIENT\_VERSION\_MAJOR} & 9 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}clientversion.h}{19--25} \\
+\texttt{CLIENT\_VERSION\_MINOR} & 1 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}clientversion.h}{19--25} \\
+\texttt{CLIENT\_VERSION\_REVISION} & 0 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}clientversion.h}{19--25} \\
+\texttt{CLIENT\_VERSION\_BUILD} & 50 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}clientversion.h}{19--25} \\
+\texttt{CLIENT\_VERSION} (computed: $1000000\cdot9+10000\cdot1+100\cdot0+50$) & 9010050 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}clientversion.h}{19--25} \\
+\texttt{IS\_RELEASE} & \texttt{true} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}clientversion.h}{19--25} \\
+\texttt{COPYRIGHT\_YEAR} (stale, not updated since) & 2022 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}clientversion.h}{31} \\
+\daemonversion (package version string) & \texttt{9.1.0} & \srccode{fluxd/\allowbreak{}configure.ac}{3--11} \\
+\end{longtable}
+
+%% =====================================================================
+\subsection{Network upgrades}
+
+\Cref{tab:upgrades} lists every entry of \fluxd's \texttt{Consensus::\allowbreak{}Upgrade\allowbreak{}Index} table
+in activation order (mainnet), together with its activation-block hash where the
+consensus code sets one; \texttt{UPGRADE\_PON} is the only entry with no
+\texttt{hash\allowbreak{}Activation\allowbreak{}Block} set.
+
+\begin{longtable}{@{}p{0.20\linewidth}p{0.12\linewidth}p{0.46\linewidth}p{0.14\linewidth}@{}}
+\caption{Network upgrade activation heights and block hashes (mainnet, \fluxd).}\label{tab:upgrades}\\
+\toprule
+\textbf{Upgrade} & \textbf{Height} & \textbf{Activation-block hash} & \textbf{Provenance} \\
+\midrule
+\endfirsthead
+\caption[]{\itshape continued from previous page}\\
+\toprule
+\textbf{Upgrade} & \textbf{Height} & \textbf{Activation-block hash} & \textbf{Provenance} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\texttt{BASE\_SPROUT} & \texttt{ALWAYS\_ACTIVE} & --- & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{108--110} \\
+\texttt{UPGRADE\_TESTDUMMY} & \texttt{NO\_ACTIVATION\_HEIGHT} & --- & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{112--114} \\
+\texttt{UPGRADE\_LWMA} & 125000 & (none set) & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{116--117} \\
+\texttt{UPGRADE\_EQUI144\_5} & 125100 & (none set) & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{119--120} \\
+\texttt{UPGRADE\_ACADIA} & 250000 & \texttt{0000001d65fa78f2\allowbreak{}f6c172a51b5aca59\allowbreak{}ee1927e51f728647\allowbreak{}fca21b180becfe59\allowbreak{}} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{122--125} \\
+\texttt{UPGRADE\_KAMIOOKA} & 372500 & \texttt{00000052e2ac144c\allowbreak{}2872ff641c646e41\allowbreak{}dac166ac577bc9b0\allowbreak{}837f501aba19de4a\allowbreak{}} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{127--130} \\
+\texttt{UPGRADE\_KAMATA} & 558000 & \texttt{000000a33d38f37f\allowbreak{}586b843a9c8cf6d1\allowbreak{}ff1269e6114b3460\allowbreak{}4cabcd14c44268d4\allowbreak{}} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{132--135} \\
+\texttt{UPGRADE\_FLUX} & 835554 & \texttt{000000ce99aa6765\allowbreak{}bdaae673cdf41f66\allowbreak{}1ff20a116eb6f2fe\allowbreak{}0843488d8061f193\allowbreak{}} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{137--140} \\
+\texttt{UPGRADE\_HALVING} & 1076532 & \texttt{000000111f8643ce\allowbreak{}24d9753dbc324220\allowbreak{}877299075a8a6102\allowbreak{}da61ef4460296325\allowbreak{}} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{142--145} \\
+\texttt{UPGRADE\_P2SHNODES} & 1549500 & \texttt{00000009f9178347\allowbreak{}f3dea495a0894000\allowbreak{}50c3388e07f9c871\allowbreak{}fb1ebddcab1f8044\allowbreak{}} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{147--150} \\
+\texttt{UPGRADE\_PON} (mainnet) & 2020000 & \emph{none set} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{152--153} \\
+\texttt{UPGRADE\_PON} (testnet) & 800 & \emph{none set} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{394} \\
+\texttt{UPGRADE\_PON} (regtest) & \texttt{NO\_ACTIVATION\_HEIGHT} & \emph{none set} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{610--611} \\
+\end{longtable}
+
+Each upgrade also carries a fixed \texttt{n\allowbreak{}Protocol\allowbreak{}Version} and a \texttt{nBranchId}
+\texttt{=\allowbreak{} 0x76b809bb} shared by all post-LWMA upgrades except Sprout/testdummy
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}consensus/\allowbreak{}upgrades.cpp}{12--68}. The exact wall-clock timestamp of
+\texttt{UPGRADE\_PON}'s activation is not stored in \fluxd as a literal; the closest
+available evidence is the checkpoint at height 2022000, timestamp \texttt{1761701944}
+(2025-10-29), which only brackets the activation \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{281,284}
+\srcinferred.
+
+%% =====================================================================
+\subsection{Emission}
+
+\Cref{tab:emission} covers \fluxd's monetary-policy constants for both the legacy
+proof-of-work slow-start/halving path and the post-\PoN emission path; \maxmoney is a
+per-transaction sanity bound enforced by \texttt{MoneyRange()}, not a supply cap
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}amount.h}{24--31}. Values were cross-checked against an independent
+Python re-derivation, \texttt{flux-\allowbreak{}roadmap/\allowbreak{}supply/\allowbreak{}emission\_model.\allowbreak{}py}, which reproduces
+every figure below identically from its own transcription of the same \fluxd source
+\srccode{flux-roadmap/\allowbreak{}supply/\allowbreak{}emission\_model.py}{133--172}.
+
+\begin{longtable}{@{}p{0.36\linewidth}p{0.24\linewidth}p{0.32\linewidth}@{}}
+\caption{Emission and monetary-policy constants (\fluxd).}\label{tab:emission}\\
+\toprule
+\textbf{Constant} & \textbf{Value} & \textbf{Provenance} \\
+\midrule
+\endfirsthead
+\caption[]{\itshape continued from previous page}\\
+\toprule
+\textbf{Constant} & \textbf{Value} & \textbf{Provenance} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\texttt{COIN} & 100000000 sat/\flux & \srccode{fluxd/\allowbreak{}src/\allowbreak{}amount.h}{17} \\
+\maxmoney (per-tx sanity bound, \emph{not} a supply cap) & $440000000\cdot\text{COIN}$ = 440000000\flux & \srccode{fluxd/\allowbreak{}src/\allowbreak{}amount.h}{31} \\
+\texttt{n\allowbreak{}Subsidy\allowbreak{}Slow\allowbreak{}Start\allowbreak{}Interval} & 5000 blocks & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{90} \\
+\texttt{n\allowbreak{}Subsidy\allowbreak{}Halving\allowbreak{}Interval} & 655350 blocks (``2.5 years'', comment) & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{91} \\
+Base pre-slow-start-end subsidy & $150\cdot\text{COIN}$ = 150\flux & \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2818} \\
+Premine (per code: height 1) & $13020000\cdot\text{COIN}$ = 13020000\flux & \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2820--2822} \\
+Premine height (per code, \texttt{Get\allowbreak{}Block\allowbreak{}Subsidy}) & 1 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2820--2822} \\
+Premine height (as observed on mainnet) & 2 -- \textbf{disagrees with the code-path height above; not independently re-verified against the chain by this survey} & \srccode{flux-roadmap/\allowbreak{}supply/\allowbreak{}emission\_model.py}{142} (model's own claim, ``verified on chain'') \\
+Hardcoded halving freeze & \texttt{halvings >=\allowbreak{} 2} $\Rightarrow$ \texttt{nSubsidy >>=\allowbreak{} 2} (locked at the 2nd-halving level, i.e.\ 37.5\flux, rather than continuing to halve every \texttt{n\allowbreak{}Subsidy\allowbreak{}Halving\allowbreak{}Interval} blocks) & \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2842--2848} \\
+\texttt{UPGRADE\_FLUX} fluxnode-tier multiplier & \texttt{fMultiple} $1.0\to2.0$ & \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2926--2939} \\
+\texttt{n\allowbreak{}PONInitial\allowbreak{}Subsidy} (mainnet/testnet/regtest, all equal) & 14\flux/block & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{156,397,614} \\
+\texttt{n\allowbreak{}PONSubsidy\allowbreak{}Reduction\allowbreak{}Interval} (mainnet) & 1051200 blocks ($=365\cdot24\cdot60\cdot2$, ``\textasciitilde1 year in 30s blocks'') & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{157} \\
+\texttt{n\allowbreak{}PONSubsidy\allowbreak{}Reduction\allowbreak{}Interval} (testnet) & 525600 blocks (``\textasciitilde6 months'') & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{398} \\
+\texttt{n\allowbreak{}PONSubsidy\allowbreak{}Reduction\allowbreak{}Interval} (regtest) & 100 blocks & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{615} \\
+\texttt{n\allowbreak{}PONMax\allowbreak{}Reductions} (mainnet/testnet) & 20 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{158,399} \\
+\texttt{n\allowbreak{}PONMax\allowbreak{}Reductions} (regtest) & 10 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{616} \\
+Reduction factor (applied once per elapsed reduction interval) & \texttt{nSubsidy = nSubsidy*9/\allowbreak{}10} (10\% reduction, C++ integer truncation, per-step compounding) & \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2811--2813} \\
+\texttt{n\allowbreak{}Pon\allowbreak{}Target\allowbreak{}Spacing} (all three networks) & 30 seconds & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{105,358,565} \\
+\texttt{n\allowbreak{}Pow\allowbreak{}Target\allowbreak{}Spacing} (legacy PoW) & 120 seconds & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{101} \\
+\texttt{n\allowbreak{}Pon\allowbreak{}Difficulty\allowbreak{}Window} (mainnet) & 30 blocks (``= 15 minutes'') & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{106} \\
+\texttt{n\allowbreak{}Pon\allowbreak{}Difficulty\allowbreak{}Window} (testnet, regtest) & 60 blocks & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{359,566} \\
+\texttt{ponLimit} (mainnet) & \texttt{0x0fff...ff} (``\textasciitilde1/16 chance minimum'') & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{103} \\
+\texttt{ponLimit} (testnet) & \texttt{0x0fff...ff} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{356} \\
+\texttt{ponLimit} (regtest) & \texttt{0x0f0f...0f} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{561} \\
+\texttt{ponStartLimit} (mainnet) & \texttt{0x000bff...ff} (``\textasciitilde1/10000 chance'') & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{104} \\
+\texttt{ponStartLimit} (testnet, regtest) & \texttt{0x7fff...ff} (trivially easy) & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{357,562} \\
+\texttt{PON\_CUMULUS\_BASE} (of \texttt{PON\_INITIAL\_TOTAL} $=14\cdot\text{COIN}$) & $1.0\cdot\text{COIN}$ = 1.0\flux & \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2892--2895} \\
+\texttt{PON\_NIMBUS\_BASE} & $3.5\cdot\text{COIN}$ = 3.5\flux & \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2892--2895} \\
+\texttt{PON\_STRATUS\_BASE} & $9.0\cdot\text{COIN}$ = 9.0\flux & \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2892--2895} \\
+Tier-base sum vs.\ \texttt{n\allowbreak{}PONInitial\allowbreak{}Subsidy} & $1.0+3.5+9.0=13.5$\flux of 14\flux; remainder 0.5\flux/block is a consensus-enforced minimum coinbase payment to the dev-fund address (\Cref{tab:funds}), not unallocated emission & \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2877--2884} \\
+\end{longtable}
+
+%% =====================================================================
+\subsection{Consensus-level addresses and funds}
+
+\Cref{tab:funds} covers the dev-fund address and its remainder-based payout mechanism,
+the one-off exchange and foundation funds, and the swap-pool payment schedule, each with
+its activation height; only mainnet addresses/heights/amounts were found in evidence for
+the exchange fund, foundation fund, and swap pool (the dev-fund address is given for all
+three networks).
+
+\begin{longtable}{@{}p{0.30\linewidth}p{0.32\linewidth}p{0.30\linewidth}@{}}
+\caption{Consensus-level addresses and funds (\fluxd).}\label{tab:funds}\\
+\toprule
+\textbf{Constant} & \textbf{Value} & \textbf{Provenance} \\
+\midrule
+\endfirsthead
+\caption[]{\itshape continued from previous page}\\
+\toprule
+\textbf{Constant} & \textbf{Value} & \textbf{Provenance} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Dev-fund address (mainnet) & \texttt{t3h\allowbreak{}Pu1YDe\allowbreak{}GUCp8m7BQCnn\allowbreak{}NUm\allowbreak{}RMJBa5Rady\allowbreak{}A} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{306} \\
+Dev-fund address (testnet) & \texttt{t2Gox\allowbreak{}S2SRm\allowbreak{}LQDn\allowbreak{}Ty\allowbreak{}We\allowbreak{}PHj\allowbreak{}KD3izv\allowbreak{}Fs\allowbreak{}KUAjr\allowbreak{}H} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{499} \\
+Dev-fund address (regtest) & \texttt{t2Gox\allowbreak{}S2SRm\allowbreak{}LQDn\allowbreak{}Ty\allowbreak{}We\allowbreak{}PHj\allowbreak{}KD3izv\allowbreak{}Fs\allowbreak{}KUAjr\allowbreak{}H} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{701} \\
+Dev-fund mechanism (\texttt{Get\allowbreak{}Min\allowbreak{}Dev\allowbreak{}Fund\allowbreak{}Amount}) & \texttt{nBlockSubsidy} $-$ (Cumulus + Nimbus + Stratus tier rewards); coinbase must pay $\geq$ this remainder to the dev-fund address post-\PoN or the block is rejected with \texttt{REJECT\_INVALID "tx-\allowbreak{}coinbase-\allowbreak{}missing-\allowbreak{}dev-\allowbreak{}funding"} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{1231--1249,2877--2884} \\
+Exchange fund address & \texttt{t3PMbb\allowbreak{}A5YBMrj\allowbreak{}SD3d\allowbreak{}D16SSd\allowbreak{}XKu\allowbreak{}Kovwmj6t\allowbreak{}S} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{292--294} \\
+Exchange fund height & 836274 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{292--294} \\
+Exchange fund amount & $7500000\cdot\text{COIN}$ = 7500000\flux & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{292--294} \\
+Foundation fund address & \texttt{t3Xj\allowbreak{}YMBvwxn\allowbreak{}XVv9jqg4Cgok\allowbreak{}Z3f7k\allowbreak{}Ao\allowbreak{}XPQL8} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{297--298} \\
+Foundation fund height & 836994 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{297--298} \\
+Foundation fund amount & $2500000\cdot\text{COIN}$ = 2500000\flux & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{297--298} \\
+Swap-pool address & \texttt{t3Thb\allowbreak{}Wog\allowbreak{}Do\allowbreak{}Aj\allowbreak{}Gu\allowbreak{}S6DEnm\allowbreak{}N1GWJBRb\allowbreak{}Vj\allowbreak{}SUK4T} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{301--304} \\
+Swap-pool start height (\texttt{n\allowbreak{}Swap\allowbreak{}Pool\allowbreak{}Start\allowbreak{}Height}) & 837714 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{301--304} \\
+Swap-pool per-payment amount & $22000000\cdot\text{COIN}$ = 22000000\flux per interval & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{301--304} \\
+Swap-pool interval (\texttt{n\allowbreak{}Swap\allowbreak{}Pool\allowbreak{}Interval}) & 21600 blocks & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{301--304} \\
+Swap-pool max count (\texttt{n\allowbreak{}Swap\allowbreak{}Pool\allowbreak{}Max\allowbreak{}Times}) & 10 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{301--304} \\
+Swap-pool total across schedule (derived) & $\leq 220000000\cdot\text{COIN}$ = 220000000\flux & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{301--304} \\
+Exchange fund (testnet) & \texttt{\scriptsize tmRucHD8\allowbreak{}5zgSigtA\allowbreak{}4sJJBDbP\allowbreak{}kMUJDcw5\allowbreak{}XDE}, height \num{4100}, \num{7500000}\flux & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{484--487} \\
+Foundation fund (testnet) & same address, height \num{4200}, \num{2500000}\flux & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{488--491} \\
+Swap pool (testnet) & same address, start \num{4300}, \num{2200000}\flux, interval \num{100}, max 10 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{492--496} \\
+Dev fund (testnet) & \texttt{\scriptsize t2GoxS2S\allowbreak{}RmLQDnTy\allowbreak{}WePHjKD3\allowbreak{}izvFsKUA\allowbreak{}jrH} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{497} \\
+Exchange fund (regtest) & \texttt{\scriptsize tmRucHD8\allowbreak{}5zgSigtA\allowbreak{}4sJJBDbP\allowbreak{}kMUJDcw5\allowbreak{}XDE}, height 10, \num{3000000}\flux & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{687--689} \\
+Foundation fund (regtest) & \texttt{\scriptsize t2DFGpj2\allowbreak{}tciojsGK\allowbreak{}KrGVwQ92\allowbreak{}hUwAxWQQ\allowbreak{}gJ9}, height 10, \num{2500000}\flux & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{691--693} \\
+Swap pool (regtest) & \texttt{\scriptsize t2Dsexh4\allowbreak{}v5g2dpL2\allowbreak{}LLCsR1p9\allowbreak{}TshMm63j\allowbreak{}SBM}, start 10, \num{2100000}\flux, interval 10, max 5 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{695--699} \\
+\end{longtable}
+
+%% =====================================================================
+\subsection{Node tiering and lifecycle}
+
+\Cref{tab:tiering} covers V1/V2 collateral per tier, the collateral-transition windows,
+the deterministic-registration confirmation and expiration constants across their
+successive versions, and the legacy (pre-\PoN) payout percentages.
+
+\begin{longtable}{@{}p{0.36\linewidth}p{0.28\linewidth}p{0.28\linewidth}@{}}
+\caption{Node tiering and lifecycle constants (\fluxd).}\label{tab:tiering}\\
+\toprule
+\textbf{Constant} & \textbf{Value} & \textbf{Provenance} \\
+\midrule
+\endfirsthead
+\caption[]{\itshape continued from previous page}\\
+\toprule
+\textbf{Constant} & \textbf{Value} & \textbf{Provenance} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+V1 collateral: Cumulus / Nimbus / Stratus & $10000\cdot\text{COIN}$ / $25000\cdot\text{COIN}$ / $100000\cdot\text{COIN}$ (10000 / 25000 / 100000\flux) & \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{57--63} \\
+V2 collateral: Cumulus / Nimbus / Stratus & $1000\cdot\text{COIN}$ / $12500\cdot\text{COIN}$ / $40000\cdot\text{COIN}$ (1000 / 12500 / 40000\flux) & \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{57--63} \\
+Transition window, Cumulus (mainnet) & $[1076532, 1086612)$ -- both old and new collateral amounts accepted inside the window & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{308--315} \\
+Transition window, Nimbus (mainnet) & $[1081572, 1092372)$ & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{308--315} \\
+Transition window, Stratus (mainnet) & $[1087332, 1097412)$ & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{308--315} \\
+\texttt{FLUXNODE\_MIN\_CONFIRMATION\_DETERMINISTIC} & 100 blocks (collateral maturity before a start-tx is accepted) & \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{20} \\
+\texttt{COINBASE\_MATURITY} & 100 blocks & \srccode{fluxd/\allowbreak{}src/\allowbreak{}consensus/\allowbreak{}consensus.h}{34} \\
+\texttt{FLUXNODE\_START\_TX\_EXPIRATION\_HEIGHT} & 60 blocks (pre-\PoN) & \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{23--44} \\
+\texttt{FLUXNODE\_START\_TX\_EXPIRATION\_HEIGHT\_V2} & 240 blocks (\PoN) & \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{23--44} \\
+\texttt{FLUXNODE\_DOS\_REMOVE\_AMOUNT} & 180 blocks (pre-\PoN) & \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{23--44} \\
+\texttt{FLUXNODE\_DOS\_REMOVE\_AMOUNT\_V2} & 720 blocks (\PoN) & \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{23--44} \\
+\texttt{FLUXNODE\_CONFIRM\_UPDATE\_EXPIRATION\_HEIGHT\_V1} & 60 blocks & \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{23--44} \\
+\texttt{FLUXNODE\_CONFIRM\_UPDATE\_EXPIRATION\_HEIGHT\_V2} & 80 blocks & \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{23--44} \\
+\texttt{FLUXNODE\_CONFIRM\_UPDATE\_EXPIRATION\_HEIGHT\_V3} & 160 blocks & \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{23--44} \\
+\texttt{FLUXNODE\_CONFIRM\_UPDATE\_EXPIRATION\_HEIGHT\_V4} & 640 blocks (\PoN) & \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{23--44} \\
+\texttt{FLUXNODE\_CONFIRM\_UPDATE\_MIN\_HEIGHT\_V1} & 40 blocks & \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{23--44} \\
+\texttt{FLUXNODE\_CONFIRM\_UPDATE\_MIN\_HEIGHT\_V2} & 120 blocks & \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{23--44} \\
+\texttt{FLUXNODE\_CONFIRM\_UPDATE\_MIN\_HEIGHT\_V3} & 500 blocks (\PoN) & \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{23--44} \\
+\texttt{FLUXNODE\_CONFIRM\_UPDATE\_MIN\_HEIGHT\_IP\_CHANGE\_V1} & 5 blocks (out-of-band IP-change re-confirm, post-\texttt{UPGRADE\_FLUX}) & \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{23--44} \\
+\texttt{FLUXNODE\_CONFIRM\_TX\_IP\_ADDRESS\_SIZE\_V1} & 40 bytes & \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{23--44} \\
+\texttt{FLUXNODE\_CONFIRM\_TX\_IP\_ADDRESS\_SIZE\_V2} & 60 bytes & \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{23--44} \\
+\texttt{FLUXNODE\_MAX\_SIG\_TIME} & 3600 seconds (mempool-only signature freshness) & \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{23--44} \\
+\texttt{n\allowbreak{}Start\allowbreak{}Fluxnode\allowbreak{}Payments\allowbreak{}Height} (mainnet) & 560000 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{230} \\
+\texttt{n\allowbreak{}Start\allowbreak{}Fluxnode\allowbreak{}Payments\allowbreak{}Height} (testnet) & 350 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{463} \\
+\texttt{n\allowbreak{}Start\allowbreak{}Fluxnode\allowbreak{}Payments\allowbreak{}Height} (regtest) & 100 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{655} \\
+\texttt{V1\_FLUXNODE\_PERCENT\_CUMULUS} (legacy, pre-\PoN) & 0.0375 (of block value; sums to 0.25 pre-\texttt{UPGRADE\_FLUX}, $\times2$ after) & \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{71--74} \\
+\texttt{V1\_FLUXNODE\_PERCENT\_NIMBUS} & 0.0625 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{71--74} \\
+\texttt{V1\_FLUXNODE\_PERCENT\_STRATUS} & 0.15 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{71--74} \\
+\end{longtable}
+
+%% =====================================================================
+\subsection{Block and consensus limits}
+
+\Cref{tab:limits} covers block-format and reorg-depth limits, including
+\texttt{MAX\_REORG\_LENGTH}'s temporary override during the \PoN launch window, and the
+emergency-block governance thresholds.
+
+\begin{longtable}{@{}p{0.36\linewidth}p{0.30\linewidth}p{0.28\linewidth}@{}}
+\caption{Block and consensus limits (\fluxd).}\label{tab:limits}\\
+\toprule
+\textbf{Constant} & \textbf{Value} & \textbf{Provenance} \\
+\midrule
+\endfirsthead
+\caption[]{\itshape continued from previous page}\\
+\toprule
+\textbf{Constant} & \textbf{Value} & \textbf{Provenance} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\texttt{MIN\_BLOCK\_VERSION} & 4 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}consensus/\allowbreak{}consensus.h}{11} \\
+\texttt{MAX\_BLOCK\_SIZE} & 2000000 bytes & \srccode{fluxd/\allowbreak{}src/\allowbreak{}consensus/\allowbreak{}consensus.h}{23} \\
+\texttt{MAX\_BLOCK\_SIGOPS} & 20000 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}consensus/\allowbreak{}consensus.h}{25} \\
+\texttt{MAX\_BLOCK\_SIG\_SIZE} & 73 bytes & \srccode{fluxd/\allowbreak{}src/\allowbreak{}consensus/\allowbreak{}consensus.h}{27} \\
+\texttt{MAX\_EMERGENCY\_BLOCK\_SIG\_SIZE} & 512 bytes & \srccode{fluxd/\allowbreak{}src/\allowbreak{}consensus/\allowbreak{}consensus.h}{29} \\
+\texttt{MAX\_TX\_SIZE\_BEFORE\_SAPLING} & 100000 bytes & \srccode{fluxd/\allowbreak{}src/\allowbreak{}consensus/\allowbreak{}consensus.h}{31} \\
+\texttt{TX\_EXPIRY\_HEIGHT\_THRESHOLD} & 500000000 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}consensus/\allowbreak{}consensus.h}{36} \\
+\texttt{MAX\_REORG\_LENGTH} (normal) & 40 blocks & \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.h}{74} \\
+\texttt{MAX\_REORG\_LENGTH} (temporary override) & 5000 blocks, for heights $[2020000, 2025000]$ (``Temporary deep reorg limit during PON stabilization period'') & \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{8983--8988} \\
+Emergency-block signature threshold, \texttt{n\allowbreak{}Emergency\allowbreak{}Min\allowbreak{}Signatures} (mainnet, testnet) & 2 (of a 4-key set, i.e.\ 2-of-4) & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{253,522} \\
+Emergency-block signature threshold (regtest) & 1 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{717} \\
+\texttt{vec\allowbreak{}Emergency\allowbreak{}Public\allowbreak{}Keys} key-set size (all networks) & 4 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{242--253} \\
+\end{longtable}
+
+%% =====================================================================
+\subsection{Difficulty}
+
+\Cref{tab:difficulty} covers the Digishield, LWMA, and LWMA3 retarget parameters used
+before \PoN activation, and the \PoN retarget clamp used after.
+
+\begin{longtable}{@{}p{0.40\linewidth}p{0.28\linewidth}p{0.26\linewidth}@{}}
+\caption{Difficulty-retarget constants (\fluxd).}\label{tab:difficulty}\\
+\toprule
+\textbf{Constant} & \textbf{Value} & \textbf{Provenance} \\
+\midrule
+\endfirsthead
+\caption[]{\itshape continued from previous page}\\
+\toprule
+\textbf{Constant} & \textbf{Value} & \textbf{Provenance} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\texttt{n\allowbreak{}Digishield\allowbreak{}Averaging\allowbreak{}Window} & 17 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{96} \\
+\texttt{n\allowbreak{}Digishield\allowbreak{}Max\allowbreak{}Adjust\allowbreak{}Down} & 32\% & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{98} \\
+\texttt{n\allowbreak{}Digishield\allowbreak{}Max\allowbreak{}Adjust\allowbreak{}Up} & 16\% & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{99} \\
+Digishield dampening factor & 1/4 (damped-median timespan) & \srccode{fluxd/\allowbreak{}src/\allowbreak{}pow.cpp}{99--131} \\
+\texttt{n\allowbreak{}Pow\allowbreak{}Target\allowbreak{}Spacing} (legacy) & 120 seconds & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{101} \\
+\texttt{n\allowbreak{}Zawy\allowbreak{}LWMAAveraging\allowbreak{}Window} & 60 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{160} \\
+\texttt{eh\_epoch\_fade\_length} & 11 & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{161} \\
+LWMA3 per-block clamp vs.\ previous target & $+50\%$ / $-33\%$ & \srccode{fluxd/\allowbreak{}src/\allowbreak{}pow.cpp}{175--218} \\
+\PoN retarget clamp (Digishield-style, over \texttt{n\allowbreak{}Pon\allowbreak{}Difficulty\allowbreak{}Window}) & $[\text{targetTimespan}\cdot4/5,\ \text{targetTimespan}\cdot5/4]$ (i.e.\ $-20\%$ / $+25\%$) & \srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon.cpp}{152--157} \\
+\PoN fixed chain-work per block (\texttt{GetBlockProof}) & $2^{40}$, independent of actual difficulty target & \srccode{fluxd/\allowbreak{}src/\allowbreak{}pow.cpp}{284--290} \\
+\end{longtable}
+
+%% =====================================================================
+\subsection{Benchmarking}
+
+\Cref{tab:fluxbench} covers every threshold, interval, timeout, buffer size, and port
+constant in \fluxbench, plus the per-tier hardware requirement constants it enforces.
+
+\begin{longtable}{@{}p{0.38\linewidth}p{0.28\linewidth}p{0.28\linewidth}@{}}
+\caption{Benchmarking constants (\fluxbench).}\label{tab:fluxbench}\\
+\toprule
+\textbf{Constant} & \textbf{Value} & \textbf{Provenance} \\
+\midrule
+\endfirsthead
+\caption[]{\itshape continued from previous page}\\
+\toprule
+\textbf{Constant} & \textbf{Value} & \textbf{Provenance} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\texttt{DEFAULT\_PORT} (FluxOS port, as seen by \fluxbench) & 16127 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{43} \\
+\texttt{ACCEPT\_PORT\_2.\allowbreak{}.\allowbreak{}8} & 16137, 16147, 16157, 16167, 16177, 16187, 16197 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{44--50} \\
+\texttt{DEFAULT\_HIGH\_INT} (tier-unset sentinel requirement) & 999999 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{53} \\
+\texttt{SPEEDTEST\_NOT\_REACHABLE\_REQUIREMENTS} & 0 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{56} \\
+Cumulus hardware requirement (cores / threads / RAM std / RAM Jetson / storage GB / EPS / writespeed MB/s / upload / download Mbit/s) & 2 / 4 / 7 / 3 / 220 / 240 / 180 / 25 / 25 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{58--66} \\
+Nimbus hardware requirement (same fields, no Jetson RAM value) & 4 / 8 / 30 / --- / 440 / 640 / 180 / 50 / 50 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{68--75} \\
+Stratus hardware requirement (same fields, no Jetson RAM value) & 8 / 16 / 61 / --- / 880 / 1520 / 400 / 100 / 100 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{77--84} \\
+Internet-speed tolerance bonus: Cumulus & +2 Mbit/s & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{86--88} \\
+Internet-speed tolerance bonus: Nimbus & +4 Mbit/s & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{86--88} \\
+Internet-speed tolerance bonus: Stratus & +9 Mbit/s & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{86--88} \\
+\texttt{SYSTEM\_BENCH\_MIN\_*\_VERSION} (sysbench minimum) & 0.4.1 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{40--42} \\
+\texttt{SYSTEM\_SPEEDTESTCLI\_MIN\_*\_VERSION} (Ookla CLI minimum) & 1.2.0 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{44--46} \\
+Ookla speedtest pinned build & 1.2.0 (\texttt{ookla-speedtest-1.2.0-linux-\{x86\_64,aarch64\}.tgz}) & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{1676,1690,1704} \\
+\texttt{fluxbenchd} RPC port (mainnet) & 16224 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}chainparamsbase.cpp}{20} \\
+\texttt{fluxbenchd} RPC port (testnet, regtest) & 26224 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}chainparamsbase.cpp}{33,47} \\
+SAS plain-HTTP port, as addressed by \fluxbench (\fluxsas itself serves no plain-HTTP listener; \Cref{tab:attestation}) & 16100 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{4106} \\
+SAS mTLS port, as addressed by \fluxbench (\fluxsas has no listener on this port; \Cref{tab:attestation}) & 16102 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}sasclient.h}{161,166} \\
+\texttt{SYSTEM\_SECURE\_CACHE\_TTL\_S} & 60 s & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{4084} \\
+\texttt{SYSTEM\_SECURE\_TLS\_CACHE\_TTL\_S} & 60 s & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}rpc/\allowbreak{}fluxnode.cpp}{773} \\
+\texttt{getpublicip} RPC cache & 69 s & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}rpc/\allowbreak{}fluxnode.cpp}{442} \\
+Benchmark loop poll sleep & 1000 ms & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{529} \\
+Tier-not-set wait & 180000 ms (3 min) & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{704} \\
+Multiport sync offset & +180 s & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{678} \\
+Retry backoff, attempts 1--3 & 5 min ($60\times5$) & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{591} \\
+Retry backoff, attempts $\geq4$ & 30 min ($60\times30$) & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{594} \\
+Re-benchmark cadence after success & 30 min ($60\times30$) & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{597} \\
+EPS-clear maintenance cadence & every 192 \texttt{benchmarkRun}s (comment: ``\textasciitilde4 days'') & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{636} \\
+Disk/speedtest-reinstall maintenance cadence & every 480 \texttt{benchmarkRun}s (comment: ``\textasciitilde10 days'') & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{639} \\
+sysbench single-thread test duration & \texttt{--time=20} (\texttt{strEpsCommand}, 57 chars) & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{361} \\
+sysbench multi-thread duration (normal / multiport) & \texttt{--time=20} / \texttt{--time=60} & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{363--364} \\
+sysbench \texttt{-\allowbreak{}-\allowbreak{}cpu-\allowbreak{}max-\allowbreak{}prime} & 60000 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{361--364} \\
+EPS retry count / wait & \texttt{MAX\_RETRIES=\allowbreak{}3}, \texttt{RETRY\_WAIT\_MS=\allowbreak{}15000} & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{2069--2070} \\
+Single-thread fallback bonus & \texttt{SINGLE\_THREAD\_BONUS=\allowbreak{}1.10} (10\%) & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{2071} \\
+\texttt{dd} block size / count & \texttt{bs=\allowbreak{}64k count=\allowbreak{}16k} & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{602,1027} \\
+\texttt{dd} timeout & 25 s & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{602,1027} \\
+\texttt{dd} runs / averaging & 3 runs, drop worst, average remaining 2 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{662--668,1090--1100} \\
+Disk-speed floor for reporting & 40 MB/s & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{1936} \\
+Raspberry-Pi Cumulus disk-speed bonus & +40 MB/s (if measured $>120$) & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{1937--1940} \\
+Available-space threshold before write test & 2 GiB (2147483648 bytes) & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{1073} \\
+\texttt{dstat} disk-in-use sampling & \texttt{--disk 1 30} (1s interval, 30s) & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{354} \\
+Disk-in-use scale factor & $\times1.1$ & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{2024} \\
+\texttt{iftop} bandwidth-in-use sampling & timeout 35 s, \texttt{-s 30} & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{355--356} \\
+speedtest CLI timeout & 120 s & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{1427} \\
+CPU-usage threshold to skip real disk/memory test & 75\% (\texttt{cpuUsagePercent > 75.\allowbreak{}0} / \texttt{<= 75.0}) & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{1891,1903} \\
+Memory-test wait after detach & 60000 ms & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{1894} \\
+stress-ng memory test size (Stratus / Nimbus / Cumulus) & 8G / 4G / 2G (or available $\times0.90$ if less) & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{3649--3667} \\
+stress-ng memory test timeout & 120 s & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{3644} \\
+SpeedTest setup poll & initial 30000 ms, then every 10000 ms & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{858,861} \\
+\texttt{RunCommand} shutdown SIGTERM$\to$SIGKILL grace & 100000 \textmu s (100 ms) & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{1230} \\
+\texttt{RunCommand} \texttt{select()} timeout & 100000 \textmu s (100 ms) & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{1245} \\
+SAS response buffer cap & 536870912 bytes (512 MiB) & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}sasclient.h}{49} \\
+SAS curl timeout & 15 s & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}sasclient.h}{133} \\
+Curl timeouts (FluxOS/SAS plain queries, most call sites) & \texttt{-m 15} (15 s) & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{2434,2525,2616,2709} \\
+Private-IP prefixes checked (count) & 18 (\texttt{10.}, \texttt{172.16.}--\texttt{172.31.}, \texttt{192.168.}) & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{187--189} \\
+\texttt{getbenchmarks}/RPC-reported version & \texttt{"6.3.1"} & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}rpc/\allowbreak{}fluxnode.cpp}{423} \\
+\texttt{CLIENT\_VERSION\_MAJOR.\allowbreak{}MINOR.\allowbreak{}REVISION.\allowbreak{}BUILD} & 6.3.1.50 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}clientversion.h}{18--21} \\
+Benchmarking key rotation activation times (mainnet, 5 keys) & 0, 1618113600, 1647262800, 1706209200, 1743534000 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}chainparams.cpp}{52--71} \\
+App-signing key count (mainnet, no rotation) & 1 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}chainparams.cpp}{73--81} \\
+Testnet/regtest benchmarking key rotation & 2 keys each, second activates 1617508800 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}chainparams.cpp}{119--127,157--165} \\
+OS end-of-life list & Ubuntu 20.04, Debian 11 & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{4168--4180} \\
+System uptime threshold for FluxOS speed-fallback attempt & 3600 s (1 hour) & \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{829} \\
+\end{longtable}
+
+%% =====================================================================
+\subsection{\FluxOS}
+
+\Cref{tab:fluxos} covers \FluxOS's ports, MongoDB collections, timeouts, intervals,
+spawn deferrals, the crash-backoff ladder, the install-collision wait, per-tier resource
+allowances, locked system resources, CPU burst, and version pins, grouped by subject as
+in the source configuration file.
+
+\begin{longtable}{@{}p{0.14\linewidth}p{0.30\linewidth}p{0.24\linewidth}p{0.24\linewidth}@{}}
+\caption{\FluxOS constants, by category.}\label{tab:fluxos}\\
+\toprule
+\textbf{Category} & \textbf{Constant} & \textbf{Value} & \textbf{Provenance} \\
+\midrule
+\endfirsthead
+\caption[]{\itshape continued from previous page}\\
+\toprule
+\textbf{Category} & \textbf{Constant} & \textbf{Value} & \textbf{Provenance} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Ports & \texttt{server.apiport} (default) & 16127 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{28} \\
+Ports & \texttt{server.\allowbreak{}allowed\allowbreak{}Ports} & [16127,16137,16147,16157,16167,16177,16187,16197] & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{26} \\
+Ports & \texttt{apiPortHttps} & \texttt{apiPort + 1} & \srccode{flux/\allowbreak{}apiServer.js}{38} \\
+Ports & \texttt{homePort} & \texttt{apiPort - 1} & \srccode{flux/\allowbreak{}homeServer.js}{19} \\
+Ports & \texttt{syncthing.port} (ip \texttt{127.0.0.1}) & 8384 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{407} \\
+Ports & \texttt{database.port} (MongoDB) & 27017 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{32} \\
+Ports & \texttt{benchmark.port} / \texttt{.rpcport} (mainnet) & 16225 / 16224 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{102--106} \\
+Ports & \texttt{benchmark.port} / \texttt{.rpcport} (testnet) & 26225 / 26224 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{102--106} \\
+Ports & \texttt{daemon.port} / \texttt{.rpcport} / \texttt{.zmqport} (mainnet) & 16125 / 16124 / 16123 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{109--115} \\
+Ports & \texttt{daemon.port} / \texttt{.rpcport} (testnet) & 26125 / 26124 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{109--115} \\
+Ports & \texttt{peers.\allowbreak{}wsPingIntervalMs} & 15000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{18} \\
+Ports & \texttt{peers.\allowbreak{}wsMaxMissedPongs} & 3 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{19} \\
+Ports & \texttt{fluxapps.\allowbreak{}portMinLegacy}\slash\texttt{portMaxLegacy} & 31000 / 39999 (30000--30999 reserved for local apps) & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{248--249} \\
+Ports & \texttt{fluxapps.\allowbreak{}port\allowbreak{}Min}\slash\texttt{portMax} (current) & 1 / 65535 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{251--252} \\
+Ports & \texttt{fluxapps.\allowbreak{}portBlockheightChange} & \texttt{is\allowbreak{}Development ? 1390000 :\allowbreak{} 1420000} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{250} \\
+Ports & \texttt{fluxapps.\allowbreak{}bannedPorts} & \texttt{['16100-16299',\allowbreak{}'26100-26299',\allowbreak{}'30000-30099',\allowbreak{}8384,\allowbreak{}27017,\allowbreak{}22,\allowbreak{}23,\allowbreak{}25,\allowbreak{}3389,\allowbreak{}5900,\allowbreak{}5800,\allowbreak{}161,\allowbreak{}512,\allowbreak{}513,\allowbreak{}5901,\allowbreak{}3388,\allowbreak{}4444,\allowbreak{}123,\allowbreak{}53]} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{253} \\
+Ports & \texttt{fluxapps.\allowbreak{}enterprisePorts} & \texttt{['0-\allowbreak{}1023',8080,8081,8443,6667]} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{254} \\
+Ports & \texttt{server.\allowbreak{}fluxNodeServiceAddress} & \texttt{169.254.43.43} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{29} \\
+DB collections & \texttt{zelfluxlocal} (local) & \texttt{loggedusers,\allowbreak{} activeloginphrases,\allowbreak{} activesignatures,\allowbreak{} activepaymentrequests,\allowbreak{} completedpayments,\allowbreak{} geolocation,\allowbreak{} benchmark,\allowbreak{} apptamperingevents,\allowbreak{} nodestartuptracker} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{33--45} \\
+DB collections & \texttt{zelcashdata} (daemon mirror) & \texttt{scannedheight,\allowbreak{} utxoindex,\allowbreak{} addresstransactionindex,\allowbreak{} zelnodetransactions,\allowbreak{} zelappshashes,\allowbreak{} coinbasefusionindex} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{47--55} \\
+DB collections & \texttt{localzelapps} (per-node local truth) & \texttt{zelappsinformation,\allowbreak{} zelappsruntimestate} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{57--64} \\
+DB collections & \texttt{globalzelapps} (network-global, P2P-replicated) & \texttt{zelappsmessages,\allowbreak{} zelappsinformation,\allowbreak{} zelappstemporarymessages,\allowbreak{} zelappslocation,\allowbreak{} appsinstallinglocations,\allowbreak{} appsInstallingErrorsLocations,\allowbreak{} appstateevents,\allowbreak{} fluxappinstallingbroadcasts,\allowbreak{} fluxappinstallingerrorsbroadcasts} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{65--75} \\
+DB collections & \texttt{chainparams} & \texttt{chainmessages} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{78--87} \\
+Chain/height forks & \texttt{daemon.\allowbreak{}chainValidHeight} & 1062000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{110} \\
+Chain/height forks & \texttt{deterministic\allowbreak{}Nodes\allowbreak{}Start} & 558000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{123} \\
+Chain/height forks & \texttt{messages\allowbreak{}Broadcast\allowbreak{}Refactor\allowbreak{}Start} & 1751250 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{124} \\
+Chain/height forks & \texttt{fluxapps.\allowbreak{}daemonPONFork} & 2020000 (chain 4$\times$ faster after) & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{293} \\
+Chain/height forks & \texttt{fluxapps.\allowbreak{}multisigAddressChange} & 1670000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{245} \\
+Chain/height forks & \texttt{fluxapps.\allowbreak{}epochstart} / \texttt{publicepochstart} & 694000 / 705000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{246--247} \\
+Chain/height forks & \texttt{fluxapps.\allowbreak{}newMinBlocksAllowanceBlock} & 1630040 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{288} \\
+Chain/height forks & \texttt{fluxapps.\allowbreak{}cancel1BlockMinBlocksAllowanceBlock} & 1964447 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{290} \\
+Chain/height forks & \texttt{fluxapps.\allowbreak{}removeBlocksAllowanceIntervalBlock} & 1625000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{295} \\
+Chain/height forks & \texttt{fluxapps.\allowbreak{}applyMinimumPriceOn3Instances} & 1691000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{305} \\
+Chain/height forks & \texttt{fluxapps.\allowbreak{}applyMinimumForExtraInstances} & 1890000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{306} \\
+Chain/height forks & \texttt{fluxapps.\allowbreak{}minimumInstancesV8Block} & 2176519 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{259} \\
+Chain/height forks & \texttt{app\allowbreak{}Specs\allowbreak{}Enforcement\allowbreak{}Heights} v1--v8 & 0, 0, 983000, 1004000, 1142000, 1300000, 1390000/1420000, 1921500/1932380 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{232--239} \\
+Chain/height forks & v9 price-segment height & 2950000 & \srcbranch{RunOnFlux/\allowbreak{}flux}{feat/appspec-v9}{ZelBack/config/default.js:201} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}minimumInstances} & 3 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{257} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}minimumInstancesV8} & 1 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{258} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}maximumInstances} & 100 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{260} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}maxAppsPerNode} & 200 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{261} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}minOutgoing} / \texttt{min\allowbreak{}Unique\allowbreak{}Ips\allowbreak{}Outgoing} & 8 / 7 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{262--263} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}minIncoming} / \texttt{min\allowbreak{}Unique\allowbreak{}Ips\allowbreak{}Incoming} & 4 / 3 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{264--265} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}minHashSyncPeers} & 12 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{266} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}min\allowbreak{}Up\allowbreak{}Time} & 1800 s (30 min) & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{267} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}appSyncPeerThreshold} / \texttt{Degraded} & 12 / 4 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{268--269} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}appSyncMinPeerUptime} & 7500 s & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{270} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}appSyncMinCompletions} & 3 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{271} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}installation.\allowbreak{}probability}\slash\texttt{.delay} & 100 (1\%) / 120 s & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{273--274} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}removal.\allowbreak{}probability}\slash\texttt{.delay} & 25 (4\%) / 300 s & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{277--278} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}redeploy.\allowbreak{}probability}\slash\texttt{.delay}\slash\texttt{.composedDelay} & 2 (50\%) / 30 s / 5 s & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{281--283} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}blocksLasting} & 22000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{285} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}minBlocksAllowance} & 5000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{286} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}newMinBlocksAllowance} & 100 (active $\geq$ height 1630040) & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{287} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}cancel1BlockMinBlocksAllowance} & 1 (active $\geq$ height 1964447 -- \textbf{the live \texttt{deploymentinformation} endpoint nonetheless reports \texttt{min\allowbreak{}Blocks\allowbreak{}Allowance:\allowbreak{} 5000} at height 2917115, past both height gates}: the validator applies the three constants by height --- 5000 below 1630040, 100 below 1964447, 1 thereafter --- while the endpoint returns the static \texttt{fluxapps.\allowbreak{}minBlocksAllowance} regardless of height, so the reported 5000 is a stale minimum and the enforced floor is 1) & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{289}; \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{852--863}; \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appQuery/\allowbreak{}deploymentInfoService.js}{44}; \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}maxBlocksAllowance} (pre-PON) & 264000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{291} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}postPonMaxBlocksAllowance} & 1056000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{292} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}blocksAllowanceInterval} & 1000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{294} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}ownerAppAllowance} & 1000 blocks & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{296} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}temporaryAppAllowance} & 200 blocks & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{297} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}expireFluxAppsPeriod} & 100 blocks & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{298} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}updateFluxAppsPeriod} & 9 blocks & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{299} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}removeFluxAppsPeriod} & 11 blocks & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{300} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}reconstr\allowbreak{}uctAppMe\allowbreak{}ssagesHa\allowbreak{}shPeriod} & 3600 blocks (comment: ``every 5 days'', i.e.\ at the 120\,s pre-\PoN spacing) & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{301} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}benchUpnpPeriod} & 6480 blocks (comment: ``every 9 days'', i.e.\ at the 120\,s pre-\PoN spacing) & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{302} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}hddFileSystemMinimum} & 10 GB & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{303} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}defaultSwap} & 2 GB & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{304} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}maxImageSize} & 5000000000 (5000 MB) & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{256} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}installCollisionWaitMs} & 90000 ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{321} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}crashBackoffDelaysMs} & [0, 30000, 300000, 900000, 1800000] (0s, 30s, 5min, 15min, 30min ladder) & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{130} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}crashBackoffStableRunMs} & 600000 ms (10 min stable run resets the ladder) & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{131} \\
+App lifecycle & \texttt{fluxapps.\allowbreak{}nonEnterpriseSpawnDelayMs} (fallback) & $2\times60\times1000$ ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{34} \\
+Spawn deferrals & \texttt{fluxapps.\allowbreak{}spawnDeferrals.\allowbreak{}targetedNodesMs} & enterprise 1800000 / standard 3420000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{341} \\
+Spawn deferrals & \texttt{fluxapps.\allowbreak{}spawnDeferrals.\allowbreak{}staticIpMs} & enterprise 1620000 / standard 3420000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{342} \\
+Spawn deferrals & \texttt{fluxapps.\allowbreak{}spawnDeferrals.\allowbreak{}datacenterMs} & enterprise 1620000 / standard 3420000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{343} \\
+Spawn deferrals & \texttt{fluxapps.\allowbreak{}spawnDeferrals.\allowbreak{}capacityGap.\allowbreak{}large/\allowbreak{}medium/\allowbreak{}smallMs} & enterprise 1800000/1260000/720000; standard 7020000/5220000/3420000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{345--347} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}locationTtlS} & 7500 s & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{311} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}installingTtlS} & 900 s & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{312} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}installErrorTtlS} & 3600 s & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{313} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}tempMsgTtlS} & 3600 s & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{314} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}hashSyncIntervalMs} & 1800000 ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{315} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}peerNotifyIntervalMs} & 3600000 ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{316} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}cpuCheckIntervalMs} & 900000 ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{317} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}portRestoreIntervalMs} & 600000 ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{318} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}imageComplianceIntervalMs} & 3600000 ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{319} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}forceRemovalIntervalMs} & 7200000 ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{320} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}portTestBindDelayMs}\slash\texttt{Propagation\allowbreak{}Delay\allowbreak{}Ms}\slash\texttt{PeerTimeoutMs}\slash\texttt{MaxAttempts} & 5000 / 10000 / 30000 / 5 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{322--325} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}nodeMonitorRemovalDelayMs} & 60000 ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{335} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}nodeMonitorDosRecoveryDelayMs} & 600000 ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{336} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}nodeMonitorConfirmationLossDelayMs} & 1200000 ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{337} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}nodeMonitorErrorRecoveryDelayMs} & 120000 ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{338} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}nodeMonitorCheckTimeoutMs} & 10000 ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{339} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}hashSyncMaxRetries}\slash\texttt{RetryMs}\slash\texttt{SettleMs}\slash\texttt{Response\allowbreak{}Time\allowbreak{}Per\allowbreak{}Hash\allowbreak{}Ms}\slash\texttt{BufferMs}\slash\texttt{MaxRounds}\slash\texttt{PeersPerRound}\slash\texttt{EphemeralPeers}\slash\texttt{Fallback\allowbreak{}Recheck\allowbreak{}Blocks} & 3 / 300000 / 4000 / 150 / 5000 / 4 / 3 / 5 / 100 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{355--363} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}syncResponseThrottleMs} & 300000 ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{364} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}wsHandshakeTimeoutMs} & 10000 ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{365} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}imageUpdateCheckIntervalMs} & 21600000 ms (6 h) & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{366} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}imageUpdateInitialDelayMin/\allowbreak{}MaxMs} & 600000 / 1800000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{367--368} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}imageUpdateDelayBetweenAppsMs} & 5000 ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{369} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}imageUpdateDelayAfterRedeployMs} & 120000 ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{370} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}imageUpdateDelayBetweenComponentsMs} & 1000 ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{371} \\
+Timeouts/intervals & \texttt{fluxapps.\allowbreak{}masterSlaveIntervalMs} & 30000 ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{372} \\
+Timeouts/intervals & \texttt{SIGTERM\_EXPIRY\_MS} & 420000 ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}appConstants.js}{86} \\
+Timeouts/intervals & \texttt{system.\allowbreak{}heartbeatIntervalMs} & 30000 ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{14} \\
+Timeouts/intervals & \texttt{system.\allowbreak{}bootSyncTimeoutMs}\slash\texttt{boot\allowbreak{}Daemon\allowbreak{}Timeout\allowbreak{}Ms} & 300000 / 300000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{15--16} \\
+Timeouts/intervals & \texttt{confirmation.\allowbreak{}pollIntervalMs} & 30000 ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{21} \\
+Timeouts/intervals & \texttt{confirmation.\allowbreak{}daemonStaleMs} & 7500000 ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{22} \\
+Timeouts/intervals & \texttt{confirmation.\allowbreak{}daemonExpiredMs} & 19200000 ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{23} \\
+Timeouts/intervals & \texttt{syncthing.\allowbreak{}monitorIntervalMs} & 30000 ms & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{408} \\
+Timeouts/intervals & \texttt{syncthing.\allowbreak{}stallNudgeAfterMs}\slash\texttt{stall\allowbreak{}Nudge\allowbreak{}Max\allowbreak{}Interval\allowbreak{}Ms}\slash\texttt{stall\allowbreak{}Remove\allowbreak{}Min\allowbreak{}Window\allowbreak{}Ms}\slash\texttt{stall\allowbreak{}Remove\allowbreak{}Min\allowbreak{}Nudges} & 180000 / 900000 / 1200000 / 3 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{412--415} \\
+Timeouts/intervals & \texttt{Flux\allowbreak{}Peer\allowbreak{}Manager.\allowbreak{}CONNECTION\_BACKOFF\_MS} (default) & [120000, 300000, 600000, 900000] & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}FluxPeerManager.js}{32} \\
+Tier resources & Cumulus: CPU total (apps avail.) / RAM MB total (apps) / HDD GB total (apps) / collateral current-old & 40 (30) / 7000 (5000) / 220 (180) / 1000--10000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{380--403} \\
+Tier resources & Nimbus: same fields & 80 (70) / 30000 (28000) / 440 (400) / 12500--25000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{380--403} \\
+Tier resources & Stratus: same fields & 160 (150) / 61000 (59000) / 880 (840) / 40000--100000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{380--403} \\
+Locked resources & \texttt{lockedSystemResources.\allowbreak{}cpu} & 10 (1 core, $\times10$ units) & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{375--378} \\
+Locked resources & \texttt{lockedSystemResources.\allowbreak{}ram} & 2000 MB & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{375--378} \\
+Locked resources & \texttt{lockedSystemResources.\allowbreak{}hdd} & 60 GB & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{375--378} \\
+Locked resources & \texttt{lockedSystemResources.\allowbreak{}extrahdd} & 20 GB & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{375--378} \\
+Locked resources & Usable disk multiplier & 0.95 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}hwRequirements.js}{385} \\
+Locked resources & CPU-burst headroom floor & $\leq4$ free vCores rejected & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}hwRequirements.js}{432} \\
+CPU burst & \texttt{cpu\allowbreak{}Burst.\allowbreak{}enabled} & \texttt{true} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{440--453} \\
+CPU burst & \texttt{cpu\allowbreak{}Burst.\allowbreak{}period\allowbreak{}Us} & 100000 (CFS 100 ms period) & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{440--453} \\
+CPU burst & \texttt{cpuBurst.\allowbreak{}reservedCores} & 1 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{440--453} \\
+Payment addresses & \texttt{fluxapps.\allowbreak{}address} & \texttt{t1LUs6quf7TB2z\allowbreak{}VZmexq\allowbreak{}PQdnqmr\allowbreak{}FMGZGj\allowbreak{}V6} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{241--244} \\
+Payment addresses & \texttt{address\allowbreak{}Multisig} & \texttt{t3a\allowbreak{}GJvdtd8NR6Grnqn\allowbreak{}Ru\allowbreak{}VEz\allowbreak{}H6Mbr\allowbreak{}Xu\allowbreak{}JFLUX} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{241--244} \\
+Payment addresses & \texttt{address\allowbreak{}Multisig\allowbreak{}B} & \texttt{t3Nryf\allowbreak{}AQLGe\allowbreak{}Fs9j\allowbreak{}Eoeqsxm\allowbreak{}BN2QLRa\allowbreak{}RKFLUX} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{241--244} \\
+Payment addresses & \texttt{address\allowbreak{}Development} & \texttt{t1Mzja9i\allowbreak{}Jc\allowbreak{}EYe\allowbreak{}W5B4m4s1t\allowbreak{}JG8M42od\allowbreak{}FZ16A} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{241--244} \\
+Payment addresses & \texttt{fluxTeamFluxID} & \texttt{1hjy4b\allowbreak{}CYBJr4mny4z\allowbreak{}CE85J94RXa8W6q37} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{121--122} \\
+Payment addresses & \texttt{flux\allowbreak{}Support\allowbreak{}Team\allowbreak{}Flux\allowbreak{}ID} & \texttt{16i\allowbreak{}Jqi\allowbreak{}Vb\allowbreak{}Hpt\allowbreak{}Cx87q6XQw\allowbreak{}Np\allowbreak{}Kdg\allowbreak{}EZn\allowbreak{}Ft\allowbreak{}Kcy\allowbreak{}P} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{121--122} \\
+Payment addresses & \texttt{team\allowbreak{}Support\allowbreak{}Address} (height-gated) & \texttt{\{height:1851659,\allowbreak{} address:'16iJqiVb\allowbreak{}HptCx87q\allowbreak{}6XQwNpKd\allowbreak{}gEZnFtKc\allowbreak{}yP'\}} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{225--228} \\
+Payment addresses & \texttt{usersToExtend} & \texttt{['1MCBJn6qsy3YRY2Yasd\allowbreak{}YMYd\allowbreak{}Jcdhy1ev8Rd']} (append-only allow-list) & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{229} \\
+Version pins & \texttt{minimum\allowbreak{}Flux\allowbreak{}Bench\allowbreak{}Allowed\allowbreak{}Version} & \texttt{'6.2.0'} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{117--120} \\
+Version pins & \texttt{minimum\allowbreak{}Flux\allowbreak{}OSAllowed\allowbreak{}Version} & \texttt{'8.13.1'} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{117--120} \\
+Version pins & \texttt{minimum\allowbreak{}Syncthing\allowbreak{}Allowed\allowbreak{}Version} & \texttt{'2.0.10'} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{117--120} \\
+Version pins & \texttt{minimum\allowbreak{}Docker\allowbreak{}Allowed\allowbreak{}Version} & \texttt{'26.1.2'} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{117--120} \\
+Version pins & \texttt{fluxapps.\allowbreak{}latestSupportedSpecVersion} & 8 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{126} \\
+Version pins & \texttt{fluxapps.\allowbreak{}latestAppSpecification} & 8 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{307} \\
+Version pins & \texttt{fluxapps.\allowbreak{}accept\allowbreak{}V9} & \texttt{false} & \srcbranch{RunOnFlux/\allowbreak{}flux}{feat/appspec-v9}{ZelBack/config/default.js:127} \\
+\end{longtable}
+
+%% =====================================================================
+\subsection{Application pricing and deployment}
+
+\Cref{tab:pricing} gives the height-scheduled price table (genesis plus five revisions),
+the payment sink address, instance and blocks-allowance bounds, the maximum image size,
+the port range, and the \specv{1}--\specv{8} enforcement heights, all read from the
+\texttt{deploymentinformation} endpoint's live response.
+
+\begin{longtable}{@{}p{0.34\linewidth}p{0.32\linewidth}p{0.30\linewidth}@{}}
+\caption{Application pricing and deployment constants.}\label{tab:pricing}\\
+\toprule
+\textbf{Constant} & \textbf{Value} & \textbf{Provenance} \\
+\midrule
+\endfirsthead
+\caption[]{\itshape continued from previous page}\\
+\toprule
+\textbf{Constant} & \textbf{Value} & \textbf{Provenance} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Price table row, height $-1$ (genesis) (cpu/ram/hdd/minPrice/port/scope/staticip) & 3 / 1 / 0.5 / 1 / 2 / 6 / 3 & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+Price table row, height 983000 & 0.3 / 0.1 / 0.05 / 0.1 / 2 / 6 / 3 & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+Price table row, height 1004000 & 0.06 / 0.02 / 0.01 / 0.01 / 2 / 6 / 3 & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+Price table row, height 1288000 & 0.15 / 0.05 / 0.02 / 0.01 / 2 / 6 / 3 & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+Price table row, height 1594832 (soft fork 1) & 0.15 / 0.05 / 0.02 / 0.01 / 1.5 / 6 / 3 & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+Price table row, height 1597156 (soft fork 2) & 0.03 / 0.01 / 0.004 / 0.01 / 0.4 / 0.8 / 0.4 & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+Cross-check: same six rows, static config & identical values at the same six heights & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{133--209} \\
+v9 price-segment row, height 2950000 (not one of the six live-scheduled revisions; gated by \texttt{acceptV9} feature flag, not chain height) & identical to the 1597156 row (``income-never-falls rule'') & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{196--209} \\
+Payment sink address & \texttt{t3Nryf\allowbreak{}AQLGe\allowbreak{}Fs9j\allowbreak{}Eoeqsxm\allowbreak{}BN2QLRa\allowbreak{}RKFLUX} & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+\texttt{portMin} / \texttt{portMax} & 1 / 65535 & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+\texttt{enterprise\allowbreak{}Ports} & [0--1023, 8080, 8081, 8443, 6667] & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+\texttt{bannedPorts} & [16100--16299, 26100--26299, 30000--30099, 8384, 27017, 22, 23, 25, 3389, 5900, 5800, 161, 512, 513, 5901, 3388, 4444, 123, 53] & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+\texttt{maxImageSize} & 5000000000 & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+\texttt{minimum\allowbreak{}Instances} & 3 (the endpoint's static report; the validator enforces 1 for \specv{8} and later from height 2176519, \Cref{tab:fluxos}) & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+\texttt{maximum\allowbreak{}Instances} & 100 & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+\texttt{blocksLasting} & 22000 & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+\texttt{min\allowbreak{}Blocks\allowbreak{}Allowance} & 5000 (the endpoint's static report; the validator's floor is 1 from height 1964447, \Cref{tab:fluxos}) & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+\texttt{max\allowbreak{}Blocks\allowbreak{}Allowance} & 1056000 (matches the code's \texttt{fluxapps.\allowbreak{}postPonMaxBlocksAllowance}, \Cref{tab:fluxos}, not the pre-\PoN \texttt{fluxapps.\allowbreak{}maxBlocksAllowance}=264000) & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+\texttt{blocks\allowbreak{}Allowance\allowbreak{}Interval} & 1000 & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+\texttt{app\allowbreak{}Specs\allowbreak{}Enforcement\allowbreak{}Heights}, \specv{1} & 0 & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+\texttt{app\allowbreak{}Specs\allowbreak{}Enforcement\allowbreak{}Heights}, \specv{2} & 0 & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+\texttt{app\allowbreak{}Specs\allowbreak{}Enforcement\allowbreak{}Heights}, \specv{3} & 983000 & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+\texttt{app\allowbreak{}Specs\allowbreak{}Enforcement\allowbreak{}Heights}, \specv{4} & 1004000 & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+\texttt{app\allowbreak{}Specs\allowbreak{}Enforcement\allowbreak{}Heights}, \specv{5} & 1142000 & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+\texttt{app\allowbreak{}Specs\allowbreak{}Enforcement\allowbreak{}Heights}, \specv{6} & 1300000 & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+\texttt{app\allowbreak{}Specs\allowbreak{}Enforcement\allowbreak{}Heights}, \specv{7} & 1420000 & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+\texttt{app\allowbreak{}Specs\allowbreak{}Enforcement\allowbreak{}Heights}, \specv{8} & 1932380 & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03} \\
+\end{longtable}
+
+%% =====================================================================
+\subsection{Networking}
+
+\Cref{tab:networking} covers \FDM and \PDNS intervals, TTLs, timeouts, retry counts, and
+ports, plus the network-policy fetch interval enforced fleet-wide by \FluxOS.
+
+\begin{longtable}{@{}p{0.38\linewidth}p{0.28\linewidth}p{0.28\linewidth}@{}}
+\caption{Networking constants (\FDM, \PDNS, and related network/addressing services).}\label{tab:networking}\\
+\toprule
+\textbf{Constant} & \textbf{Value} & \textbf{Provenance} \\
+\midrule
+\endfirsthead
+\caption[]{\itshape continued from previous page}\\
+\toprule
+\textbf{Constant} & \textbf{Value} & \textbf{Provenance} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\FDM HTTP port (16131 if \texttt{manage\allowbreak{}Certificate\allowbreak{}Only}) & 16130 & \srccode{flux-domain-manager/\allowbreak{}config/\allowbreak{}default.js}{7} \\
+\texttt{globalAppSpecs} poll interval (default) & 30000 ms & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}flux/\allowbreak{}dataFetcher.js}{54} \\
+\texttt{appsLocations} poll interval (hardcoded, always) & 10000 ms & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}flux/\allowbreak{}dataFetcher.js}{66,707} \\
+\texttt{permMessages} poll interval (default) & 120000 ms & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}flux/\allowbreak{}dataFetcher.js}{82} \\
+Main HAProxy (home/api/cloud) regen interval & 30000 ms & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domainService.js}{201--208} \\
+Main pool minimum node count (throws below) & 10 & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domainService.js}{181--183} \\
+Main pool maximum size & 100 & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domainService.js}{114,173--176} \\
+G-app health retry count / delay & 3 attempts / 3000 ms & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domainService.js}{29--30} \\
+G-app sticky-unhealthy threshold & 90000 ms (90 s) & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domainService.js}{31} \\
+HAProxy generic-app health check & \texttt{inter 3s fall 2 rise 2 fastinter 500} & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}haproxyTemplate.js}{311} \\
+HAProxy main UI/API health check & \texttt{inter 10s fall 2 rise 3 maxconn 100} & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}haproxyTemplate.js}{384,408,427} \\
+Certificate renewal threshold & $<30$ days remaining & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domain/\allowbreak{}cert.js}{108,241} \\
+Stale-cert deletion threshold & $<-30$ days (expired $>30$ days ago) & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domain/\allowbreak{}cert.js}{337--339} \\
+CDM certificate obtain/renew loop interval & 15 min ($15\times60\times1000$ ms) & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domainService.js}{1079--1086} \\
+Cert operation concurrency limit & 10 & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domain/\allowbreak{}cert.js}{16,270} \\
+ACME HTTP-01 challenge port & 8787 & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domain/\allowbreak{}cert.js}{40} \\
+DNS backoff cooldowns (failures 1/2/3/4+) & 0 / 30 min / 1 h / capped 2 h & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domain/\allowbreak{}dnsCache.js}{7--21} \\
+flux-apps-dns-manager service port & 16140 & \srccode{flux-apps-dns-manager/\allowbreak{}config/\allowbreak{}default.js}{6} \\
+flux-apps-dns-manager polling interval & 60000 ms & \srccode{flux-apps-dns-manager/\allowbreak{}config/\allowbreak{}default.js}{81} \\
+flux-apps-dns-manager deletion grace period & 24 h & \srccode{flux-apps-dns-manager/\allowbreak{}config/\allowbreak{}default.js}{84} \\
+DNS record TTL (\texttt{app.}\slash\texttt{app2.\allowbreak{}runonflux.\allowbreak{}io}) & 300 s & \srccode{flux-apps-dns-manager/\allowbreak{}config/\allowbreak{}default.js}{25,40} \\
+Placeholder record TTL & 60 s & \srccode{flux-apps-dns-manager/\allowbreak{}config/\allowbreak{}default.js}{27,42} \\
+flux-dnsd bind address & \texttt{169.254.43.53:\allowbreak{}53} (UDP+TCP) & \srccode{flux-dnsd/\allowbreak{}src/\allowbreak{}main.rs}{37--39} \\
+flux-dnsd mesh answer TTL & 5 s & \srccode{flux-dnsd/\allowbreak{}src/\allowbreak{}main.rs}{57--60} \\
+flux-dnsd TCP idle timeout & 5 s & \srccode{flux-dnsd/\allowbreak{}src/\allowbreak{}main.rs}{102} \\
+flux-dnsd max in-flight TCP responses/conn & 32 & \srccode{flux-dnsd/\allowbreak{}src/\allowbreak{}main.rs}{102} \\
+flux-pdns PowerDNS version & 5.0.6 & \srccode{flux-pdns/\allowbreak{}vars.yaml}{19--21} \\
+flux-pdns cache-ttl / negquery-cache-ttl & 60 s each & \srccode{flux-pdns/\allowbreak{}templates/\allowbreak{}pdns.conf.j2}{27--28} \\
+flux-pdns query-cache-ttl & 20 s & \srccode{flux-pdns/\allowbreak{}templates/\allowbreak{}pdns.conf.j2}{29} \\
+flux-pdns webserver (API) port & 8081 & \srccode{flux-pdns/\allowbreak{}templates/\allowbreak{}pdns.conf.j2}{43} \\
+flux-pdns DNS port & 53 & \srccode{flux-pdns/\allowbreak{}templates/\allowbreak{}pdns.conf.j2}{61} \\
+flux-pdns xfr-cycle-interval & 10 s & \srccode{flux-pdns/\allowbreak{}templates/\allowbreak{}pdns.conf.j2}{104} \\
+flux-pdns app-zone TTL & 3600 s & \srccode{flux-pdns/\allowbreak{}vars.yaml}{69,111} \\
+flux-pdns geo-zone TTL & 300 s & \srccode{flux-pdns/\allowbreak{}vars.yaml}{49,90} \\
+flux-pdns geo health check timeout / \texttt{minimum\allowbreak{}Failures} / \texttt{interval} & 3 s / 3 / 15 s & \srccode{flux-pdns/\allowbreak{}templates/\allowbreak{}geo\_routing.lua.j2}{55--57} \\
+flux-dns-gateway server port (behind Nginx 8443) & 8080 & \srccode{flux-dns-gateway/\allowbreak{}src/\allowbreak{}dns\_gateway/\allowbreak{}config/\allowbreak{}settings.py}{18--19} \\
+flux-dns-gateway request timeout & 30 s & \srccode{flux-dns-gateway/\allowbreak{}src/\allowbreak{}dns\_gateway/\allowbreak{}config/\allowbreak{}settings.py}{37} \\
+flux-dns-gateway max retries / retry delay & 3 / 2.0 s (linear backoff) & \srccode{flux-dns-gateway/\allowbreak{}src/\allowbreak{}dns\_gateway/\allowbreak{}config/\allowbreak{}settings.py}{40--41} \\
+flux-dns-gateway DNS-state cache TTL & 3600.0 s (1 h) & \srccode{flux-dns-gateway/\allowbreak{}src/\allowbreak{}dns\_gateway/\allowbreak{}managers/\allowbreak{}dns\_manager.py}{36} \\
+flux-dns-gateway record TTL bounds & 60--86400 s & \srccode{flux-dns-gateway/\allowbreak{}src/\allowbreak{}dns\_gateway/\allowbreak{}api/\allowbreak{}routes/\allowbreak{}dns.py}{26,38,54} \\
+flux-geo-cert certbot subprocess timeout & 300 s (5 min) & \srccode{flux-geo-cert/\allowbreak{}files/\allowbreak{}cert\_orchestrator/\allowbreak{}src/\allowbreak{}cert\_orchestrator/\allowbreak{}managers/\allowbreak{}cert\_manager.py}{327} \\
+flux-geo-cert DNS propagation poll interval & 15 s & \srccode{flux-geo-cert/\allowbreak{}files/\allowbreak{}cert\_orchestrator/\allowbreak{}src/\allowbreak{}cert\_orchestrator/\allowbreak{}managers/\allowbreak{}dns\_manager.py}{275,283--300} \\
+flux-geo-cert renewal threshold (default, validated $1..89$) & 30 days before expiry & \srccode{flux-geo-cert/\allowbreak{}files/\allowbreak{}cert\_orchestrator/\allowbreak{}src/\allowbreak{}cert\_orchestrator/\allowbreak{}config/\allowbreak{}settings.py}{100,119--126} \\
+fluxos-network-policy fetch interval: blocked repos, enterprise nodes & 6 h & \srccode{fluxos-network-policy/\allowbreak{}README.md}{30} \\
+fluxos-network-policy fetch interval: tampering blocklist & 12 h & \srccode{fluxos-network-policy/\allowbreak{}README.md}{30} \\
+fluxos-network-policy iplocation baseline fetch & daily, conditional & \srccode{fluxos-network-policy/\allowbreak{}.github/\allowbreak{}workflows/\allowbreak{}monthly-baseline.yml}{82} \\
+\end{longtable}
+
+%% =====================================================================
+\subsection{Attestation and boot}
+
+\Cref{tab:attestation} covers \fluxsas ports and intervals, the watchdog poll period, and
+the ArcaneOS release/build constants.
+
+\begin{longtable}{@{}p{0.40\linewidth}p{0.28\linewidth}p{0.26\linewidth}@{}}
+\caption{Attestation and boot constants (\fluxsas, \ArcaneOS).}\label{tab:attestation}\\
+\toprule
+\textbf{Constant} & \textbf{Value} & \textbf{Provenance} \\
+\midrule
+\endfirsthead
+\caption[]{\itshape continued from previous page}\\
+\toprule
+\textbf{Constant} & \textbf{Value} & \textbf{Provenance} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\fluxsas mTLS listen port (single listener; a stale doc comment names a second, non-existent port 16102) & 16100 & \srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{972--999,1042--1053}; \srccode{fluxsas/\allowbreak{}secrets}{225} \\
+\texttt{MAX\_REQUEST\_BODY\_SIZE} & 16777216 bytes (16 MiB) & \srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{55} \\
+\texttt{MAX\_APP\_NAME\_LENGTH} / \texttt{MAX\_FLUX\_ID\_LENGTH} / \texttt{MAX\_MESSAGE\_LENGTH} & 63 / 64 / 20000 & \srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{56--58} \\
+\texttt{BLOB\_SIGN\_FRESHNESS\_SECONDS} & 300 s & \srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{183} \\
+Per-app leaf certificate validity & 30 days (default) & \srccode{fluxsas/\allowbreak{}src/\allowbreak{}crypto/\allowbreak{}ca.h}{60--65,132--134} \\
+Per-app CA self-signed validity window & \texttt{notBefore}=1767225600 (2026-01-01), \texttt{notAfter}=4922899200 (2126-01-01) -- a 100-year window & \srccode{fluxsas/\allowbreak{}src/\allowbreak{}crypto/\allowbreak{}ca.h}{239--240} \\
+TPM PCR sealed by \texttt{systemd-\allowbreak{}cryptenroll} & PCR 7 only (\texttt{--tpm2-pcrs=\allowbreak{}7}) -- Secure Boot policy state, not kernel/initrd/rootfs identity & \srccode{fluxsas/\allowbreak{}src/\allowbreak{}fes/\allowbreak{}fes.cpp}{174} \\
+Watchdog poll interval & two 5 s sleeps per loop iteration ($\approx$10 s/iteration) & \srccode{fluxsas/\allowbreak{}src/\allowbreak{}watchdog.h}{734--744} \\
+Watchdog periodic hash-check period & \texttt{timer > 8600 + random[1,\allowbreak{}8600]} loop-iterations at $\approx$10 s/iteration $\Rightarrow$ $\approx$24--48 h (in-code comment says a fixed 24 h, which undercounts) & \srccode{fluxsas/\allowbreak{}src/\allowbreak{}watchdog.h}{721--725,745--748} \\
+Unlock/rotate retry policy & 3 retries, 10 s apart & \srccode{fluxsas/\allowbreak{}src/\allowbreak{}disk\_encryption.h}{701--717,723--731,742--750} \\
+\texttt{sas} version & 1.2.1 & \srccode{fluxsas/\allowbreak{}src/\allowbreak{}sas.cpp}{183} \\
+\texttt{fes} version & 1.0.0 & \srccode{fluxsas/\allowbreak{}src/\allowbreak{}fes/\allowbreak{}fes.cpp}{376} \\
+FES exit codes: Secure Boot disabled / PK validation failed / TPM2 absent / TPM2-enroll failed / VPS-check failed / PKCS11-enroll failed / keystore failed / device-unlock failed & 50 / 51 / 52 / 53 / 54 / 55 / 56 / 57 & \srccode{fluxsas/\allowbreak{}secrets}{FES\_EXIT\_* block} \\
+Countdown before poweroff on enrollment failure (\texttt{fes-wrapper}) & 30 s & \srccode{fluxos-iso-pkcs11/\allowbreak{}99flux-crypt/\allowbreak{}fes-wrapper}{36,39} \\
+\texttt{FLUX\_PK\_SHA256SUM} (hash of the DER-encoded custom UEFI platform key) & \texttt{820ddf304e3cff16\allowbreak{}13603f529dc6d558\allowbreak{}2343b90b8b1750ce\allowbreak{}e188b25d609ccff0\allowbreak{}} & \srccode{fluxos-iso/\allowbreak{}Makefile}{65} \\
+Ubuntu base release for FluxOS/ArcaneOS images & \texttt{resolute} / 26.04 (``Resolute Raccoon'') & \srccode{fluxos-iso/\allowbreak{}release\_config.env}{1--3} \\
+\texttt{KERNEL\_PIN} (pinned image/kmss kernel) & \texttt{7.0.0-\allowbreak{}29-\allowbreak{}generic} & \srccode{fluxos-iso/\allowbreak{}release\_config.env}{9} \\
+Ed25519 release-signing signature / trailer length & 64 bytes / 4 bytes & \srccode{fluxos-iso/\allowbreak{}flux-release-signer/\allowbreak{}src/\allowbreak{}flux\_release\_signer/\allowbreak{}main.py}{20--21} \\
+Release-tarball hashing/signing chunk size & 268435456 bytes (256 MiB) & \srccode{fluxos-iso/\allowbreak{}flux-release-signer/\allowbreak{}src/\allowbreak{}flux\_release\_signer/\allowbreak{}main.py}{19} \\
+HSM signing-client TCP port & 38678 & \srccode{flux-iso-hsm/\allowbreak{}docs/\allowbreak{}PIN\_FLOW\_EFI\_SIGNING.md}{63} \\
+HSM WireGuard-tunnel forwarder port & 8888 & \srccode{flux-iso-hsm/\allowbreak{}src/\allowbreak{}flux\_hsm/\allowbreak{}server/\allowbreak{}socket\_server.py}{1198} \\
+Root CA / FluxOS Devices PK/KEK/DB / Release-signing key object IDs & 0x1200/0x1210, 0x1500/0x1510, 0x1501/0x1511, 0x1502/0x1512, 0x1400 & \srccode{flux-iso-hsm/\allowbreak{}src/\allowbreak{}flux\_hsm/\allowbreak{}hsm\_manager.py}{181--336} \\
+Two-CA-slot rotation (\PoN attestation-analogue for FDM) & \texttt{SAS\_TLS\_CA\_CERT} / \texttt{SAS\_TLS\_CA\_CERT\_PREV} & \srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{978--999} \\
+FDM-arcane / DNS-gateway CA certificate validity & 3650 days (10 years) & \srccode{flux-fdm-infrastructure/\allowbreak{}ansible/\allowbreak{}playbooks/\allowbreak{}apps-dns-manager/\allowbreak{}README.md}{29} \\
+\end{longtable}
+
+%% =====================================================================
+\subsection{Measured network state}
+
+\Cref{tab:measured} gives the fleet census, locked collateral, deployed application
+counts, committed resources, and shielded value pools, each read from the live public
+API at chain height 2917115, retrieval date 2026-09-03.
+
+\begin{longtable}{@{}p{0.40\linewidth}p{0.30\linewidth}p{0.24\linewidth}@{}}
+\caption{Measured network state.}\label{tab:measured}\\
+\toprule
+\textbf{Quantity} & \textbf{Value} & \textbf{Provenance} \\
+\midrule
+\endfirsthead
+\caption[]{\itshape continued from previous page}\\
+\toprule
+\textbf{Quantity} & \textbf{Value} & \textbf{Provenance} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Fleet total (\texttt{getzelnodecount}) & 6489 nodes, all \texttt{stable} & \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}getzelnodecount}{2026-09-03} \\
+Cumulus nodes / collateral each / tier collateral & 3247 / 1000\flux / 3247000\flux & \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03} \\
+Nimbus nodes / collateral each / tier collateral & 1615 / 12500\flux / 20187500\flux & \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03} \\
+Stratus nodes / collateral each / tier collateral & 1627 / 40000\flux / 65080000\flux & \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03} \\
+Total locked collateral & 88514500\flux (88514.5 voting-weight units at 1 unit/1000\flux) & \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03} \\
+IPv4 / IPv6 / onion node addresses & 2322 / 0 / 0 & \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}getzelnodecount}{2026-09-03} \\
+Deployed application specifications (\texttt{globalappsspecifications}) & 1195 records & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03} \\
+Deployed apps by spec version: v2/v3/v4/v5/v6/v7/v8 & 2 / 27 / 11 / 3 / 70 / 209 / 873 & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03} \\
+Total requested instances / compose components & 7486 / 1371 & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03} \\
+Committed CPU (vCPU-equivalents, summed over instances) & 8972.0 & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03} \\
+Committed RAM (summed over instances) & 17544229 MB (17133.0 GiB) & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03} \\
+Committed HDD (summed over instances) & 160107 GB & \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03} \\
+Chain tip at time of measurement & height 2917115 & \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}getblockchaininfo}{2026-09-03} \\
+Shielded value pool: \texttt{sprout} & 19291.17735041\flux (1929117735041 zat) & \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}getblockchaininfo}{2026-09-03} \\
+Shielded value pool: \texttt{sapling} & 77188.75921324\flux (7718875921324 zat) & \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}getblockchaininfo}{2026-09-03} \\
+Total shielded value & 96479.93656365\flux (9647993656365 zat) & \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}getblockchaininfo}{2026-09-03} \\
+Shielded share of issued supply (against 429466823.97\flux at height 2912015) & 0.0225\% & \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}getblockchaininfo}{2026-09-03} \\
+\end{longtable}
+
+%% =====================================================================
+\subsection*{Reproduction note}
+
+The values in this appendix were current at the time of this survey (evidence
+collected through 2026-09-03; measured-network figures retrieved 2026-09-03 at chain
+height 2917115). Consensus constants (\Cref{tab:chain-identity,tab:upgrades,tab:emission,tab:funds,tab:tiering,tab:limits,tab:difficulty})
+change only by network upgrade, whereas policy constants such as the application price
+table (\Cref{tab:pricing}) change by height-scheduled revision or live configuration
+update without a consensus-level upgrade; the reproduction instructions for every
+measured and computed value in this appendix are given in Appendix C.
+

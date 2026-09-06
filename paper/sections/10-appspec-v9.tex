@@ -1,0 +1,429 @@
+\section{FluxOS application specification v9}
+\label{sec:appspec-v9}
+
+Every application that runs on \Flux is described by a small, owner-signed JSON document: a
+container image, how much CPU, memory and disk it needs, how many copies to run, and for how long.
+Because \FluxOS has no central scheduler and instead relies on every node independently deciding
+what to run (\S9), that document is closer to a consensus artifact than to an ordinary
+application-programming detail — every node on the network must parse and validate it the same
+way, which is why changing its shape is slow and height-gated, exactly like a price table. This
+section describes the specification version currently enforced on the network, and a substantial,
+actively-developed redesign that is not enforced anywhere yet. This paper calls the specification
+version \emph{v9} throughout, written in full here and as \specv{9} from this point on; it is
+unrelated to \daemonversion, the version number of the consensus daemon \fluxd, which is
+maintained independently and is never the referent of ``v9'' in this document
+\srcintent{00-scope.md}. The reason this section exists is structural, not archival: three fields
+\specv{9} adds — \texttt{paymentMemo}, \texttt{referralCode} and \texttt{machineType} — are the
+substrate that \PNR (\S7), the referral program, and the VPS/datacenter tier (\S11) are each stated
+to depend on, and as of this writing none of the three has any consumer code anywhere in \FluxOS.
+
+\subsection{Version gating as deployed}
+
+\FluxOS accepts an incoming specification $s$ at chain height \hgt only if its declared version does
+not exceed the maximum version enforced at that height, its top-level and per-component fields are
+drawn from that version's whitelist, and it otherwise satisfies that version's own validity rules:
+$$
+\mathrm{Accept}(s,\hgt) \;\equiv\; v(s) \le V(\hgt) \;\wedge\; \mathrm{Fields}(s) \subseteq
+\mathcal{F}_{v(s)} \;\wedge\; \mathrm{Valid}_{v(s)}(s),
+$$
+with $V(\hgt)$ the highest specification version whose enforcement height has been reached. This is
+the same height-scheduling mechanism the network uses for price-table changes, applied to the
+specification schema itself: \texttt{verify\allowbreak{}App\allowbreak{}Specifications} runs type correctness, then
+per-version restriction checks, then the enforcement-height gate, then object-key correctness
+against a per-version field whitelist, in that fixed order, before anything is broadcast \shipped\ \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{1243-1400}.
+
+The enforcement-height table, as configured today, is:
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}llp{6.5cm}@{}}
+\toprule
+Version & Enforcement height & Notes \\
+\midrule
+1 & 0 & no longer accepted for registration or update via the API \\
+2 & 0 & \\
+3 & 983{,}000 & \\
+4 & 1{,}004{,}000 & composition (\texttt{compose} array) \\
+5 & 1{,}142{,}000 & \texttt{contacts}, \texttt{geolocation} \\
+6 & 1{,}300{,}000 & \texttt{expire}, price change \\
+7 & 1{,}420{,}000 (mainnet) / 1{,}390{,}000 (dev) & \texttt{nodes} targeting, \texttt{secrets}, \texttt{staticip} \\
+8 & \textbf{1{,}932{,}380} (mainnet) / \textbf{1{,}921{,}500} (dev) & enterprise / ArcaneOS apps \\
+\bottomrule
+\end{tabular}
+\caption{Specification-version enforcement heights as shipped in \FluxOS. There is no row for
+version 9: no enforcement height for it exists in the shipped configuration or the live pricing
+endpoint (below).}
+\end{table}
+
+\shipped\ \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{231-240}, cross-checked against the live public
+pricing endpoint, which returns the identical mainnet heights through version 8 and carries no key
+for version 9 at all \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03}.
+\specv{8}'s enforcement height is \textbf{1{,}932{,}380} on mainnet and \textbf{1{,}921{,}500} in the
+development network \shipped\ \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{231-240}. Above that height, a
+specification whose top-level keys are anything other than \texttt{version,\allowbreak{} name,\allowbreak{} description,\allowbreak{}
+owner,\allowbreak{} compose,\allowbreak{} instances,\allowbreak{} contacts,\allowbreak{} geolocation,\allowbreak{} expire,\allowbreak{} nodes,\allowbreak{} staticip,\allowbreak{} datacenter,\allowbreak{} enterprise}
+is rejected outright \shipped\ \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{1063-1067}.
+
+\inprogress\ The organisation's own working checkout additionally carries a single, unpublished
+commit that begins to vendor a copy of the RFC-0 schema (\S\ref{sec:two-artifacts}) behind a feature flag
+rather than a height: registering or updating a \texttt{version: 9} specification is rejected
+before schema validation ever runs unless \texttt{config.\allowbreak{}fluxapps.\allowbreak{}acceptV9} is \texttt{true}, and
+that flag defaults to \texttt{false} with no caller anywhere in the codebase that sets it
+\srcbranch{RunOnFlux/\allowbreak{}flux}{feat/appspec-v9}{ZelBack/src/services/appDatabase/registryManager.js:1766-1769}.\footnote{%
+This sits on a working checkout of the organisation repository that had not been pushed to
+\texttt{RunOnFlux/flux}'s public remote at the time of writing, and it is a much smaller and
+separate effort from the contributor fork discussed in \S\ref{sec:appspec-v9-scale}. It is cited
+here as an unpublished working branch, not as a fetchable public artifact.} No node on the network
+today enforces any rule for \texttt{version: 9} beyond ``reject it.''
+
+\subsection{The migration baseline, measured}
+\label{sec:migration-baseline}
+
+The concrete cost of this gating scheme is visible in what is actually deployed. Of 1{,}195
+applications registered on the network on 2026-09-03
+\srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lrr@{}}
+\toprule
+Version & Applications & Share \\
+\midrule
+v8 & 873 & 73.1\% \\
+v7 & 209 & 17.5\% \\
+v6 & 70 & 5.9\% \\
+v3 & 27 & 2.3\% \\
+v4 & 11 & 0.9\% \\
+v5 & 3 & 0.3\% \\
+v2 & 2 & 0.2\% \\
+\midrule
+Total & 1{,}195 & 100\% \\
+\bottomrule
+\end{tabular}
+\caption{Deployed-application count by specification version, ordered by share.}
+\end{table}
+
+\shipped\ \textbf{322 applications (26.9\%) are on a version older than \specv{8}.} Seven
+specification versions — \specv{2} through \specv{8} — are live on the network simultaneously
+\srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}. The acceptance predicate
+above has a ceiling ($v(s) \le V(\hgt)$) but no floor: nothing in it forces an already-running
+application to move forward when a newer version becomes enforceable, and the measured coexistence
+of seven versions is the direct, observable consequence. The network has not deprecated any
+specification version to date; every version ever shipped is still validated, by every node, for as
+long as an application on that version continues to exist. That is the real cost of
+height-scheduled versioning with no deprecation mechanism, and it is the baseline against which
+\specv{9}'s eventual migration has to be measured (\S\ref{sec:migration-mechanism}).
+
+\subsection{What v9 changes}
+
+\inprogress\ \specv{9} is defined, at present, only as a draft JSON Schema (RFC-0) in a standalone
+repository \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{1-350} — see \S\ref{sec:two-artifacts} for why that
+draft and what \FluxOS actually consumes are not the same object. Table~\ref{tab:v9-changes}
+summarises the delta against \specv{8}: four field renames, one removal, and five additions, each
+against what depends on it and how far its implementation actually reaches.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}llp{3.6cm}p{4.4cm}@{}}
+\toprule
+Change & \specv{9} name (\specv{8} name) & Depends on & Implementation status \\
+\midrule
+Rename & \texttt{components} (\texttt{compose}) & --- & schema-level only; breaks every existing client, hence bundled with the other renames rather than dripped \\
+Rename & \texttt{image} (\texttt{repotag}) & --- & schema-level only \\
+Rename & \texttt{memory} (\texttt{ram}) & --- & schema-level only \\
+Rename & \texttt{rootFsGb} (\texttt{hdd}) & --- & schema-level only \\
+Removal & --- (\texttt{enterprise}; its envelope replacement named but not specified) & private/encrypted specifications & regression; see \S\ref{sec:envelope-regression} \\
+Addition & \texttt{loadBalancing} & routing, health checks, backend TLS, connection draining & partially implemented: draining and per-app-CA TLS wired; config generation stays in \FDM (\S12) \\
+Addition & \texttt{duration} & subscriptions and auto-renewal (\S16) & first-class in the schema; the fork's pricing engine reads the same concept off \texttt{spec.ttl}, and whether \texttt{duration} maps to it is unresolved (\S\ref{sec:app-interfaces}) \\
+Addition & \texttt{paymentMemo} & \PNR (\S7) & \textbf{zero consumers in \FluxOS} \\
+Addition & \texttt{referralCode} & referrals, preview environments & \textbf{zero consumers} \\
+Addition & \texttt{machineType} & VPS/datacenter tier (\S11) & \textbf{zero consumers} \\
+\bottomrule
+\end{tabular}
+\caption{\specv{8}$\to$\specv{9} field changes, their dependents, and implementation status.}
+\label{tab:v9-changes}
+\end{table}
+
+Field shapes and required-field membership per \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{40-46} (\texttt{components}),
+\srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{47-61} (\texttt{loadBalancing}), \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{62-82}
+(\texttt{duration}, \texttt{paymentMemo}, \texttt{referralCode}, \texttt{machineType}), and
+\srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{103-122} (\texttt{image}, \texttt{memory}, \texttt{rootFsGb}); the
+removal of \texttt{enterprise}, with its envelope replacement deferred to a later revision, is stated in the draft's own README
+\srcdoc{flux-spec/README.md:58-67,95-96}; the \texttt{paymentMemo}\slash\texttt{referralCode} dependency
+mapping is drawn from the fork's own code comments (``basis for paying operators under PNR v2'',
+``rewards paid as hosting credits'') \srcbranch{RunOnFlux/\allowbreak{}flux}{feat/appspec-v9}{ZelBack/src/services/appRequirements/appSpecV9.js}.
+
+\subsection{The finding this section exists to deliver}
+\label{sec:finding}
+
+\inprogress\ Stated plainly and without spin: \texttt{paymentMemo}, \texttt{referralCode} and
+\texttt{machineType} have \textbf{zero consumer code anywhere in \FluxOS} — no billing path, no
+referral-reward path, no
+capacity-tier scheduling path reads any of the three, confirmed by grepping every JavaScript file
+under \texttt{ZelBack/} and \texttt{tests/} for all three field names
+\srcbranch{MorningLightMountain713/\allowbreak{}flux}{feat/fluxos-v9}{(grep -rn "paymentMemo|referralCode|machineType" --include=*.js ZelBack tests)}.
+Those are exactly the fields \PNR (\S7), the referral program, and the VPS tier (\S11) are stated to
+depend on. The orchestration substrate of \specv{9} — placement, mesh identity, routing plumbing,
+persistent storage, pricing — is built and tested (\S\ref{sec:appspec-v9-scale}); the economic
+fields the roadmap's dependency chain actually rests on are declared in a schema and nothing more.
+The dependency chain the roadmap draws between \specv{9} and \PNR, referrals and the VPS tier is
+real at the level of the schema; it currently terminates in fields no code reads. \S\ref{sec:feasibility} returns to
+this as one instance of a broader pattern in how far the remaining work actually reaches.
+
+\subsection{The scale of the work, quantified}
+\label{sec:appspec-v9-scale}
+
+The overwhelming majority of \specv{9} engineering effort does not live in the organisation
+repository. It lives on an individual contributor's fork\footnote{\texttt{MorningLightMountain713/\allowbreak{}flux},
+branch \texttt{feat/fluxos-v9}, last pushed 2026-09-02 — an external fork of \texttt{RunOnFlux/flux},
+not a branch of the organisation repository itself. Citations against it use
+\textsf{[repo@branch:file:line]} notation for that reason, and none of them can be fetched from the
+organisation's own remote.} that diffs 932 files against \texttt{upstream/\allowbreak{}master}, with
+$+180{,}317/-49{,}561$ lines
+\srcbranch{MorningLightMountain713/\allowbreak{}flux}{feat/fluxos-v9}{(git diff --stat upstream/master origin/feat/fluxos-v9)},
+decomposing the old monolithic application-service layout into 23 focused service
+packages, ten of them absent from \texttt{upstream/\allowbreak{}master} (\texttt{appMesh}, \texttt{appPlacement}, \texttt{pricing},
+\texttt{quorumGrant}, and others)
+\srcbranch{MorningLightMountain713/\allowbreak{}flux}{feat/fluxos-v9}{(find ZelBack/src -maxdepth 3 -type d)}.
+This is \inprogress\ work, and it is substantial: 289 unit-test files containing 7{,}763 test cases
+run on every push
+\srcbranch{MorningLightMountain713/\allowbreak{}flux}{feat/fluxos-v9}{(find tests/unit -name *.test.js | wc -l = 289; grep count of it/test call sites in tests/unit = 7763)}
+\srcbranch{MorningLightMountain713/\allowbreak{}flux}{feat/fluxos-v9}{.github/workflows/nodejs.yml:1-3,90-93},
+alongside a from-scratch, 121-scenario integration harness that provisions up to 16 simulated nodes
+with per-daemon stubs
+\srcbranch{MorningLightMountain713/\allowbreak{}flux}{feat/fluxos-v9}{(ls test-infra/runner/tests); (find test-infra/config -maxdepth 1 -type d)}
+— but that harness runs only on manual dispatch, on a self-hosted runner, and is not part of the
+automatic merge gate
+\srcbranch{MorningLightMountain713/\allowbreak{}flux}{feat/fluxos-v9}{.github/workflows/integration-harness.yml:1-38}.
+
+This is an ordinary open-source pattern, not a criticism, but it is a fact about where development
+authority currently sits for the largest in-flight change to how applications are described on
+Flux: on a contributor's fork rather than in the organisation's own repository. \S23 returns to
+this as a governance observation.
+
+\subsection{The routing layer, precisely}
+
+\srcroadmap{flux-roadmap-public.md:52-53} The public roadmap states that \specv{9}'s routing layer
+has been ``rewritten.'' Read precisely against the fork, that claim is partially, not wholly,
+supported. \inprogress\ Two mechanisms declared through the \texttt{loadBalancing} block are
+genuinely wired: connection draining, served over a UNIX-socket
+JSON-RPC endpoint that \texttt{flux-shutdownd} calls with \texttt{drain\_app}\slash\texttt{stop\_app} to
+mark an application draining ahead of node shutdown
+\srcbranch{MorningLightMountain713/\allowbreak{}flux}{feat/fluxos-v9}{ZelBack/src/services/appMessaging/drainServer.js:12-24,85-136,176-201};
+and per-application-CA backend TLS, under which a node generates a local Ed25519 keypair, obtains a
+30-day host certificate signed by the application's own certificate authority through \fluxbench,
+and renews it automatically before expiry
+\srcbranch{MorningLightMountain713/\allowbreak{}flux}{feat/fluxos-v9}{ZelBack/src/services/appLifecycle/backendTlsService.js:1-18,73-116}.
+What is \emph{not} true is that \FluxOS now owns HAProxy configuration generation: grepping every
+service file for the routing-layer vocabulary (\texttt{loadBalancing}, \texttt{healthCheck},
+\texttt{stickySession}, \texttt{connection\allowbreak{}Drain}, \texttt{customDomain}) turns up three files, none
+of them a route-table or config-generation engine
+\srcbranch{MorningLightMountain713/\allowbreak{}flux}{feat/fluxos-v9}{(grep -rln "loadBalancing|healthCheck|stickySession|connectionDrain|customDomain" ZelBack/src/services)}.
+That responsibility stays where it already sits, in \FDM (\S12). And the actual signal a routing
+layer would consume when an application starts draining is not a new push protocol; marking a
+component draining triggers an immediate presence rebroadcast, so the mechanism by which \FDM
+would pull a backend out of rotation is the same gossip/presence-announcement path \FluxOS already
+used before \specv{9}
+\srcbranch{MorningLightMountain713/\allowbreak{}flux}{feat/fluxos-v9}{ZelBack/src/services/appMessaging/drainServer.js:79-91}.
+So: the spec-side declaration and two real backend mechanisms are new and wired; the config-generation
+engine the roadmap's phrase might suggest is not, and never was scoped to live here.
+
+\subsection{Two artifacts, not one}
+\label{sec:two-artifacts}
+
+``\specv{9}'' currently names two different objects, and this section describes them separately
+rather than presenting one as a stand-in for the other.
+
+The first is \texttt{Run\allowbreak{}On\allowbreak{}Flux/\allowbreak{}flux-\allowbreak{}spec}, a standalone repository holding the RFC-0 draft schema:
+two commits, both dated 2026-09-01, self-described as ``Status: RFC-0 — draft for comment
+(2026-09-01). Not live on the network'' \srcdoc{flux-spec/README.md:3}, unpublished
+(\texttt{"private":\allowbreak{} true}, no \texttt{bin}\slash\texttt{main}\slash\texttt{exports}), with no CI and no tags.
+The second is the vendored copy the contributor fork actually consumes at runtime, which is pulled
+not from this repository but from a different, private, monorepo-structured \texttt{flux-spec}
+pinned at a specific commit hash
+\srcbranch{MorningLightMountain713/\allowbreak{}flux}{feat/fluxos-v9}{test-infra/flux-spec/pin:1}; the two are
+structurally different (the private monorepo has \texttt{packages/spec}, \texttt{spec-backend},
+\texttt{spec-policy} subpackages that do not exist in the public draft) and, on the evidence
+gathered, disagree on at least one field name — the draft's \texttt{duration}
+\srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{15,62} versus the fork's internal \texttt{spec.ttl}
+\srcbranch{MorningLightMountain713/\allowbreak{}flux}{feat/fluxos-v9}{ZelBack/src/services/pricing/v9PricingRegime.js:95,108,122,128,183,228,279,308}
+— which this paper flags rather than resolves, since the vendored validator classes themselves
+are not available to inspect.
+
+\inprogress\ The public draft carries two specific defects worth naming, because a specification
+whose entire purpose is that every node agrees on it should not have them. First, it has \textbf{no signature
+field at all}: nothing in \texttt{schema/v9.json} names a field a submitter signs, and the only
+``signature''/``signed'' references anywhere in the repository describe an unrelated \fluxbench
+attestation workstream \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{1-350}. A ``recommended'' canonicalize-then-
+double-SHA256 fingerprint recipe exists for comparison purposes, but the draft offers it only as a
+fingerprint and nowhere defines what gets signed for submission
+authenticity \srcdoc{flux-spec/validation/canonicalization.md:53-63}. Second, the draft's own
+canonicalization rules — array-sort ordering for fields such as \texttt{customDomains} and
+\texttt{certificate\allowbreak{}Authorities}, and explicit materialization of defaulted fields — are stated as
+\texttt{MUST} requirements in prose, with \textbf{no schema or code enforcement} anywhere in the
+repository \srcdoc{flux-spec/validation/canonicalization.md:31-45}. JSON Schema has no array-sort
+keyword, so nothing here can express these rules as validation; a document can be schema-valid and
+canonically invalid at the same time, and nothing in the draft detects that. For a document meant to
+be compared byte-for-byte across roughly 6{,}500 independent validators, that is the defect to name.
+
+\subsection{The encryption-envelope regression}
+\label{sec:envelope-regression}
+
+\planned\ The public roadmap states that \specv{9} will deliver ``a cleaner encryption envelope for
+private specs'' \srcroadmap{flux-roadmap-public.md:61}. \inprogress\ The RFC-0 draft does the
+opposite of deliver it: it removes \specv{8}'s \texttt{enterprise} field outright, names the
+encryption envelope as its replacement \textbf{without specifying it}, and
+lists that envelope for private deployments as an explicitly open question deferred to a
+future schema revision \srcdoc{flux-spec/README.md:58-67,95-96}. Concretely, \specv{9} as drafted
+has no way to express a private or enterprise deployment at all. This is not a marginal population:
+223 of the 1{,}195 deployed applications measured in \S\ref{sec:migration-baseline} (18.7\%) use
+\texttt{enterprise} today \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}.
+If the published draft is what ships, the roadmap's promise is currently unmet in it, and this gap
+has to be closed before \texttt{enterprise} can be removed on any node (\S\ref{sec:migration-mechanism}).
+
+\subsection{The migration mechanism: forced, not opt-in}
+\label{sec:migration-mechanism}
+
+\inprogress\ No mechanism for migrating deployed applications from \specv{8} (or older) to \specv{9}
+exists in code today: the fork's own \texttt{migrations/} service registers exactly two node-runtime-state
+migrations (node identity, container labels), neither of which touches application specifications
+\srcbranch{MorningLightMountain713/\allowbreak{}flux}{feat/fluxos-v9}{ZelBack/src/services/migrations/index.js:39-51}.
+
+\planned\ What is decided supersedes an earlier draft of this subsection, which proposed a
+non-destructive version transition of this paper's own design: a version floor $v_{\min}$ with a
+deprecation schedule, below which existing deployments would be refused renewal rather than
+evicted. The team's design is a different one: migration to \specv{9} will be
+\textbf{forced, not opt-in}. Every application will be migrated by an application-update message
+carrying a special signature that compels the \specv{9} version; updates and upgrades on older
+specification versions will then be disabled, and once the entire fleet is on \specv{9} the legacy
+code paths will be removed \srcintent{08-answers-round-2.md, v9 migration bullet}. This paper states
+the change rather than silently substituting it: the forced design is operationally cleaner than the
+deprecation window it replaces, because it would remove the 322-application, 26.9\% legacy-version
+tail (\S\ref{sec:migration-baseline}) in a single step, at the moment the forcing message is
+broadcast, rather than letting it trail off across a schedule at each owner's own pace.
+
+The invariant this section stated for the superseded design was that no deployed application is
+evicted by a version change — it lapses under the rules it was created under. Forced migration is
+intended to preserve non-eviction by a different route, and the difference is worth stating
+precisely, as a design target rather than a shipped guarantee:
+
+\begin{property}
+No application is evicted by the migration to \specv{9}: instead of lapsing under the rules it was
+created under, every application is rewritten forward onto the new version.
+\end{property}
+
+\planned\ What this would trade against the superseded invariant is consent: nothing in the design
+gives an owner a way to remain on their signed specification, or to decline the rewrite
+\srcintent{08-answers-round-2.md, v9 migration bullet}. Non-eviction would be preserved; opt-out
+would not exist.
+
+A key able to rewrite any tenant's application specification without that tenant's own signature
+would be a privileged capability, and \srcinferred\ this paper places it, on that basis, in the same
+class it already inventories elsewhere: the unsigned network policy (\S12), the OS release channel
+(\S14), and the 2-of-4 emergency block keys (\S4). Naming it is the point; a capability of this
+shape left unnamed is a finding, not a footnote. \planned\ Per the team's decision, three properties
+are intended to bound it: it would be \textbf{single-use}, scoped to the migration rather than a
+standing signing service; \textbf{migration-scoped}, existing only to perform this one version
+transition and nothing else; and \textbf{hardcoded}, expected to be baked-in values rather than a
+live signer that could be invoked again later
+\srcintent{08-answers-round-2.md, round 3 answers}. Those three properties are what would make the
+capability acceptable rather than alarming.
+
+\planned\ The scope and the enforcement class are now decided rather than open. The scope is the
+\textbf{version field and the required-field additions only} --- never the container image and never
+the application's functionality --- and the stated purpose is strictly to bring the network into
+alignment on one schema version, nothing more
+\srcintent{08-answers-round-2.md, round 5 answers}. Enforcement is by \textbf{\FluxOS}, not by
+\fluxd: every node validates the forced-update message against that scope, which is the same
+enforcement class as specification validation generally --- the \texttt{verify\allowbreak{}App\allowbreak{}Specifications}
+check described above --- checked by every node, but as a \FluxOS{} policy rule rather than a
+consensus rule. That distinction bounds the capability's blast radius precisely: a future \FluxOS{}
+release could in principle change what the forcing message is permitted to touch, in exactly the
+sense that \S23's deployed policy channel is \FluxOS-enforced and not consensus state, and the two
+capabilities belong to the same class for that reason. It also means the scope is a stated design
+constraint rather than a proof: nothing in \fluxd{} itself rejects a forced-update message that
+exceeded it, so the guarantee rests on the migration tooling matching its own specification rather
+than on a rule \fluxd{} would enforce independently. Explicit retirement of the key once the
+migration completes remains a step the team has not stated as a commitment, and leaving hardcoded
+values live in a binary indefinitely after that point would be a departure from the single-use
+property above.
+
+\planned\ Under this design the four field renames (\texttt{compose}$\to$\texttt{components},
+\texttt{repotag}$\to$\texttt{image}, \texttt{ram}$\to$\texttt{memory},
+\texttt{hdd}$\to$\texttt{rootFsGb}) would need no separate compatibility shim: the same
+forced-update message that compels the version bump would rewrite the renamed fields as part of the
+same rewrite, so the translation question this section previously posed as open is resolved by the
+mechanism itself rather than by added code.
+
+\subsection{The v9 schema, for reference}
+
+\inprogress\ Listing~\ref{lst:v9-schema} reconstructs the root object of the draft schema from the
+field table gathered during evidence collection; it is not a verbatim excerpt of the source file;
+the citations that follow it, not the listing itself, are the evidence that these fields exist.
+
+\begin{lstlisting}[caption={Root object of the \specv{9} RFC-0 draft schema (reconstructed). Look at \texttt{additional\allowbreak{}Properties:\allowbreak{}false} together with the five new required fields: this combination is what makes an unrecognised key --- including v8's removed \texttt{enterprise} --- a hard validation failure rather than a silent drop, and what makes \texttt{paymentMemo}\slash\texttt{referralCode}\slash\texttt{machineType} required inputs to a document that \S\ref{sec:finding} shows no \FluxOS code yet reads.}, label={lst:v9-schema}]
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version","name","description","owner",
+               "components","loadBalancing","duration",
+               "paymentMemo","referralCode","machineType"],
+  "properties": {
+    "version":      { "const": 9 },
+    "duration":     { "type": "integer", "minimum": 1 },
+    "paymentMemo":  { "type": "string", "minLength": 1, "maxLength": 512 },
+    "referralCode": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "machineType":  { "enum": ["standard", "gpu", "vps"] }
+  }
+}
+\end{lstlisting}
+
+Root object, \texttt{additional\allowbreak{}Properties:\allowbreak{}false}, and the ten required top-level fields:
+\srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{7-19}. \texttt{version}: \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{21-24}.
+\texttt{duration}: \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{62-66}. \texttt{paymentMemo}:
+\srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{67-72}. \texttt{referralCode}: \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{73-78}.
+\texttt{machineType}: \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{79-82}.
+
+\subsection{Open parameters}
+
+\begin{remark}[\specv{9} timing: the quarter settled in round 11, the height in round 17]
+\label{rem:v9-timing}
+\specv{9} is in development and is to be \textbf{activated in Q4~2026, with the migration of
+existing applications in the same quarter} \srcintent{08-answers-round-2.md, round 11} (\planned).
+That places $\hstar$ before $\hpa = \num{3466630}$ (2027-03-12), so the specification change
+lands ahead of \PNR{} activation and the parallel-asset cut rather than with them --- which is the
+right order, because \S\ref{sec:feasibility} places \PNR{}, credits, referrals, the VPS tier and the
+provisioning API all downstream of the \specv{9} economic fields.
+
+Round 11 fixed no height, and the constraint on it is unchanged: $\hstar$ must \emph{follow} the
+implementation of the \texttt{paymentMemo}\slash\texttt{referralCode}\slash\texttt{machineType} trio
+(\S\ref{sec:finding}), never precede it, or the height would activate a schema whose economic fields
+are declared but inert. At the \SI{30}{\second} target a Q4~2026 activation corresponds to roughly
+$\num{3000000}$--$\num{3260000}$, and the paper states that range as an implication of the stated
+quarter rather than as a number the team has given.
+\settlednote{$\hstar = \num{3050000}$ \srcintent{08-answers-round-2.md, round 17},
+approximately 2026-10-20 at the \SI{30}{\second} target --- inside the settled Q4~2026 window, about
+\num{45} days beyond the 2026-09-05 tip of \num{2921193}, and about \num{145} days before
+$\hpa = \num{3466630}$. That ordering is what \S\ref{sec:feasibility} requires: the \specv{9}
+economic fields land, and are given roughly five months to prove themselves, before \PNR{}, credits,
+referrals, the VPS tier and the provisioning API activate on top of them. The constraint of
+\Cref{rem:v9-timing} still binds and is now a scheduling obligation rather than an open question:
+the \texttt{paymentMemo}\slash\texttt{referralCode}\slash\texttt{machineType} implementation must be
+complete before this height, or the height activates a schema whose economic fields are inert.}
+\end{remark}
+
+\settlednote{\texttt{quorum\allowbreak{}Grant\allowbreak{}Activation\allowbreak{}Height} activates \emph{after} \specv{9}, once
+\specv{9} is stable, at a height not fixed now
+\srcintent{08-answers-round-2.md, round 17}. This is a deliberate decoupling rather than an
+unfinished decision: the mastership/active-standby quorum plane and the \specv{9} schema change have
+unrelated failure modes, so binding them to one height would mean a fault in either forces a rollback
+of both. The cost is a second upgrade event and a second announcement. The height is left unset
+because the trigger is an observed condition --- \specv{9} running stably --- and a height chosen
+today could only be a guess at when that condition will hold. Until it activates, the field remains
+what \S\ref{sec:one-platform} measures it as: read by production code, set only in integration-test
+fixtures, and inert on mainnet.}
+
+%% Drain this section's float queue before the next begins.
+\FloatBarrier

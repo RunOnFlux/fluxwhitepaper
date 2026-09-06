@@ -1,0 +1,4 @@
+# remaining chains, retrieved 2026-09-04T10:30:41Z
+polygon rpc: https://polygon-bor-rpc.publicnode.com
+POLYGON totalSupply=440,000,000.000000  issuer-held=439,352,071.265840  OUTSTANDING=647,928.734160
+ERGO totalSupply=440,000,000  issuer-held=439,513,253.381175  OUTSTANDING=486,746.618825

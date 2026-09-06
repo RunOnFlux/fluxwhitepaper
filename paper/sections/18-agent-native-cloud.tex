@@ -1,0 +1,207 @@
+\section{The agent-native cloud}\label{sec:agent-native}\label{sec:agent-native-cloud}
+
+The roadmap states its destination without hedging, and it is worth quoting rather than
+paraphrasing:
+\begin{quote}
+``The destination this roadmap builds toward is specific: a cloud that serves software agents
+as first-class customers. An AI agent holding a wallet should be able to deploy compute on
+Flux, pay per second, verify what it bought, and eventually do all of it privately --- no
+account, no card, no human in the loop.'' \srcroadmap{flux-roadmap-public.md:7}
+\end{quote}
+That sentence names four capabilities: provisioning without a human, payment without an
+account, verification of what was purchased, and eventually privacy over all of it. It is a
+\vision statement --- the roadmap's own framing, not a description of the deployed system --- and
+this section's job is to take it apart claim by claim rather than repeat it. Two of the four
+capabilities already exist as running code. The other two are specified, not shipped, and this
+paper's answer to each lives in \S14 and \S17 respectively. The distance between the sentence
+above and the deployed system is smaller than a skeptical reader would guess, and the missing
+piece is not an interface problem.
+
+\paragraph{What an agent can already do.} A caller that never touches a browser can, today,
+provision Flux capacity, hold a scoped and revocable credential while doing it, and pay for a
+service with no account at all. Three shipped surfaces establish this.
+
+First, an MCP (Model Context Protocol) server ships as part of the Deploy-from-Git tooling and
+exposes \texttt{deploy\_app}, \texttt{update\_app} and \texttt{renew\_app} as tool calls an AI
+agent can invoke directly \shipped
+\srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}mcp/\allowbreak{}router.js}{13-44}. These are not read-only
+introspection calls: \texttt{deploy\_app}'s own description is ``Revalidate, Firebase-sign,
+register, and test-install an Orbit app''
+\srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}mcp/\allowbreak{}createServer.js}{174-177}, and given a valid
+Firebase bearer token an agent can drive a specification from draft to a signed, submitted,
+on-chain registration transaction with no client-side wallet interaction and no human signing
+step \srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}mcp/\allowbreak{}createServer.js}{66-266}.
+
+Second, and separately, \FluxEdge exposes a fully documented OpenAPI 3.1.1 interface branded
+the ``FluxEdge API'' \shipped \srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}v1/\allowbreak{}openapi.yaml}{1-4}, plus a
+dedicated cross-platform CLI, \texttt{fluxedge-cli}, whose machine-readable \texttt{-o json}
+output mode is explicitly recommended for scripting
+\srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}v1/\allowbreak{}openapi.yaml}{81-83,124-140}. Authority on this surface is a
+bearer token, and the token's privileges are enumerated rather than all-or-nothing: a key can be
+scoped to any subset of \texttt{start\_rental}, \texttt{stop\_rental}, \texttt{start\_deployment},
+\texttt{stop\_deployment} and \texttt{get\_balance}
+\srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}v1/\allowbreak{}openapi.yaml}{2571-2581}, enforced in the Go backend by a
+function that maps the five rental and deployment routes to the privilege each requires and passes
+every other route --- premium rental, deployment update and redeploy, failover --- for any valid key
+\srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}ratelimit.go}{378-394}
+\srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}api.go}{135-170}. The surface additionally rate-limits every
+key and every source IP to two requests per second \srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}ratelimit.go}{41-42,79-88}
+and automatically revokes a key or IP that accumulates five rate-limit violations inside a
+five-minute window --- the key is disabled, its owner is emailed, and it is evicted from cache,
+with no human review in the loop \srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}ratelimit.go}{143-153,158-179,203-222}.
+This is a real, working instance of bounded and revocable \emph{action} authority; \S17 records
+it precisely for that reason.
+
+Third, \CumulusVPN pays for entitlement with a payment alone. A client generates a WireGuard
+keypair on its own device and attaches an \texttt{OP\_RETURN} memo,
+\texttt{CVPN1:\allowbreak base58(sha256(pubkey)[0{:}20])}, to an ordinary \Flux payment
+\shipped \srccode{cumulusvpn/\allowbreak{}gateway/\allowbreak{}internal/\allowbreak{}entitle/\allowbreak{}entitle.go}{99-108}. Every gateway
+independently scans the chain and derives entitlement from confirmed, correctly-memoed payments
+\srccode{cumulusvpn/\allowbreak{}gateway/\allowbreak{}internal/\allowbreak{}entitle/\allowbreak{}entitle.go}{218-287}; there is no user database, no
+login, and no server-issued token --- the public key the client already holds \emph{is} the
+credential \srccode{cumulusvpn/\allowbreak{}gateway/\allowbreak{}internal/\allowbreak{}entitle/\allowbreak{}entitle.go}{1-19}. An autonomous payer
+needs nothing this system does not already give it.
+
+\paragraph{The four capabilities, scored against the evidence.} Read as a checklist against the
+roadmap's own sentence, the honest score is two shipped and two not, and the two that are missing
+are not symmetric with the two that ship.
+
+\begin{itemize}
+  \item \emph{Provision without a human} --- yes. The MCP tool surface and the \FluxEdge API
+    both accept and act on a request with no human step in between, as above \shipped.
+  \item \emph{Pay without an account} --- yes. \CumulusVPN's memo-derived entitlement ships, and
+    direct per-deployment application payment is the same shape: a signed message and a
+    confirmed payment, no account, no stored credential (\S16) \shipped.
+  \item \emph{Verify what was bought} --- no. No tenant-facing attestation path exists today; a
+    tenant cannot check that the host running its workload booted the image it was promised to
+    boot. \S14 states the mechanism and the reason this is missing; it is not restated here
+    \planned.
+  \item \emph{Bounded spending authority} --- no. Nothing bounds the value a compromised bearer
+    token can move. The action-scoping described above is real, but it scopes \emph{what} a
+    token may do, never \emph{how much} it may spend; \S17 specifies the gap and the deployable
+    construction that closes it \planned.
+\end{itemize}
+
+Two of four ship. The two that do not are exactly the two that decide whether an agent is merely
+able to buy compute or can additionally be trusted with a budget. An agent that can provision and
+pay but cannot verify or bound its own authority is a capable customer and an unsupervised
+liability at the same time, and the paper does not paper over which one it currently is.
+
+\paragraph{The interface, as a listing.} The clearest way to show what the machine-facing
+interface actually looks like is to show one call, not to describe it. \FluxEdge's
+\texttt{POST~/\allowbreak{}rental/\allowbreak{}start} takes a criteria object --- what kind of machine, not which machine
+--- and returns a bound rental:
+
+%% float=htbp keeps the request and its response on one page; as an inline listing
+%% it broke across the page boundary mid-JSON.
+\begin{lstlisting}[float=htbp, floatplacement=htbp,
+  caption={\FluxEdge \texttt{POST /\allowbreak{}rental/\allowbreak{}start}: a representative agent-facing
+request and response \srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}v1/\allowbreak{}openapi.yaml}{1330-1338,1358-1382}. The
+request names criteria, not a specific machine, and \texttt{max\_price\_per\_hour} bounds this
+one call. Nothing in the request, the response, or the bearer token that authorized the call
+bounds what the same credential may spend across repeated calls --- the gap \S17
+specifies.},label={lst:fluxedge-rental}]
+// POST /rental/start
+{"min_memory":16,"min_storage":500,"gpu":"RTX3080","nb_gpu":1,
+ "region":"NorthAmerica","max_price_per_hour":0.5,
+ "nb_computers":3,"premium":"none"}
+
+// 200 OK
+{"rentals":[{"rental_id":8782678,"price_per_hour":0.5,
+  "status":"active",
+  "computer":{"hash":"e5b37bd2716472","memory":16,
+    "storage":500,"gpus":["RTX3080"],"nb_gpu":1,
+    "region":"NorthAmerica","cluster_name":"us-east-1",
+    "price_per_hour":0.5}}]}
+\end{lstlisting}
+
+\paragraph{What is missing for full autonomy.} Four gaps stand between the deployed interface and
+an agent that never needs a human, and each is small enough to name precisely rather than wave at.
+
+\begin{itemize}
+  \item \emph{No self-service key issuance.} \FluxEdge's own OpenAPI surface documents
+    consumption of a bearer token but not its issuance; the API's own quick-start documentation
+    points a caller at a web dashboard to obtain one, and the dashboard path is the only one that ships
+    \shipped \srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}v1/\allowbreak{}openapi.yaml}{61}. A human must mint the credential an
+    agent then uses; no programmatic issuance endpoint exists anywhere on the documented surface
+    \srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}v1/\allowbreak{}openapi.yaml}{463-2193}.
+  \item \emph{No spend bound.} As above; \S17 specifies the construction.
+  \item \emph{No verification path.} As above; \S14 specifies the construction.
+  \item \emph{Silent underpayment on the direct-payment path.} A registration or update whose
+    payment is short of the computed price is dropped with a log line and no rejection signal
+    returned to the payer \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMessaging/\allowbreak{}messageVerifier.js}{777,835}
+    \srcintent{plan/mech-credits-renewal.md \S1.3}. For a human this is a
+    support ticket. For an unattended agent it is the one failure mode with no recovery path at
+    all: the funds are already spent, the deployment does not exist, and nothing tells the caller
+    either fact.
+\end{itemize}
+
+None of these four is a redesign. Self-service key issuance is an API endpoint behind the same
+authorization logic that already exists; a spend bound has a deployable baseline that needs no
+new consensus rule (\S17); a rejection signal is a message the network is already computing the
+inputs for. The honest and more interesting claim is not that agent-native provisioning requires
+new invention --- it is that four specific, narrow, already-scoped omissions are standing between
+the interface as it exists today and the interface the roadmap's sentence describes.
+
+\paragraph{Per-second GPU without an account.} The roadmap states the next step directly:
+\begin{quote}
+``Per-second GPU without an account. With FluxEdge folded into the platform, GPU capacity is
+bought the same way: pay, run, stop. We are not fighting the GPU marketplaces on headline price;
+we are the place an agent can rent a GPU without a human signing anything.''
+\srcroadmap{flux-roadmap-public.md:79}
+\end{quote}
+This is \planned, gated on the FluxCloud/\FluxEdge merge \srcroadmap{flux-roadmap-public.md:79}.
+\S15 has already established what matters here: GPU passthrough today is whole-device, granted
+via Kubernetes' \texttt{nvidia.com/gpu} resource request and \texttt{NVIDIA\_VISIBLE\_DEVICES}
+bus-index isolation, with no MIG, vGPU or time-slicing anywhere in the stack
+\srccode{pouwbackend/\allowbreak{}rancher/\allowbreak{}deployment.go}{914-982} \srcdoc{plan/conflicts.md, C23}. The
+consequence for this section, stated once and not re-derived: a per-second \emph{price} does not
+require a per-second \emph{allocation} primitive, and nothing here blocks quoting or billing a
+whole GPU by the second. What per-second billing cannot yet mean, on the allocation primitive
+\S15 describes, is fractional-GPU multi-tenancy --- a device is sold whole or not at all
+\srcinferred.
+
+\paragraph{The composite picture.} An agent today can obtain \Flux capacity and pay for it with
+no account and no human step; \FluxEdge's scoped bearer tokens and \CumulusVPN's memo-derived
+entitlement are both running code, not proposals. What that same agent cannot do is confirm that
+the host it paid actually booted the image it was promised, and it cannot hold a credential whose
+worst-case loss is anything less than the full balance behind it. Both gaps have specifications
+elsewhere in this paper --- \S14 for the first, \S17 for the second --- and \S\ref{sec:feasibility}
+classes neither as Extension: attested execution is Research$\to$Engineering (row 4), and bounded
+spending is Research (row 13) because the L1 cannot enforce $\budget$
+(\Cref{prop:budget-balance}, \Cref{tab:two-authorities}). What is deployable today is the funded
+allowance of \Cref{con:allowance} --- a funded key with a swept revocation address, which the
+mechanism specification classes as Extension \srcintent{plan/mech-agent-identity.md \S6} --- whose
+bound is the balance behind the key, not a budget the chain enforces.
+
+\paragraph{Why this matters architecturally rather than commercially.} The properties an
+autonomous customer needs --- no account, no card, no human in the loop, verifiable delivery, a
+bounded worst-case loss --- are exactly the properties a careful, distrustful human customer
+wants as well. A human who reads a memo-derived entitlement scheme correctly does not want a
+password database holding their identity either; a human who deploys a container wants to know
+what booted it just as much as an agent does; a human handing a long-lived API key to a CI
+pipeline wants that key's blast radius bounded for the same reason a delegated agent needs one.
+Building the interface this section describes for agents is not a separate product from building
+it for people who do not want to trust the platform by default --- it is the same interface,
+and this paper makes no claim about how many agents will use it.
+
+\subsection{What such an agent would run}
+\label{sec:agent-native-workload}
+
+The interface question of this section --- how an agent obtains capacity --- is separable from what it
+then does with it, but the two meet at one point worth stating. The workloads an agent runs on behalf of
+an ordinary person are, in the main, small task-specialised models rather than frontier ones, and
+\S\ref{sec:ac-workload-fit} argues that this class of work has no interconnect requirement and therefore
+no structural reason to centralise. That is the reason the agent-native argument and the accelerated
+compute argument are the same argument seen from two ends: the network that can be bought from without
+an account is also the network whose dispersion stops being a handicap for the work being bought.
+
+Two of this section's four capabilities are what make that composition real rather than rhetorical.
+Payment without an account means a caller with no relationship to maintain can buy inference for one
+task and stop. Verification of what was bought --- absent today (\S\ref{sec:attested-execution}) ---
+matters disproportionately for a small specialised model, because a caller usually cannot tell from an
+answer whether the model that produced it was the one they paid for. Neither property is peculiar to
+autonomous callers; both are simply more visible when there is no human to absorb the ambiguity.
+
+%% Drain this section's float queue before the next begins.
+\FloatBarrier

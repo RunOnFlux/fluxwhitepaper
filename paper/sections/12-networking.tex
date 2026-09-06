@@ -1,0 +1,504 @@
+\section{Networking and addressing: \FDM, \PDNS, mesh resolution, and private deployments}
+\label{sec:networking}
+
+An operator can point a browser or an API client at an application running somewhere on the
+several-thousand-node \Flux fleet and get an answer. That works today, and the path by which it
+works is worth naming precisely, because every hop on it is presently operated by the \Flux
+Foundation. This is not a claim about node operators: the compute itself is dispersed across
+independent Cumulus, Nimbus and Stratus operators exactly as advertised. It is a claim about
+\emph{reachability} — DNS resolution, TLS termination, and the reverse proxy that decides which
+container answers a given hostname all run on Foundation-controlled infrastructure, discovered
+through a single Foundation-operated API with no on-chain or peer-to-peer fallback. Naming this
+path precisely, hop by hop, is what makes the decentralization roadmap in \S\ref{sec:governance}
+and elsewhere legible: a reader cannot evaluate a plan to decentralize a system without first
+knowing exactly what is centralized in it today.
+
+\subsection{The reachability path, end to end}
+\label{sec:networking-path}
+
+Application placement itself is decided elsewhere, by \FluxOS (\S\ref{sec:fluxos}); nothing in
+this section governs \emph{where} an application runs. What this section governs is how a client
+finds the IP:port that \FluxOS placed it on. \shipped
+
+\begin{enumerate}
+  \item \textbf{Discovery.} \FDM (\texttt{flux-\allowbreak{}domain-\allowbreak{}manager}) does not talk to \fluxd or to any
+  peer-to-peer layer to learn what applications exist or where they run. It polls a single
+  Flux-Foundation-operated REST API, \texttt{https:/\allowbreak{}/\allowbreak{}api.\allowbreak{}runonflux.\allowbreak{}io}, for
+  \texttt{apps/\allowbreak{}globalappsspecifications} and \texttt{apps/locations}
+  \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}flux/\allowbreak{}dataFetcher.js}{47-71}. This is FDM's only
+  source for "what apps exist and where"; no fallback source exists in the codebase
+  \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}flux/\allowbreak{}dataFetcher.js}{47-91}.
+  \item \textbf{Polling cadence.} Three independent, self-rescheduling timers run per FDM process:
+  \texttt{globalAppSpecs} at a default 30{,}000\,ms (conditional on HTTP \texttt{ETag}), \texttt{
+  apps\allowbreak{}Locations} hardcoded to 10{,}000\,ms regardless of change, and \texttt{permMessages} at a
+  default 120{,}000\,ms \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}flux/\allowbreak{}dataFetcher.js}{47-91,409-417,689-721}.
+  \item \textbf{Naming.} For a native application $\app$ with port $P$, FDM computes
+  \texttt{$\app$\_$P$.app2.runonflux.io} (per port) and \texttt{$\app$.app2.runonflux.io} (main
+  alias) by string concatenation — \texttt{app.} rather than \texttt{app2.} on the production
+  shard \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domain/\allowbreak{}index.js}{9-32}. An operator may also
+  set a custom domain in the application spec, which FDM verifies against its own IP via
+  \texttt{dns.resolve4} before requesting a certificate for it
+  \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domain/\allowbreak{}cert.js}{128-157}.
+  \item \textbf{DNS.} A hostname is served either by Cloudflare, used strictly as authoritative
+  "DNS-only" (grey-cloud) DNS — FDM actively deletes any record it finds with \texttt{proxied =\allowbreak{}=\allowbreak{}=\allowbreak{}
+  true} — or by the self-hosted \PDNS zone service, selected per FDM host by
+  \texttt{config.\allowbreak{}cloudflare.\allowbreak{}enabled}\slash\texttt{config.\allowbreak{}p\allowbreak{}DNS.\allowbreak{}enabled}
+  \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domain/\allowbreak{}cert.js}{170-181}
+  \srccode{flux-domain-manager/\allowbreak{}config/\allowbreak{}default.js}{32-47}. The evidence surveyed establishes how
+  each backend behaves but not, from code alone, which one is authoritative for
+  \texttt{runonflux.io} at any given moment: the checked-in default config is itself a
+  certificate-only variant with \texttt{cloudflare.enabled:\ true}, and per-host Ansible
+  templating can override this per fleet member \srccode{flux-domain-manager/\allowbreak{}config/\allowbreak{}default.js}{38,46}.
+  \item \textbf{TLS termination and routing.} The FDM host's own \texttt{HAProxy} instance
+  terminates TLS, binding \texttt{*:443} against every \texttt{.pem} file under
+  \texttt{/\allowbreak{}etc/\allowbreak{}ssl/\allowbreak{}fluxapps/\allowbreak{}} \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}haproxyTemplate.js}{81-134},
+  then routes on the \texttt{Host} header via an ACL to the matching backend, forwarding to one of
+  the application's container IPs at its declared port
+  \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}haproxyTemplate.js}{260-319}. Per-server health
+  checks (\S\ref{sec:networking-runloop}) decide which of an application's IPs are actually in that
+  backend at any moment.
+  \item \textbf{Game-application shortcut.} For roughly two dozen "G-mode" game-server application
+  types (Minecraft, Rust, Valheim, and similar), a separate, single-instance service,
+  \texttt{flux-\allowbreak{}apps-\allowbreak{}dns-\allowbreak{}manager}, reads the master IP FDM already elected into its own
+  \texttt{/appips} output and publishes it directly as an \texttt{A} record via the DNS Gateway
+  (\S\ref{sec:networking-gateway}) — client traffic, often UDP, goes node-to-node and never passes
+  through HAProxy \srccode{flux-apps-dns-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appsDnsManager.js}{202-255}
+  \srcdoc{flux-apps-dns-manager/README.md:3-15}.
+\end{enumerate}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[
+    font=\footnotesize,
+    node distance=6mm,
+    box/.style={draw, rounded corners=2pt, minimum height=9mm, align=center,
+                inner xsep=3pt, text width=23mm},
+    flux/.style={box, fill=black!4},
+    found/.style={box, fill=black!12, very thick},
+    lbl/.style={font=\scriptsize, align=center, inner sep=1pt},
+    arr/.style={-{Latex[length=2mm]}, thick},
+  ]
+    \node[box]   (client) {client};
+    \node[found, right=10mm of client] (dns) {DNS\\[-1pt]{\scriptsize Cloudflare \emph{or} \PDNS}};
+    \node[found, right=10mm of dns]    (ha)  {HAProxy\\[-1pt]{\scriptsize on the elected \FDM host}};
+    \node[flux,  right=10mm of ha]     (app) {application\\[-1pt]{\scriptsize container IP:port}};
+
+    \draw[arr] (client) -- node[lbl, above] {name} (dns);
+    \draw[arr] (dns) -- node[lbl, above] {\texttt{A} record} (ha);
+    \draw[arr] (ha)  -- node[lbl, above] {proxied} (app);
+
+    % HAProxy-bypassing shortcut for game applications
+    \draw[arr, dashed] (dns.south) .. controls +(0,-11mm) and +(0,-11mm) ..
+      node[lbl, below, pos=0.5] {\texttt{flux-\allowbreak{}apps-\allowbreak{}dns-\allowbreak{}manager}: elected master IP as a direct
+        \texttt{A} record\\[-1pt](game applications; bypasses HAProxy)} (app.south);
+
+    \node[lbl, above=1mm of ha] {TLS termination, Host-header ACL,\\[-1pt]per-server health check};
+    \node[lbl, below=13mm of dns, anchor=north] {};
+    \node[draw, dashed, rounded corners=2pt, inner sep=3mm, fit=(dns)(ha),
+          label={[lbl, yshift=1mm]above:{Foundation-operated}}] {};
+  \end{tikzpicture}
+  \caption{The reachability path from client to a running application, and the game-application
+  shortcut that bypasses \FDM's HAProxy entirely. Both intermediate hops are Foundation-operated
+  \shipped; \S\ref{sec:networking-inventory} inventories what each depends on and what happens
+  when it is unavailable.}
+  \label{fig:reachability-path}
+\end{figure}
+
+The \texttt{*.\allowbreak{}app.\allowbreak{}runonflux.\allowbreak{}io}\slash\texttt{*.\allowbreak{}app2.\allowbreak{}runonflux.\allowbreak{}io} wildcard certificate that step 5
+depends on is treated by \FDM's own code as always present — the presence check short-circuits to
+\texttt{true} for any domain ending in these suffixes, so \FDM never calls \texttt{certbot} for
+them \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domain/\allowbreak{}cert.js}{18-22}.
+\decided{the wildcard certificate is managed by InFlux Technologies USA LLC and renewed
+periodically against the \texttt{runonflux.io} domain \srcintent{08-answers-round-2.md, rounds
+24--25}. This is less of a concentration than it first reads. Behind any certificate there must be
+some company managing the domain --- that is a property of the web PKI rather than of \Flux{} --- and
+what matters is whether the arrangement can be replicated. It can: \texttt{flux-domain-manager} is
+public under AGPL-3.0, the application specification already admits tenant-set custom domains
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appsService.js}{passim}, and any operator may run
+their own \FDM{}, their own \PDNS{} and serve applications from a domain they control.
+
+Discovery is replicable too, and this paper's earlier reading of
+\texttt{api.\allowbreak{}runonflux.\allowbreak{}io} conflated two different claims. The endpoint is not a
+Foundation-only service: \texttt{/apps/\allowbreak{}globalappsspecifications} is an ordinary \FluxOS{}
+route served by \emph{every} node \shipped~\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}routes.js}{402}, and
+\FDM{} takes its host as a constructor parameter, \texttt{flux\allowbreak{}Api\allowbreak{}BaseUrl}, whose
+shipped value merely happens to be that name
+\shipped~\srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}flux/\allowbreak{}dataFetcher.js}{886}. Pointing an
+independent \FDM{} at any of the \num{6489} nodes, or at a bare IP, is a configuration change rather
+than a fork --- and the code is AGPL-3.0 if a fork is wanted anyway.
+
+What survives is narrower and is a resilience property, not a centralisation one: as shipped there is
+\emph{one} base URL and \emph{no automatic failover}, so an \FDM{} whose configured endpoint becomes
+unreachable stalls on its last-known data rather than trying another node. That is worth fixing and
+is recorded in \Cref{tab:centralization} on those terms. \textbf{What is centralised here is the
+default, not the capability.}}
+
+\subsection{\FDM's run loop}
+\label{sec:networking-runloop}
+
+\FDM's inputs are the three polled feeds above (application specs, locations, permanent
+messages); its output is a generated \texttt{HAProxy} configuration file, validated with
+\texttt{haproxy -\allowbreak{}f .\allowbreak{}.\allowbreak{}.\allowbreak{} -\allowbreak{}c} before it is ever installed — a failed validation leaves the
+previously-loaded configuration serving, not a hard outage
+\srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domainService.js}{196-200,355-359}
+\srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}haproxyTemplate.js}{626-646}. Reconfiguration of the
+main HAProxy pool (the \texttt{home}\slash\texttt{api}\slash\texttt{cloud} UI/API backends) is driven purely
+by a 30{,}000\,ms self-rescheduling timer, independent of any external event
+\srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domainService.js}{96-210}; that regeneration throws and
+aborts the cycle if fewer than 10 Stratus candidates pass its 8-stage health chain, keeping the
+old configuration running rather than publishing an under-populated pool
+\srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domainService.js}{110-183}. Reconfiguration of
+per-application backends is driven by the \texttt{apps\allowbreak{}Locations\allowbreak{}Updated} event fired on every
+10-second location poll, which re-checks every location IP with a per-application-type coded
+health check and writes into the backend only the IPs that pass
+\srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domainService.js}{730-767}. \shipped
+
+\begin{table}[H]
+\centering
+\small
+\renewcommand{\arraystretch}{1.15}
+\caption{\FDM/\PDNS reachability-path health-check and reconfiguration constants.}
+\label{tab:fdm-health-constants}
+\begin{tabular}{lll}
+\toprule
+Mechanism & Constants & Source \\
+\midrule
+Generic app backend, HAProxy-level & \texttt{inter 3s fall 2 rise 2 fastinter 500} & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}haproxyTemplate.js}{311} \\
+\quad detection floor & $\approx$6\,s down (2$\times$3\,s) & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}haproxyTemplate.js}{311} \\
+Main UI/API backend, HAProxy-level & \texttt{inter 10s fall 2 rise 3 maxconn 100} & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}haproxyTemplate.js}{384,408,427} \\
+\quad detection floor & $\approx$20\,s down, 30\,s up & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}haproxyTemplate.js}{384,408,427} \\
+G-mode sticky-master retries & 3 attempts, 3{,}000\,ms apart & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domainService.js}{29-30} \\
+G-mode sticky-unhealthy grace & 90{,}000\,ms since last healthy & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domainService.js}{31} \\
+\texttt{appsLocations} poll (control plane) & 10{,}000\,ms, hardcoded & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}flux/\allowbreak{}dataFetcher.js}{66,707} \\
+Main HAProxy pool regeneration & 30{,}000\,ms, self-rescheduling & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domainService.js}{201-208} \\
+Main pool minimum candidates & 10 (throws below this) & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domainService.js}{181-183} \\
+CDM certificate obtain/renew loop & 15\,min (900{,}000\,ms) & \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domainService.js}{1046-1088} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Because the G-mode control-plane grace window (90\,s) is a much slower mechanism than HAProxy's
+own data-plane health check ($\approx$6\,s detection floor), an already-open connection to a dead
+sticky IP typically stops receiving traffic within HAProxy's own $\approx$6--9\,s window; the 90\,s
+constant instead bounds how long \FDM keeps re-publishing the same, possibly-dead IP into the
+configuration before attempting election of a new one
+\srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domainService.js}{253-321}. \shipped
+
+\subsection{Certificates}
+\label{sec:networking-certs}
+
+Every certificate in this path is issued by Let's Encrypt, exclusively, via \texttt{certbot
+certonly -\allowbreak{}-\allowbreak{}standalone -\allowbreak{}-\allowbreak{}http-\allowbreak{}01-\allowbreak{}port=8787}
+\srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domain/\allowbreak{}cert.js}{38-46}; no wildcard issuance is coded —
+only exact-domain HTTP-01 challenges. The ACME account state (keys, order history) lives wherever
+\texttt{certbot} itself keeps it, under \texttt{/\allowbreak{}etc/\allowbreak{}letsencrypt/\allowbreak{}}, outside \FDM's own code. The
+artifact \texttt{HAProxy} actually serves is a single, world-readable-by-haproxy file per domain,
+\texttt{/etc/ssl/\{certFolder\}/\{domain\}.pem}, formed by concatenating \texttt{fullchain.pem}
+and \texttt{privkey.pem} — public certificate and private key in one file
+\srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domain/\allowbreak{}cert.js}{38-46}
+\srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}haproxyTemplate.js}{141-150}. \shipped
+
+Issuance is technically permissionless: any host that can bind port 8787 for the HTTP-01
+challenge and run \texttt{sudo certbot} can obtain a certificate for a domain it is authoritative
+for. Operationally, in the deployed fleet, only the 16 Flux-Foundation-run \FDM/CDM hosts ever do
+so; an ordinary Cumulus, Nimbus or Stratus node operator never runs \FDM or its certificate-only
+sibling \srccode{flux-fdm-infrastructure/\allowbreak{}ansible/\allowbreak{}inventory/\allowbreak{}hosts.yaml}{1-100}. Two PM2 processes
+run from the same repository on the per-shard app hosts: \texttt{FDM} itself
+(\texttt{manage\allowbreak{}Certificate\allowbreak{}Only:\allowbreak{} false}, handles HAProxy) and, on the EU-private-network hosts, a
+second clone named \texttt{CDM} ("cert-domain-manager", \texttt{manage\allowbreak{}Certificate\allowbreak{}Only:\allowbreak{} true}),
+dedicated purely to issuance and renewal
+\srccode{flux-domain-manager/\allowbreak{}deployment/\allowbreak{}fdm\_setup.yml}{1-9,140-259}. CDM's loop runs every
+15\,min, classifying each custom domain into skip/obtain/renew — renewing when fewer than 30 days
+of validity remain — and deleting any certificate that expired more than 30 days ago
+\srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domain/\allowbreak{}cert.js}{18-36,91-126,214-249,308-340}. \shipped
+
+\subsection{\fluxdnsd mesh resolution: a local file-tail resolver, not a gossip protocol}
+\label{sec:networking-dnsd}
+
+The name \fluxdnsd invites a reading in which nodes discover each other's application members by
+talking to one another — a gossip or peer-to-peer resolution protocol. That reading is wrong, and
+the paper states this plainly because the mistake is an easy one to make from the name alone.
+\fluxdnsd is a purely local, single-node process. It holds an in-memory view built from exactly one
+JSON file, \texttt{/\allowbreak{}var/\allowbreak{}lib/\allowbreak{}flux-mesh/\allowbreak{}resolver/\allowbreak{}membership.\allowbreak{}json}, and answers
+\texttt{*.mesh.flux} queries from that view, scoped to the querying container's source IP
+\srccode{flux-dnsd/\allowbreak{}src/\allowbreak{}snapshot.rs}{319-363,79-84}. It never opens a connection to another
+\fluxdnsd instance, never queries a central server at request time, and implements no notion of
+node-to-node consensus \srccode{flux-dnsd/\allowbreak{}src/\allowbreak{}snapshot.rs}{319-363}. The file is written by
+\FluxOS, which computes the per-node membership view and installs it with a temporary-file-then-
+rename, an atomic operation \fluxdnsd's file watcher depends on: only an inotify
+\texttt{IN\_MOVED\_TO} event whose destination is \texttt{membership.\allowbreak{}json} triggers a reload —
+a plain write-in-place is inert by construction
+\srccode{flux-dnsd/\allowbreak{}src/\allowbreak{}watcher.rs}{20-69}. As the component's own documentation states,
+"FluxOS's database is the authority and rewrites it on boot-sync"
+\srcdoc{flux-dnsd/README.md:75-85}. \shipped
+
+The cross-node propagation that makes membership on one node visible to a container on another —
+the actual mechanism a reader might expect "mesh" to name — happens entirely inside \FluxOS,
+outside \fluxdnsd. From \fluxdnsd's own source this propagation mechanism is opaque: the daemon
+"only accepts or rejects [the file] whole," never repairing, merging, or arbitrating between
+disagreeing sources \srcdoc{flux-dnsd/README.md:83-85}
+\srccode{flux-dnsd/\allowbreak{}src/\allowbreak{}snapshot.rs}{72-77}. A snapshot whose generation number does not strictly
+exceed the currently loaded view's is rejected outright, so a stale or replayed file cannot
+regress the served view \srccode{flux-dnsd/\allowbreak{}src/\allowbreak{}snapshot.rs}{397-416}. Answers carry a fixed
+5-second TTL, justified in the source as "membership changes must propagate and nothing in the
+path caches anyway" \srccode{flux-dnsd/\allowbreak{}src/\allowbreak{}main.rs}{57-60}. If no valid snapshot has ever
+arrived, or the source IP is unscoped, the daemon answers \texttt{REFUSED} rather than
+\texttt{SERVFAIL}\slash\texttt{NXDOMAIN}, so a client's stub resolver fails over to its secondary
+nameserver \srccode{flux-dnsd/\allowbreak{}src/\allowbreak{}server.rs}{82-90}. \shipped
+
+\subsection{flux-dns-gateway: an mTLS proxy in front of the \PDNS key}
+\label{sec:networking-gateway}
+
+\texttt{flux-\allowbreak{}dns-\allowbreak{}gateway} is an mTLS-fronted proxy that lets the 16 \FDM instances write DNS
+records into \PDNS without any of them ever holding the \PDNS API key themselves
+\srcdoc{flux-dns-gateway/README.md:1-29}. Nginx terminates and verifies the client certificate and
+sets \texttt{X-\allowbreak{}SSL-\allowbreak{}Client-\allowbreak{}Verify}\slash\texttt{X-\allowbreak{}SSL-\allowbreak{}Client-\allowbreak{}CN} headers that the FastAPI backend trusts
+unconditionally, with no re-verification of the certificate itself in the Python layer
+\srccode{flux-dns-gateway/\allowbreak{}src/\allowbreak{}dns\_gateway/\allowbreak{}api/\allowbreak{}middleware/\allowbreak{}auth.py}{18-69}. Each client's ACL is
+enforced by \texttt{client\_cn}, \texttt{allowed\_zones}, \texttt{allowed\_record\_types}, and
+\texttt{allowed\_prefixes}, deny-by-default for any unrecognised \texttt{client\_cn}
+\srccode{flux-dns-gateway/\allowbreak{}src/\allowbreak{}dns\_gateway/\allowbreak{}config/\allowbreak{}acl.py}{13-97,99-151}. \shipped
+
+The README's example ACL configuration also documents two further safety fields,
+\texttt{max\_records\_per\_zone} and \texttt{rate\_limit\_per\_minute}
+\srcdoc{flux-dns-gateway/README.md:259-274}. Neither has any corresponding reader anywhere in the
+source: the \texttt{ACLConfig}\slash\texttt{FDMPermissions} parser reads only the four fields listed
+above \srccode{flux-dns-gateway/\allowbreak{}src/\allowbreak{}dns\_gateway/\allowbreak{}config/\allowbreak{}acl.py}{21-30}. A documented per-zone
+record cap and a documented per-client rate limit are, as deployed, no-ops. \shipped
+
+\subsection{flux-geo-cert: a citation trap}
+\label{sec:networking-geocert}
+
+\texttt{flux-geo-cert}'s name and its corpus label ("Certificate Orchestrator for Flux Geo CDN")
+suggest node-location attestation. It is not that. It is a Python service that automates Let's
+Encrypt DNS-01 certificate renewal for the geo-routed CDN domain and pushes the resulting
+certificates over SSH to a small set of CDN nodes (Germany, US, Hong Kong)
+\srcdoc{flux-geo-cert/README.md:1-13}
+\srccode{flux-fdm-infrastructure/\allowbreak{}ansible/\allowbreak{}inventory/\allowbreak{}hosts.yaml}{155-177}. It has no inbound network
+interface at all — "pure outbound service" \srcdoc{flux-geo-cert/ARCHITECTURE.md:54} — and
+performs no measurement, claim, or signature about where any Flux node physically is. No code
+anywhere in the repositories surveyed for this section implements cryptographic attestation of
+node geography; the geolocation machinery that actually feeds placement decisions
+(fault-domain counting, residential-versus-hosting classification) lives in
+\texttt{fluxos-\allowbreak{}network-\allowbreak{}policy}'s \texttt{iplocation.\allowbreak{}bin.\allowbreak{}gz} artifact
+(\S\ref{sec:networking-policy}), a build-time table sourced from RIR delegated-extended files and
+commercial geolocation data, not from any on-node measurement. This paper does not cite
+\texttt{flux-geo-cert} for, and makes no claim anywhere that, node geography is cryptographically
+attested.
+
+\subsection{fluxos-network-policy: the governance-relevant lever}
+\label{sec:networking-policy}
+
+\texttt{fluxos-\allowbreak{}network-\allowbreak{}policy} is a small set of JSON/binary documents — blocked repositories,
+vetted repositories, a tampering blocklist, an enterprise-node owner allow-list, and a
+$\sim$2.0-million-row IP$\to$(organisation, country, region) geolocation table — that every
+\FluxOS node fetches on a fixed schedule over plain HTTPS and enforces immediately, fleet-wide,
+with no staged rollout \srcdoc{fluxos-network-policy/README.md:1-9,11-17,30-44}. Fetch intervals
+are 6\,h for the blocked-repositories and enterprise-node documents and 12\,h for the tampering
+blocklist, with the geolocation table refreshed on a daily conditional check
+\srcdoc{fluxos-network-policy/README.md:34-35}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}cacheManager.js}{126-129}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}enterpriseConfig.js}{12}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appTamperingBlocklistService.js}{11}. A node that cannot reach the repository keeps
+enforcing whatever it last successfully fetched, indefinitely and across restarts — failure here
+is neither fail-open nor fail-closed-to-empty but fail-frozen, and a node that has never
+successfully fetched anything declines to answer rather than guess
+\srcdoc{fluxos-network-policy/README.md:33-44}. \shipped
+
+The documents are unsigned and served over plain HTTPS; by the component's own account, "their
+authenticity rests on GitHub and on who can merge to this repo"
+\srcdoc{fluxos-network-policy/README.md:320-326}. Write access is restricted to GitHub
+organisation owners, and there is deliberately no second-reviewer requirement: CI runs a shape
+validator and a dual-write mirror check only, reaching green in roughly 15 seconds, after which
+the author of the pull request may merge their own change
+\srcdoc{fluxos-network-policy/README.md:297-303}
+\srccode{fluxos-network-policy/\allowbreak{}.github/\allowbreak{}CODEOWNERS}{1-7}
+\srccode{fluxos-network-policy/\allowbreak{}.github/\allowbreak{}workflows/\allowbreak{}validate.yml}{1-27}. The stated reasoning is
+explicit: "the moment you most need to change policy is during an incident, and a rule requiring a
+second person is one that gets bypassed at 3am"
+\srcdoc{fluxos-network-policy/README.md:300-302}. Once merged, every \FluxOS node enforces
+the new document on its own next scheduled fetch — within 7--13\,h depending on the document, the
+fetch interval plus the hourly sweep (\S\ref{sec:governance}), with
+no canary and no staged rollout \srcdoc{fluxos-network-policy/README.md:3-5,34-35}. \shipped
+
+Concretely, a single merged pull request can: block or unblock any container image, namespace,
+owner address, or 64-hex application hash network-wide (\texttt{blockedrepositories.\allowbreak{}json},
+\texttt{vettedrepositories.\allowbreak{}json}); grant or revoke which owner addresses may install applications
+on which enterprise-designated nodes (\texttt{enterprisenodes.\allowbreak{}json}); mark a node's collateral
+transaction hash as blocked for tampering (\texttt{tamperingblockednodes.\allowbreak{}json}), a mechanism the
+evidence describes as able to DOS a node's collateral for that offense; and, via the monthly
+geolocation-baseline pull request, reclassify which organisations or regions count as residential
+versus hosting for placement fault-domain counting and enforcement purposes
+\srcdoc{fluxos-network-policy/README.md:320-326,99-172}. This is, by the component's own
+documentation, "the sharpest single point of centralized, unsigned control" identified across the
+network- and addressing-plane components covered in this section
+\srcdoc{fluxos-network-policy/README.md:320-326}; \S\ref{sec:governance} argues directly from this
+lever when it assesses censorship- and Sybil-resistance at the measured node distribution. \shipped
+
+\subsection{The centralization inventory}
+\label{sec:networking-inventory}
+
+Table~\ref{tab:centralization} states, without further comment, which surfaces described in this
+section are Foundation-operated, what depends on each, and what happens if each is unavailable.
+
+\begin{table}[H]
+\centering
+\small
+\renewcommand{\arraystretch}{1.2}
+\caption{Centralization surfaces in the reachability and naming path.}
+\label{tab:centralization}
+\begin{tabular}{p{2.6cm}p{2.1cm}p{4.4cm}p{4.6cm}}
+\toprule
+Surface & Operator & Depends on it & If unavailable \\
+\midrule
+\texttt{api.\allowbreak{}runonflux.\allowbreak{}io} (application discovery) --- the \emph{configured default},
+not a unique source & Flux Foundation operates this endpoint; the route it serves is on every node & Every \FDM/CDM
+control-plane loop reads app specs, locations and permanent messages from one configured base URL. The
+route is an ordinary \FluxOS{} one served by all \num{6489} nodes \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}routes.js}{402}
+and the host is a constructor parameter \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}flux/\allowbreak{}dataFetcher.js}{886},
+so an independent operator repoints it by configuration & \textbf{Resilience, not centralisation:} no
+automatic failover to another node is coded, so a loop whose configured endpoint is unreachable keeps
+polling, logs errors and serves the last-known HAProxy configuration (fail-static)
+\srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}flux/\allowbreak{}dataFetcher.js}{47-91} \\
+\addlinespace
+Foundation-private \texttt{10.100.0.0/24} (WireGuard hub, \PDNS masters, DNS Gateway, Arcane load
+balancers, SAS decrypt endpoint) & Flux Foundation & All non-EU \FDM/CDM and
+\texttt{flux-\allowbreak{}apps-\allowbreak{}dns-\allowbreak{}manager} instances, reachable outside the EU segment only through a single
+WireGuard hub, \texttt{wireguard-\allowbreak{}eu-\allowbreak{}01} (\texttt{10.100.0.167}, public
+\texttt{5.39.57.49:\allowbreak{}51000}) \srccode{flux-fdm-infrastructure/\allowbreak{}ansible/\allowbreak{}inventory/\allowbreak{}hosts.yaml}{180-185}
+& Custom-domain certificate issuance, enterprise application-spec decryption, and game-application
+DNS publication all stop for every host that reaches this segment only through that hub
+\srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domainService.js}{1099-1105} \\
+\addlinespace
+16-host \FDM/CDM fleet (6 EU direct-private, 6 US and 4 Singapore over WireGuard)
+\srccode{flux-fdm-infrastructure/\allowbreak{}ansible/\allowbreak{}inventory/\allowbreak{}hosts.yaml}{1-100} & Flux Foundation & HAProxy
+routing and TLS termination for every \texttt{app(2).\allowbreak{}runonflux.\allowbreak{}io} and custom-domain hostname
+network-wide & Stale-but-serving: a failed configuration validation leaves the previous
+configuration running, but no new application is routed or certified until a host recovers
+\srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domainService.js}{196-200} \\
+\addlinespace
+\texttt{flux-\allowbreak{}apps-\allowbreak{}dns-\allowbreak{}manager} (single, unreplicated instance on \texttt{flux-cert-1} =
+\texttt{10.100.0.172}) & Flux Foundation & Direct node-to-node DNS for $\sim$26 G-mode
+game-server application types
+\srccode{flux-apps-dns-manager/\allowbreak{}config/\allowbreak{}gamesConfig.js}{30-57} & No coded high availability,
+leader election, or standby process; game-application \texttt{A} records stop updating until the
+single host/co-located DNS Gateway returns
+\srccode{flux-apps-dns-manager/\allowbreak{}ansible/\allowbreak{}inventory.yaml}{6-7} \\
+\addlinespace
+Let's Encrypt (ACME certificate authority) & External (ISRG) & Every TLS-terminated
+\texttt{app(2).\allowbreak{}runonflux.\allowbreak{}io} and custom-domain certificate; exclusively used, no alternate CA
+coded \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domain/\allowbreak{}cert.js}{38-46} & No fallback CA; the CDM
+renewal loop retries every 15\,min indefinitely, and the 30-day renewal floor provides slack, but
+new domains cannot be certified at all during an outage \\
+\addlinespace
+Cloudflare (where \texttt{config.\allowbreak{}cloudflare.\allowbreak{}enabled}) & External (Cloudflare) & DNS resolution for
+domains on the Cloudflare-selected path, used strictly DNS-only (grey-cloud), never as a proxy or
+CDN \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}domain/\allowbreak{}cert.js}{170-181} & No fallback registrar or
+DNS backend is coded per domain; whichever hostnames are Cloudflare-hosted stop resolving \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Node network configuration}
+\label{sec:networking-nodeconfig}
+
+At install and reconfiguration time, network interfaces are discovered automatically: a
+\texttt{probert}-backed (netlink and udev) scan produces interface objects carrying type, name,
+state, index, MAC, vendor, model, address, VLAN and bridge identifiers with no operator input
+\srccode{fluxos-iso-networking-shared/\allowbreak{}src/\allowbreak{}flux\_networking\_shared/\allowbreak{}models/\allowbreak{}network.py}{326-388}.
+What the operator configures, per interface, is the allocation mode — DHCP or static — through a
+TUI screen; choosing static reveals a form for subnet, address, gateway and DNS that is
+blur-validated before the change may be saved
+\srccode{fluxos-iso-networking/\allowbreak{}src/\allowbreak{}flux\_iso\_networking/\allowbreak{}screens/\allowbreak{}interface\_modal\_screen.py}{54,79-84,200-284}.
+Per-interface traffic shaping is likewise operator-set, from a closed set of rates
+($\{35,75,135,250\}$\,Mbps), written to a policy file and applied by a separate, privileged D-Bus
+helper because the configuring process itself runs without the capability to apply it directly
+\srccode{fluxos-iso-networking-shared/\allowbreak{}src/\allowbreak{}flux\_networking\_shared/\allowbreak{}models/\allowbreak{}network.py}{77,83,139-161,224}.
+\shipped
+
+The stack is IPv4-only by construction, not merely by current deployment. Every network dataclass
+— \texttt{Route}, \texttt{SourceAddress}, \texttt{NetworkInterface.\allowbreak{}address} — is typed
+\texttt{IPv4Network}\slash\texttt{IPv4Address}\slash\texttt{IPv4Interface} and nothing else, and the shared
+connectivity helper pins \texttt{TCPConnector(family=\allowbreak{}AF\_INET)} explicitly
+\srccode{fluxos-iso-networking-shared/\allowbreak{}src/\allowbreak{}flux\_networking\_shared/\allowbreak{}models/\allowbreak{}network.py}{17-29,326-337}
+\srccode{fluxos-iso-networking-shared/\allowbreak{}src/\allowbreak{}flux\_networking\_shared/\allowbreak{}helpers.py}{147,242}. The
+measured fleet crawl underlying the network-wide baseline in \S\ref{sec:baseline} reports
+2{,}322 IPv4 addresses and zero IPv6 or onion (Tor hidden-service) addresses
+\srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}getzelnodecount}{2026-09-03}. \shipped
+
+A reachability design for NAT'd and non-public nodes exists only as a docstring. The helper
+\texttt{is\_directly\_public()} states that a node with a globally-routable public IP bound to one
+of its own interfaces would act as a "Tor SOCKS-only hub," while a NAT'd node would instead run a
+"Tor hidden service" to become reachable
+\srccode{fluxos-iso-networking-shared/\allowbreak{}src/\allowbreak{}flux\_networking\_shared/\allowbreak{}models/\allowbreak{}network.py}{461-479}.
+No Tor-related code exists anywhere else in either the installer or the shared networking library;
+the design is fully specified in prose and entirely unimplemented. \vision
+
+\subsection{Private deployments (\VPON)}
+\label{sec:networking-vpon}
+
+The roadmap lists private deployments, referred to as \VPON s (private overlay networks), as a
+Q4 2026 item, described as "the complement to private payments and chain privacy"
+\srcroadmap{Private deployments (VPONs), Q4 2026}; the roadmap's own timeline artifact labels the
+same item "Private overlay networks," sub-labelled "VPONs $\cdot$ private deployments"
+\srcdoc{flux-roadmap/public/timeline.html:172-173}. No implementation of a \VPON was found in any
+repository surveyed for this section or flagged elsewhere in the corpus; the roadmap evidence
+itself notes no repository name observed anywhere in the codebase corresponds to a \VPON
+\srcdoc{flux-roadmap/public/flux-roadmap-public.md:83}. \planned
+
+Because no such system exists to describe, this section states what a \VPON would need to provide
+rather than how one works. At minimum, consistent with the notation this paper uses for the term
+and with the roadmap's framing of \VPON s as private overlays rather than a naming variant on the
+public network:
+\begin{itemize}
+  \item \textbf{Membership by key, not by discoverability.} The reachability path in
+  \S\ref{sec:networking-path} and the mesh namespace in \S\ref{sec:networking-dnsd} both resolve
+  any application's members to any container scoped correctly on the querying node; a \VPON would
+  need membership gated by possession of a private key rather than resolvable by any party who can
+  reach the mesh namespace or the public API \srcinferred.
+  \item \textbf{Reachability-plane confidentiality.} If a \VPON exists to complement private
+  payment (\S\ref{sec:private-payment}) and chain privacy, then the infrastructure this section
+  describes — the discovery API, \FDM, and \PDNS, all Foundation-operated — should not be
+  positioned to learn which nodes host a private deployment or on whose behalf, since today's
+  reachability path is Foundation-legible end to end by the construction in
+  \S\ref{sec:networking-path} \srcinferred.
+\end{itemize}
+The roadmap sequences \VPON s alongside private payments and the chain-privacy work without
+stating an explicit blocking dependency between them
+\srcdoc{flux-roadmap/public/flux-roadmap-public.md:81,84}. Beyond this framing, no wire protocol,
+key-management scheme, or placement-isolation mechanism for a \VPON is specified anywhere in the
+roadmap or in the repositories surveyed. The construction is open.
+
+What does ship, today, are WireGuard-based transports inside \CumulusVPN — a single VPN product,
+not a general per-application private-overlay primitive — that a future \VPON design could draw
+on as building blocks:
+\begin{itemize}
+  \item \textbf{AmneziaWG obfuscation.} A fork of \texttt{wireguard-go} that reshapes WireGuard's
+  handshake framing without altering its cryptography, wired up as an additive listener sharing
+  the vanilla gateway's server key. Gated off by default via an environment flag, but the fleet
+  deployment manifest sets it on by default
+  \srccode{cumulusvpn/\allowbreak{}gateway/\allowbreak{}internal/\allowbreak{}wg/\allowbreak{}device.go}{19,67-124}
+  \srccode{cumulusvpn/\allowbreak{}deploy/\allowbreak{}countries.yaml}{23}. \shipped, disabled by default in code, enabled
+  by default in the deployed fleet manifest.
+  \item \textbf{WireGuard-over-TLS ("stealth" transport, port 443).} A TLS session terminated on a
+  TCP port and bridged, byte-for-byte, to the local WireGuard UDP listener; the client does not
+  verify the certificate chain, and trust is anchored entirely in the inner WireGuard handshake
+  \srccode{cumulusvpn/\allowbreak{}gateway/\allowbreak{}internal/\allowbreak{}tlsrelay/\allowbreak{}relay.go}{1-16,229-236}. Also gated off by default
+  in code, also on by default in the fleet manifest
+  \srccode{cumulusvpn/\allowbreak{}deploy/\allowbreak{}countries.yaml}{24}. \shipped, same disabled-in-code/enabled-in-fleet
+  pattern as above.
+  \item \textbf{Multi-hop.} Implemented client-side only, with no corresponding change to the
+  gateway protocol: the client runs two stacked WireGuard interfaces under the same key, and the
+  entry hop decrypts only the outer layer before forwarding opaque ciphertext to the exit hop
+  \srcdoc{cumulusvpn/docs/11-multihop.md:8-33}. Because both hops see the same tunnel key in this
+  version, an adversary controlling both a user's chosen hops could correlate traffic by key — a
+  gap the design documentation states and leaves open, not a hypothetical one
+  \srcdoc{cumulusvpn/docs/11-multihop.md:47-58}. \shipped, client-side, with a stated unmitigated
+  correlation risk.
+\end{itemize}
+Nothing in the evidence surveyed shows any of these three transports wired into a general,
+per-application \VPON primitive; they are cited here only as the concrete pieces that exist and
+that a future \VPON specification would not need to invent from nothing.
+
+%% Drain this section's float queue before the next begins.
+\FloatBarrier

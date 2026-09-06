@@ -1,0 +1,783 @@
+\section{Agent identity and delegated authority}
+\label{sec:agent-identity}
+
+Two different things are called an \emph{agent} in this paper, and the difference decides what each
+one needs. The first is the human-facing assistant of \S19: it turns a sentence into an \appspec,
+renders it for review, and hands the signing to the person's own device. That assistant holds no key
+and needs no delegated authority, because the human's signature \emph{is} the authorisation; its open
+problem is reviewability, not delegation. The second is autonomous software — a process that
+provisions capacity, pays for it, renews it and retires it on its own schedule, with no person in the
+loop at any step, on timescales where waiting for a human tap is itself the failure. Only the second
+needs a delegation primitive. This section is about the second, exclusively, and the two must not be
+allowed to blur: a property proved about a keyless assistant says nothing about a process that holds
+a signing key, and the deployed system already contains one of each.
+
+The section opens on a statement about what is deployed, and it is not a comfortable one.
+\textbf{Authority in the deployed system is bounded by action and unbounded by value.} There exists,
+today, a real scoped and revocable delegation of \emph{actions}; there exists no bound whatsoever on
+\emph{value}; and there is already in production a bearer credential that confers unbounded signing
+authority over a user's Flux identity. What follows is therefore a specification for a capability
+that already ships without one, not a description of a mechanism the network has.
+
+\subsection{What exists today}
+\label{sec:agent-identity:today}
+
+\Cref{tab:agent-today} is the baseline. Every row is \shipped and carries code provenance; the one
+row that records an absence carries the search that established it.
+
+\begin{table}[H]
+\centering\footnotesize
+\begin{tabular}{@{}p{0.235\textwidth} p{0.72\textwidth}@{}}
+\toprule
+\textbf{Capability} & \textbf{What is deployed} \\
+\midrule
+Human key custody, UTXO &
+\shipped 2-of-2 ECDSA over secp256k1 in a sorted \texttt{OP\_CHECKMULTISIG} script. The wallet
+builds and partially signs; the Key device signs the remaining input, finalises, and broadcasts
+directly to a chain backend. The relay never sees a complete UTXO transaction.
+\srccode{ssp-wallet/\allowbreak{}src/\allowbreak{}lib/\allowbreak{}constructTx.ts}{242--298},
+\srccode{ssp-key/\allowbreak{}src/\allowbreak{}lib/\allowbreak{}constructTx.ts}{157--169} \\[2pt]
+
+Human key custody, EVM &
+\shipped Two-round MuSig-style Schnorr aggregation, verified on chain inside an ERC-4337 smart
+account through the \texttt{ecrecover} trick, at an address made identical on all seven chains of the
+deployment manifest by \texttt{CREATE2}.
+\srccode{account-abstraction/\allowbreak{}contracts/\allowbreak{}schnorr/\allowbreak{}Schnorr.sol}{7--26},
+\srccode{account-abstraction/\allowbreak{}contracts/\allowbreak{}MultiSigSmartAccount.sol}{145--159},
+\srcdoc{account-abstraction/deployments.md:5--13} \\[2pt]
+
+Human key custody, Solana &
+\shipped 2-of-2 Ed25519 over a program-derived vault. Registration is permissionless — the vault
+address is a PDA over $(\mathrm{sorted\ members}, \mathrm{threshold})$ — and the threshold is checked
+only at execution.
+\srccode{Solana-Multisig/\allowbreak{}programs/\allowbreak{}solana-multisig/\allowbreak{}src/\allowbreak{}lib.rs}{89--152,468--471},
+\srccode{ssp-wallet/\allowbreak{}src/\allowbreak{}lib/\allowbreak{}wallet.ts}{489} \\[2pt]
+
+Relay capability &
+\shipped The relay holds no private key and cannot sign on any chain. It can read, store and
+\emph{withhold} every payload it forwards. Several coordination endpoints and both socket
+\texttt{join} paths still accept unauthenticated requests, marked in the shipped source as
+\texttt{TODO:\allowbreak{} Make auth required after clients are updated}.
+\srccode{ssp-relay/\allowbreak{}src/\allowbreak{}lib/\allowbreak{}socket.ts}{31--38},
+\srccode{ssp-relay/\allowbreak{}src/\allowbreak{}routes.ts}{253--301} \\[2pt]
+
+\textbf{Action} delegation &
+\shipped The \FluxEdge API issues bearer tokens whose privileges are enumerated per key
+(\texttt{start\_rental}, \texttt{stop\_rental}, \texttt{start\_deployment}, \texttt{stop\_deployment},
+\texttt{get\_balance}) and enforced per route; \SI{2}{\per\second} per key and per IP; five
+rate-limit violations inside \SI{5}{\minute} revoke the key automatically and notify its owner.
+\srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}ratelimit.go}{41--45,203--222,375--390} \\[2pt]
+
+\textbf{Value} delegation &
+\emph{Absent.} No session key, spending cap, allowance, time-lock, guardian or social-recovery
+construct exists in the wallet, key, relay, account-abstraction or Solana-multisig code.
+\srccode{ssp-wallet, ssp-key, ssp-relay, account-abstraction, Solana-Multisig}{targeted search, no
+match} \\[2pt]
+
+Policy engine &
+\shipped The enterprise M-of-N vault has priority-ordered rules with actions
+\texttt{allow}\slash\texttt{block}\slash\texttt{require\_approval}\slash\texttt{timelock}, schedule windows,
+rolling 24\,h/7\,d/30\,d transaction-count velocity limits, whitelists and named approval groups. It
+decides whether a \emph{proposal} needs approval; it never signs, and every allowed proposal still
+requires the vault's device signatures.
+\srccode{ssp-relay-enterprise/\allowbreak{}src/\allowbreak{}services/\allowbreak{}policyEngineService.ts}{9--45},
+\srccode{ssp-relay/\allowbreak{}src/\allowbreak{}routes.ts}{644--649} \\[2pt]
+
+Gas sponsorship hook &
+\shipped \texttt{IPaymaster} and \texttt{paymaster\allowbreak{}And\allowbreak{}Data} are fully wired through the account; no
+contract in the repository implements a paymaster.
+\srccode{account-abstraction/\allowbreak{}contracts/\allowbreak{}erc4337/\allowbreak{}interfaces/\allowbreak{}IPaymaster.sol}{1--49} \\[2pt]
+
+De-facto delegation, in production &
+\shipped A Firebase bearer token authorises remote signing at
+\texttt{service.\allowbreak{}fluxcore.\allowbreak{}ai/\allowbreak{}api/\allowbreak{}signMessage}, which signs on the user's behalf. The shipped MCP tools
+\texttt{deploy\_app}, \texttt{update\_app} and \texttt{renew\_app} use exactly this path; their own
+description is ``Revalidate, Firebase-sign, register''.
+\srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}flux/\allowbreak{}fluxSession.js}{60--73},
+\srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}mcp/\allowbreak{}createServer.js}{174--266} \\
+\bottomrule
+\end{tabular}
+\caption{Authority primitives in the deployed system. \shipped rows carry code provenance; the
+absence row carries the search that established it.}
+\label{tab:agent-today}
+\end{table}
+
+Three notes on that table, because each of them constrains what the rest of the section may claim.
+
+First, the EVM contracts are reported audited by Halborn with the engagement finalised in February
+2025, with findings in code since removed \srcdoc{account-abstraction/aa-schnorr-multisig-sdk/README.md:76--83};
+that is documentation provenance and is not independently verified here. In-repo deployment
+artifacts were observed for four of the manifest's networks, the fifth directory being a local
+\texttt{hardhat} network
+\srccode{account-abstraction/\allowbreak{}deployments/\allowbreak{}}{directory listing}, so ``identical on seven chains'' is a
+manifest claim, not an artifact count.
+
+Second, the \FluxEdge token model is a genuine bounded, revocable delegation, and the section must
+not pretend otherwise. It has an enumerated privilege set, a per-key rate limit, and automatic
+revocation on abuse with the owner notified. Two gaps keep it from being sufficient for an
+autonomous agent: key issuance is not part of the documented REST surface, so a human must mint a key
+through the web dashboard before an agent can use the API at all
+\srcdoc{pouwbackend/rest\_api/v1/openapi.yaml:61}; and the privileges it scopes are actions on a
+custodial credit balance, not signatures on a chain.
+
+Third — and this is the row the whole section exists because of — the deployed delegation on the
+\FluxCore path is unbounded. A holder of a valid Firebase bearer token can construct, sign and submit
+a registration or update message end to end, with no client-side wallet interaction. There is
+\textbf{no per-transaction cap, no rate limit, no cumulative budget, no scope over what may be
+deployed, and no revocation short of invalidating the token}. The bound on a compromised token today
+is whatever the underlying identity can authorise, which is everything that identity can authorise.
+The local-signing paths (\SSP\ extension, ZelCore deep link) do not have this property, because the
+key never leaves the user's device \srccode{deploy-with-git-frontend/\allowbreak{}src/\allowbreak{}services/\allowbreak{}deployService.js}{697--772};
+the property is per-path, and \S19 states it per-path.
+
+\subsection{The two authorities}
+\label{sec:agent-identity:two}
+
+The structural claim of this section is stated early because it organises everything after it. A
+deployment involves \emph{two separable authorities}, and they are enforced in different places by
+different parties, so they have different feasibility.
+
+\begin{itemize}
+  \item \textbf{Deployment authority (A)} --- what may run, at what resource vector, in how many
+  instances, where, and under whose name. It is enforced by every \FluxOS node, at the moment the
+  node validates the owner signature over an \appspec.
+  \item \textbf{Spending authority (B)} --- how much \flux\ may move, to whom, and how fast. It is
+  enforced by \Flux\ L1 consensus rules, which are those of a Zcash-derived UTXO chain.
+\end{itemize}
+
+\Cref{tab:two-authorities} sets them side by side. Conflating them is what makes agent delegation
+look uniformly hard. Separated, (A) is tractable with the machinery that already runs and (B) is not
+tractable at all on the \Flux\ L1 without either a new trusted party or new consensus state. The rest
+of this section treats them separately and never averages them.
+
+\begin{table}[H]
+\centering\footnotesize
+\begin{tabular}{@{}p{0.19\textwidth} p{0.36\textwidth} p{0.36\textwidth}@{}}
+\toprule
+ & \textbf{(A) Deployment authority} & \textbf{(B) Spending authority} \\
+\midrule
+Object bounded & the \appspec\ an agent may submit & the value an agent may move \\
+Enforcement point & \FluxOS\ specification validation & \Flux\ L1 script validation \\
+Enforcing party & every validating node, independently & consensus \\
+Inputs available at enforcement & the message, the certificate, chain state at $\hgt$ & the spending
+transaction and the outputs it consumes, only \\
+Can enforce history-dependent limits? & yes --- a node sees the chain & no --- see
+\cref{prop:budget-balance} \\
+Feasibility class (\S\ref{sec:feasibility}) & Extension (row 12) & Research (row 13) \\
+\bottomrule
+\end{tabular}
+\caption{The two authorities, their enforcement points, and why they have different feasibility.}
+\label{tab:two-authorities}
+\end{table}
+
+\subsection{The delegation certificate}
+\label{sec:agent-identity:cert}
+
+Everything from here to \cref{sec:agent-identity:compare} is \planned. Nothing in it is deployed, no
+part of it is scheduled to a height, and no claim below should be read in the present tense as a
+statement about the network.
+
+\begin{definition}[Delegation certificate]
+\label{def:cert}
+Let $\principal$ be the human principal, holding the 2-of-2 key set $(k_1,k_2)$ split across the
+wallet and key devices of \cref{tab:agent-today}. Let $\agent$ be an autonomous agent holding a
+single key pair $(sk_\agent, pk_\agent)$ generated on the agent's own host. A \emph{delegation
+certificate} is the tuple
+\[
+  \mathsf{cert} \;=\; \bigl(pk_\agent,\; \scopeset,\; \budget,\; [t_0,t_1],\; \mathsf{rev},\; \nu\bigr),
+  \qquad
+  \sigma_{\mathsf{cert}} \;=\; \mathrm{Sign}_{k_1 \wedge k_2}\bigl(H(\mathsf{cert})\bigr),
+\]
+where
+$\scopeset$ is the scope of permitted deployments (\cref{def:scope});
+$\budget = (b_{\mathrm{tx}}, b_{\mathrm{rate}}, b_{\mathrm{total}}) \in
+(\mathbb{R}_{\ge 0}\flux) \times (\mathbb{R}_{\ge 0}\flux\,\text{per block}) \times
+(\mathbb{R}_{\ge 0}\flux)$ is the intended value bound, being respectively a per-transaction cap, a
+rate limit and a cumulative budget;
+$[t_0,t_1] \subset \mathbb{N}$ is a validity window in block heights with $t_0 < t_1$;
+$\mathsf{rev}$ is a revocation anchor, an outpoint on the \Flux\ L1 controlled by $\principal$ and
+unspent at $t_0$ (\cref{def:revoked});
+and $\nu \in \mathbb{N}$ is a monotone certificate counter, so that re-issue to the same
+$pk_\agent$ is unambiguous and an older certificate can never be presented as a newer one.
+$H$ is the canonicalising hash of the \appspec\ fingerprint recipe (\S10) and
+$\mathrm{Sign}_{k_1 \wedge k_2}$ denotes the full 2-of-2 ceremony, not a single-device signature.
+\end{definition}
+
+\begin{assumption}[Model, from \S2]
+\label{ass:agent}
+The specification of this section is stated against the following, each of which is fixed in the
+system model of \S2 and not re-argued here.
+\begin{enumerate}
+  \item[(A1)] \emph{Principal custody.} Producing $\sigma_{\mathsf{cert}}$ requires both $k_1$ and
+  $k_2$. Compromise of one device does not yield a certificate.
+  \item[(A2)] \emph{Node validation.} Every \FluxOS\ node independently validates owner signatures
+  over \appspec s and has read access to \fluxd\ chain state at the height it validates. This is the
+  deployed behaviour described in \S9 and \S10.
+  \item[(A3)] \emph{Chain state.} The \Flux\ L1 is a Zcash-derived UTXO chain with no covenant
+  opcodes, no transaction introspection, and no account abstraction. Reorganisations are bounded by
+  \texttt{MAX\_REORG\_LENGTH} $=40$ blocks
+  \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{8983--8988}, with the historical override to $5{,}000$ over heights
+  $[2{,}020{,}000,\,2{,}025{,}000]$ noted in \S5.
+  \item[(A4)] \emph{No escrow.} $sk_\agent$ is generated on the agent's host and is never
+  transmitted. Any variant in which a service can sign for $\agent$ is a custody design and is
+  labelled one.
+  \item[(A5)] \emph{Adversary.} The adversary $\adv$ of \S2 may compromise the agent host, may
+  operate or coerce the relay, and is computationally bounded so that signature forgery is
+  infeasible. $\adv$ does not hold $k_1$ and $k_2$ simultaneously.
+\end{enumerate}
+\end{assumption}
+
+\subsection{Deployment authority}
+\label{sec:agent-identity:deploy}
+
+\planned. Deployment authority is the half of the problem that composes with machinery the network
+already runs.
+
+\begin{definition}[Scope and containment]
+\label{def:scope}
+The scope is the tuple
+\[
+  \scopeset \;=\; \bigl(\mathcal{N},\; \resvec^{\max},\; \ninst^{\max},\; \mathcal{I},\;
+  \dur^{\max},\; \mathcal{G}\bigr),
+\]
+where $\mathcal{N}$ is a finite set of permitted application names;
+$\resvec^{\max} \in \mathbb{R}^3_{>0}$ is a componentwise ceiling on the resource vector
+$\resvec = (\text{cpu}, \text{memory}, \text{rootFs})$;
+$\ninst^{\max} \in \mathbb{N}$ bounds the instance count $\ninst$;
+$\mathcal{I}$ is a finite set of permitted container images, each identified by content digest and
+not by tag;
+$\dur^{\max} \in \mathbb{N}$ bounds the requested duration $\dur$ in blocks;
+and $\mathcal{G}$ is a set of permitted geolocation constraints in \FluxOS's \texttt{acXX}\slash\texttt{a!cXX}
+form.
+A specification $s$ is \emph{contained} in $\scopeset$, written $s \in \scopeset$, iff its name lies
+in $\mathcal{N}$, its resource vector satisfies $\resvec(s) \le \resvec^{\max}$ componentwise, its
+instance count satisfies $\ninst(s) \le \ninst^{\max}$, every image digest named by $s$ lies in
+$\mathcal{I}$, $\dur(s) \le \dur^{\max}$, and the geolocation constraints of $s$ lie in $\mathcal{G}$.
+Containment is a predicate on $s$ and $\scopeset$ alone: it reads nothing else.
+\end{definition}
+
+\begin{definition}[Acceptance]
+\label{def:accept}
+A node evaluating an agent-submitted specification $s$, carrying an agent signature $\sigma_s$, a
+certificate $\mathsf{cert}$ and its principal signature $\sigma_{\mathsf{cert}}$, at height $\hgt$,
+computes
+\begin{multline*}
+  \mathrm{Accept}(s,\hgt) \;\equiv\;
+  \mathrm{Verify}_{pk_\agent}\bigl(H(s), \sigma_s\bigr) \;\wedge\;
+  \mathrm{Verify}_{\mathsf{owner}}\bigl(H(\mathsf{cert}), \sigma_{\mathsf{cert}}\bigr) \\
+  {}\wedge\; t_0 \le \hgt \le t_1 \;\wedge\;
+  s \in \scopeset \;\wedge\;
+  \neg\,\mathrm{Revoked}(\mathsf{cert},\hgt),
+\end{multline*}
+where $\mathsf{owner}$ is the owner identity already carried by the specification and
+$\mathrm{Revoked}$ is \cref{def:revoked}.
+\end{definition}
+
+\begin{algorithm}[H]
+\DontPrintSemicolon
+\KwIn{message $m = (s, \sigma_s, \mathsf{cert}, \sigma_{\mathsf{cert}})$; local height $\hgt$;
+local UTXO set $U(\hgt)$; owner public key set for $\mathsf{owner}$}
+\KwOut{\textsc{accept} or \textsc{reject}}
+\tcp{Invariant: the result is a deterministic function of $(m, \hgt, U(\hgt))$ alone.
+No network fetch, no registry, no service.}
+\lIf{$\neg\,\mathrm{Verify}_{\mathsf{owner}}(H(\mathsf{cert}), \sigma_{\mathsf{cert}})$}{\Return
+\textsc{reject}}
+\lIf{$\hgt < t_0 \vee \hgt > t_1$}{\Return \textsc{reject}}
+\tcp{revoked, or anchor never existed --- both fail closed}
+\lIf{$\mathsf{rev} \notin U(\hgt)$}{\Return \textsc{reject}}
+\lIf{$\neg\,\mathrm{Verify}_{pk_\agent}(H(s), \sigma_s)$}{\Return \textsc{reject}}
+\lIf{$\mathsf{owner}(s) \neq \mathsf{owner}(\mathsf{cert})$}{\Return \textsc{reject}}
+\ForEach{clause $c$ of \cref{def:scope}}{
+  \lIf{$s$ violates $c$}{\Return \textsc{reject}}
+}
+\Return \textsc{accept}\;
+\caption{\textsc{AcceptDelegatedSpec}. \textbf{Failure mode:} every branch fails closed. A node that
+cannot evaluate $\mathsf{rev} \in U(\hgt)$ --- for instance one whose local state does not reach the
+anchor's height --- rejects rather than accepts, so a partially-synced node under-accepts and never
+over-accepts. \planned}
+\label{alg:accept}
+\end{algorithm}
+
+\begin{property}[Local enforceability]
+\label{prop:local}
+$\mathrm{Accept}(s,\hgt)$ is computable by any validating node from the submitted message, the
+node's own chain state at $\hgt$, and nothing else. It requires no consensus change and introduces
+no trusted party beyond those \S2 already names.
+\end{property}
+
+\begin{proof}
+Take the conjuncts of \cref{def:accept} in turn. The two $\mathrm{Verify}$ terms are signature checks
+over data carried in the message, against $pk_\agent$ (carried in $\mathsf{cert}$, which is itself
+signed) and against the owner key set the node already resolves in order to validate any \appspec\
+(A2). The window test compares $\hgt$, which the node holds by definition, against two integers in
+the message. Containment $s \in \scopeset$ is by \cref{def:scope} a predicate on $s$ and $\scopeset$
+alone. $\mathrm{Revoked}$ is by \cref{lem:utxo-rev} a membership test in the node's own UTXO set at
+$\hgt$. Every input is therefore either in the message or in chain state the node already maintains,
+which establishes the first claim. For the second: the check is performed at the same point, by the
+same code path, and on the same inputs as the owner-signature validation \FluxOS\ already performs
+(A2), so it changes no consensus rule and adds no party --- the only new authority is $\principal$'s
+own key set, which already authorises the specification today. \qedhere
+\end{proof}
+
+Deployment authority would fit \specv{9} cleanly: the certificate is one additional specification
+field, validated where it is enforced, in a version that is already adding fields (\S10). That is the
+recommended placement, and it is why \S\ref{sec:feasibility} classes this as Extension (row 12) rather than Engineering.
+
+\begin{remark}[Digest pinning is necessary, and against a generic runner it is not sufficient]
+\label{rem:digest}
+$\mathcal{I}$ is defined over digests rather than tags for a concrete reason. The deployed tooling
+emits \texttt{runonflux/\allowbreak{}orbit:latest}, an unpinned mutable tag, into every generated specification
+\srccode{deploy-with-git-frontend/\allowbreak{}src/\allowbreak{}services/\allowbreak{}deployService.js}{462,453--490}. A scope that permits
+a mutable tag permits whatever that tag resolves to at node pull time, which is to say arbitrary
+code, and the delegation is then vacuous: the acceptance predicate would be satisfied by a
+specification whose behaviour the principal never bounded.
+
+Pinning the digest closes that hole and opens a second one, which the specification must name rather
+than hide. The pinned image in question is a \emph{generic runner}: the Orbit container clones
+whatever repository \texttt{GIT\_REPO\_URL} names and builds and runs it
+\srccode{orbit/\allowbreak{}entrypoint.sh}{1--9,29}. Against such an image, fixing the digest fixes the
+\emph{runtime} and not the \emph{workload}, so an agent whose scope permits one pinned generic-runner
+digest can still cause arbitrary code to execute by varying an environment parameter. Bounding that
+requires $\scopeset$ to constrain the environment-parameter set as well as the image set, and the
+scope tuple of \cref{def:scope} does not. The requirement is stated; the construction is not.
+\proposednote{The scope tuple gains a seventh component: an allowed-key set for the
+environment-parameter map, with values unconstrained. Rationale: the keys are what a node can check
+cheaply and deterministically at deployment, and they are what carries the risk --- an agent that can
+set an arbitrary environment key can often reach configuration the owner never intended. Constraining
+values as well would require the verifier to understand each application's semantics, which no node
+can do. \srcinferred{} --- proposed by this paper on the same basis as \Cref{rem:cert-location}.}
+\end{remark}
+
+\subsection{Revocation}
+\label{sec:agent-identity:revoke}
+
+\begin{definition}[Revocation anchor]
+\label{def:revoked}
+$\mathsf{rev}$ is an outpoint on the \Flux\ L1 spendable by $\principal$ and required to be unspent
+at $t_0$. The certificate is revoked at the first height at which that outpoint is spent:
+\[
+  \mathrm{Revoked}(\mathsf{cert},\hgt) \;\equiv\;
+  \exists\, \hgt' \le \hgt \;:\; \mathsf{rev} \in \mathrm{Spent}(\hgt').
+\]
+\end{definition}
+
+\begin{lemma}[UTXO-set formulation]
+\label{lem:utxo-rev}
+Let $U(\hgt)$ be the unspent-output set at height $\hgt$. Given the issuance precondition that
+$\mathsf{rev} \in U(t_0)$, and given that a spent outpoint cannot be recreated,
+\[
+  \mathrm{Revoked}(\mathsf{cert},\hgt) \;\equiv\; \mathsf{rev} \notin U(\hgt)
+  \qquad \text{for all } \hgt \ge t_0 .
+\]
+\end{lemma}
+
+\begin{proof}
+If $\mathsf{rev}$ is spent at some $\hgt' \le \hgt$ then it leaves $U$ at $\hgt'$ and, by
+non-recreatability, does not re-enter, so $\mathsf{rev} \notin U(\hgt)$. Conversely, if
+$\mathsf{rev} \notin U(\hgt)$ then, since $\mathsf{rev} \in U(t_0)$ and $t_0 \le \hgt$, the only way
+to leave $U$ between $t_0$ and $\hgt$ is to be consumed by a transaction, i.e. spent at some
+$\hgt' \le \hgt$. \qedhere
+\end{proof}
+
+The lemma matters for implementation rather than for theory: it turns revocation into a UTXO-set
+membership test, which is exactly the state a pruned node retains (\S8), so revocation checking does
+not force any node to keep history it would otherwise discard. A node that finds
+$\mathsf{rev} \notin U(\hgt)$ without being able to distinguish ``spent'' from ``never existed''
+rejects, which is the fail-closed direction.
+\begin{remark}[Outpoint non-recreatability --- verified]
+\label{rem:outpoint-verified}
+\Cref{lem:utxo-rev} depends on a spent collateral outpoint not being recreatable, which was
+previously assumed from inherited Bitcoin behaviour rather than checked. \fluxd{} enforces BIP-30
+unconditionally in \texttt{ConnectBlock}: a block containing a transaction whose txid already exists
+with unspent outputs is rejected as \texttt{bad-txns-BIP30}, with no height gate and no activation
+flag \shipped \srccode{fluxd/src/main.cpp}{3868--3875}.
+
+One nuance is worth stating precisely rather than glossing, because the rule permits overwrite when
+the prior coins are \emph{completely} spent. For a non-coinbase outpoint, recreating the same txid
+requires replaying a transaction with identical inputs, and those
+inputs are by construction already spent, so the recreation cannot be built. The lemma therefore
+holds for non-coinbase anchors on the deployed rules.
+\end{remark}
+
+\begin{property}[Monotone revocation, and its latency]
+\label{prop:monotone}
+Once $\mathrm{Revoked}(\mathsf{cert},\hgt)$ holds it holds at every $\hgt' > \hgt$, except under a
+reorganisation deeper than $\hgt' - \hgt$. Revocation takes effect after one confirmation of the
+spending transaction plus specification-propagation time.
+\end{property}
+
+\begin{proof}
+Monotonicity is immediate from \cref{def:revoked}: the existential quantifier ranges over a set that
+only grows with $\hgt$. The exception is equally immediate: if a reorganisation removes the block at
+$\hgt'$ containing the spend, the existential no longer witnesses, and the certificate is live again
+on the new chain. By (A3) this is bounded by \texttt{MAX\_REORG\_LENGTH} $=40$ blocks in normal
+operation. Latency: the predicate becomes true for a node at the height at which that node accepts
+the block containing the spend, so one confirmation, plus the time for a specification submitted
+before that height to stop propagating --- during which a node that has not yet seen the spending
+block will still accept. \qedhere
+\end{proof}
+
+At the tooling's figure of $2{,}880$ blocks per day
+\srccode{deploy-with-git-frontend/\allowbreak{}src/\allowbreak{}services/\allowbreak{}deployService.js}{105}, one confirmation is
+approximately \SI{30}{\second} \srcinferred. The honest statement of the guarantee is therefore
+\emph{revocation is effective within one confirmation, and is reversible for up to $40$ blocks
+thereafter}, and a principal revoking in response to a live compromise should assume the agent can
+act for at least that long.
+
+Two weaker designs were considered and rejected. \emph{Expiry alone} --- relying on $t_1$ and issuing
+short certificates --- cannot stop an in-progress compromise: between detection and $t_1$ the agent
+retains full scope, and shortening $t_1$ to make that window small multiplies re-issue traffic
+against a 2-of-2 ceremony that requires two human devices. \emph{A revocation list served over
+HTTPS} is operationally trivial and reintroduces a Flux-operated dependency in the validation path of
+every node, which is precisely the class of dependency \S12 already inventories too many of; it would
+also make revocation checking fail-open on service outage unless every node hard-fails on an
+unreachable list, which is worse.
+
+\subsection{Spending authority, and the honest result}
+\label{sec:agent-identity:spend}
+
+\begin{proposition}[Budget reduces to balance]
+\label{prop:budget-balance}
+On the \Flux\ L1 as deployed, delegating spending authority to a key not held by $\principal$ bounds
+$\agent$'s spending by exactly the balance of the outputs that key can spend, and by nothing else.
+Neither $b_{\mathrm{rate}}$ nor $b_{\mathrm{total}}$ of \cref{def:cert} is enforceable by consensus.
+\end{proposition}
+
+\begin{proof}[Proof sketch]
+Enforcing $b_{\mathrm{rate}}$ or $b_{\mathrm{total}}$ requires a validation predicate that is a
+function of the agent's \emph{transaction history} at spend time: whether the agent has already spent
+$x$ in the preceding $n$ blocks, or $y$ in total since $t_0$. Script validation on a Bitcoin-derived
+chain is a pure function of the spending transaction and the outputs it consumes; a script sees its
+own input, its own transaction, and nothing about which other outputs the same key has spent. By
+(A3), \Flux\ inherits this via Zcash with no covenant opcode, no introspection opcode and no account
+abstraction, so no script can express the predicate, and no consensus rule in \fluxd\ supplies it
+outside script. What remains enforceable is the trivial bound: a key can spend at most the outputs it
+can spend. Hence the only real bound is the funded balance, which is $b_{\mathrm{tx}}$ collapsed into
+$b_{\mathrm{total}}$ and both collapsed into the balance. \qedhere
+\end{proof}
+
+\Cref{prop:budget-balance} is the reason \S\ref{sec:feasibility} classes bounded agent spending as Research (row 13) and
+not as an increment. The deployable construction is correspondingly modest, and is presented as such.
+
+\begin{construction}[Funded allowance]
+\label{con:allowance}
+\planned. $\principal$ funds an address controlled solely by $sk_\agent$ with $b_{\mathrm{total}}$,
+and tops it up on a schedule of the principal's choosing. The agent's maximum spending loss is that
+balance. Revocation of spending authority is a sweep: $\principal$ spends the funded outputs back to
+an address of their own. The sweep races any in-flight agent transaction, and the race is bounded by
+one confirmation --- the same bound as \cref{prop:monotone}, and for the same reason.
+\end{construction}
+
+Three richer constructions exist. They are given as the design space, with costs, not as a
+recommendation.
+
+\begin{enumerate}
+  \item \textbf{2-of-3 with a policy co-signer.} $\agent$ holds one key, $\principal$ a second, and a
+  policy service the third; the service co-signs only transactions inside $\budget$. This is
+  enforceable with what runs today, and the enterprise policy engine of \cref{tab:agent-today} is the
+  obvious substrate --- it already evaluates velocity limits and schedule windows. \emph{Cost: a new
+  trusted party.} The co-signer cannot steal, since it is one key of three, but it can refuse; and for
+  an autonomous agent, refusal is a liveness failure that arrives precisely when the agent most needs
+  to act. A design whose safety property is ``a third party can stop you'' has, for an unattended
+  process, converted a theft risk into an availability risk rather than removing a risk.
+  \item \textbf{Pre-signed rate-limited chain.} $\principal$ pre-signs a sequence of payments with
+  increasing \texttt{nLockTime}, handing $\agent$ a spend schedule it cannot accelerate. No new trust
+  is introduced and nothing new is required of consensus. \emph{Cost:} the amounts and the schedule
+  are fixed at issue, which does not fit demand-driven provisioning --- an agent that needs
+  \SI{40}{\percent} more capacity at hour three cannot buy it --- and revocation requires
+  $\principal$ to broadcast a conflicting spend, which races the agent in the mempool.
+  \item \textbf{Consensus-level delegation registry.} A new transaction type binding $pk_\agent$ to a
+  budget held as consensus state, decremented as the agent spends. This is the clean answer: it makes
+  $\budget$ real, it needs no third party, and it makes $b_{\mathrm{rate}}$ and $b_{\mathrm{total}}$
+  the enforceable objects \cref{prop:budget-balance} says they cannot otherwise be. \emph{Cost:} a
+  consensus change and new consensus state, on a chain that has just completed one major transition
+  --- not cleanly (\S5) --- and has three further changes queued (\S8).
+\end{enumerate}
+
+The paper's position is: \cref{con:allowance} is the deployable baseline; (c) is the principled
+endpoint; the choice between them is not made here.
+\proposednote{\Cref{con:allowance} only --- the funded-allowance construction, with no co-signer,
+pre-signed chain or consensus registry. This follows directly from \Cref{prop:budget-balance}: on this
+chain the only enforceable bound is the balance of the key the agent holds, so the three richer
+endpoints buy expressiveness the consensus layer cannot honour. A co-signer additionally reintroduces
+a trusted third party, which is what the agent-native claim exists to remove
+(\Cref{rem:agent-must-hold-keys}).}
+
+\textbf{The asymmetry with the EVM path should be stated precisely rather than smoothed over.} On the
+parallel-chain accounts, (B) is not hard: the ERC-4337 account already in production is a program
+with persistent state, and it admits a session-key validator module and the sponsorship hook that
+\texttt{IPaymaster} already declares. The account as deployed does not use it --- \texttt{\_validate\allowbreak{}Signature}
+returns valid-with-no-time-bound or failure, never packing \texttt{validUntil}\slash\texttt{validAfter} into
+\texttt{validationData} even though the base class supports it
+\srccode{account-abstraction/\allowbreak{}contracts/\allowbreak{}MultiSigSmartAccount.sol}{145--159} --- but the substrate is
+there. The \Flux\ L1's is not, and no amount of design closes that gap.
+
+\subsection{Invariants}
+\label{sec:agent-identity:invariants}
+
+The specification is required to maintain the following. \planned throughout.
+
+\begin{enumerate}
+  \item \textbf{No escrow.} $sk_\agent$ is generated on the agent's host and never transmitted
+  (A4). Any variant in which a service holds or can reconstruct $sk_\agent$ is a custody design and
+  must be labelled one --- which is exactly what the \FluxCore\ signing path is, and is why
+  \cref{tab:agent-today} names it.
+  \item \textbf{Certificate authenticity.} Every accepted agent action traces to exactly one
+  certificate signed by the full 2-of-2 principal key set. Single-device issuance is forbidden:
+  a delegation issued more weakly than the custody it delegates from would make the delegation, not
+  the custody, the attack surface.
+  \item \textbf{Monotone revocation.} \Cref{prop:monotone}, with the reorg caveat stated and not
+  hidden.
+  \item \textbf{Scope containment.} $s \in \scopeset$ is evaluated by every validating node from the
+  specification and the certificate alone, with no external lookup (\cref{prop:local}).
+  \item \textbf{Loss bound.} \Cref{prop:loss} below.
+\end{enumerate}
+
+\begin{proposition}[Loss bound under full agent compromise]
+\label{prop:loss}
+Let $\adv$ fully compromise $\agent$ at height $\hgt_c \in [t_0,t_1]$, and let $\hgt_r \ge \hgt_c$ be
+the height at which $\principal$'s revocation confirms. Under invariants 1--4 and
+\cref{con:allowance}, the loss is bounded by
+\[
+  \mathrm{Loss}(\adv) \;\le\;
+  \mathrm{bal}\bigl(sk_\agent, \hgt_c\bigr) \;+\;
+  \price^{\max}\!\bigl(\scopeset,\, \min(t_1,\hgt_r) - \hgt_c\bigr),
+\]
+where $\mathrm{bal}(sk_\agent,\hgt_c)$ is the balance of outputs $sk_\agent$ can spend at
+$\hgt_c$ and $\price^{\max}(\scopeset,\Delta)$ is the maximum cost of deployments admissible under
+$\scopeset$ over $\Delta$ blocks. In words: \emph{the maximum loss from full compromise is the
+balance the agent's key controls, plus the cost of any in-scope deployment for the remaining validity
+window.}
+\end{proposition}
+
+\begin{proof}
+By (A4) and invariant 1, $\adv$ obtains $sk_\agent$ and nothing else; by (A5) $\adv$ cannot produce
+$\sigma_{\mathsf{cert}}$ for any certificate $\principal$ did not sign, and cannot forge
+$\sigma_s$ for a different key. So $\adv$'s capabilities are exactly $\agent$'s. Spending: by
+\cref{prop:budget-balance} and \cref{con:allowance}, $\adv$ can move at most the outputs
+$sk_\agent$ controls, i.e. $\mathrm{bal}(sk_\agent,\hgt_c)$, plus any top-up $\principal$ makes after
+$\hgt_c$ --- which the statement excludes by evaluating the balance at $\hgt_c$ and which a principal
+responding to a detected compromise will not make. Deployment: by \cref{def:accept} every accepted
+specification satisfies $s \in \scopeset$ and $t_0 \le \hgt \le t_1$ and
+$\neg\mathrm{Revoked}$, so the admissible set is bounded by $\scopeset$ and the window closes at
+$\min(t_1,\hgt_r)$ --- at $t_1$ by expiry, at $\hgt_r$ by \cref{prop:monotone}. Summing the two
+disjoint capabilities gives the bound. \qedhere
+\end{proof}
+
+Two qualifications travel with \cref{prop:loss} and must not be dropped when it is quoted. First, the
+deployment term is only as tight as $\scopeset$, and by \cref{rem:digest} a scope containing a
+generic-runner image is not tight at all. Second, $\hgt_r$ is not under the principal's full control:
+it depends on detection, on a 2-of-2 ceremony requiring two devices, and on one confirmation.
+
+\subsection{Attack analysis}
+\label{sec:agent-identity:attacks}
+
+\paragraph{Compromised agent.} Covered by \cref{prop:loss}. The worst case is that $\adv$ spends the
+funded balance and deploys anything inside $\scopeset$ until revocation confirms, each such deployment
+then running to its own paid-through height (\Cref{rem:revoke-vs-lifecycle}). Digest-pinned
+$\mathcal{I}$ is what stops ``anything inside $\scopeset$'' from meaning arbitrary code, subject to
+\cref{rem:digest}. Revocation latency is bounded and stateable, which is the property that makes the
+exposure quantifiable rather than open-ended.
+
+\paragraph{Compromised assistant holding no key.} An assistant of the \S19 kind can propose a bad
+specification and can do nothing else: it cannot deploy and it cannot spend, because the acceptance
+predicate requires a signature it cannot produce. \textbf{This property holds only on the
+local-signing path.} On the \FluxCore/Firebase path the assistant's bearer token \emph{is} signing
+authority, and the property fails completely --- there is no key the assistant lacks. Any statement
+of the form ``the assistant configures but never signs'' is a statement about one of two deployed
+paths, and \S19 states it per path. This section's contribution to that discussion is narrow and
+concrete: the delegated path is not a defect so much as an undocumented instance of exactly the
+delegation specified here, running without any of the bounds specified here.
+
+\paragraph{Malicious principal.} $\principal$ issues a certificate, lets $\agent$ act, then claims no
+authorisation was given. The certificate is signed under (A1) and anchored on chain through
+$\mathsf{rev}$, whose creation and spend are both public and heighted, so the claim is
+non-repudiable up to compromise of both principal devices. No additional mechanism is required, and
+none is specified.
+
+\paragraph{Griefing the agent.} $\principal$ revokes mid-operation and strands a running deployment.
+This is deliberate and is not treated as an attack: the principal must always be able to stop the
+agent, and any design that lets an agent resist its principal is worse than the problem it solves.
+Nothing happens to the \emph{workload} at that moment: it continues to its paid-through height under
+the state machine of \S16, which is not restated here (\Cref{rem:revoke-vs-lifecycle}).
+\begin{remark}[Reconciling revocation with \S16's lifecycle: they are orthogonal, and must stay so]
+\label{rem:revoke-vs-lifecycle}
+Revocation and the payment lifecycle both bear on a deployment's lifetime, so the case they must agree on is a
+\textbf{revoked-but-paid} application: the owner has revoked the certificate under which the agent
+deployed it, but the application's paid-through height has not been reached. Neither section
+previously stated the transition, and the reconciliation is this: \textbf{the two state machines are
+orthogonal; revocation gates acceptance, and \S\ref{sec:paying-for-capacity} alone governs a deployment once accepted.}
+
+\S\ref{sec:paying-for-capacity}'s states $\{\textsf{funded},\textsf{grace},\textsf{suspended},\textsf{evicted}\}$
+answer \emph{has this been paid for}. Revocation answers \emph{was this authorised}, and it is evaluated
+once, by \cref{alg:accept} on a submitted message; nothing in this section re-evaluates it for a running
+application. A specification is accepted only while both hold, so a revoked-but-paid application
+\textbf{continues to its paid-through height $e_\app$ like any other paid application, and what
+revocation stops is every further registration, update or renewal under that certificate}. It does not
+pass through \textsf{grace} or \textsf{suspended} either: those two states exist to absorb transient
+funding failures --- a bridge delay, a wallet outage --- and to give a paying tenant time to recover,
+and nothing about the deployment's funding has changed. The cost of this narrowing is stated rather
+than hidden: an owner who revokes a compromised agent's authority does not stop the deployments that
+agent already had accepted; they run out their paid terms, and their cost is the $\price^{\max}$ term
+of \cref{prop:loss}. Stopping them sooner would require every node to re-check
+$\mathsf{rev} \in U(\hgt)$ for running applications at each height, a mechanism this paper does not
+specify.
+
+Two consequences follow, and both are stated rather than left implicit.
+\begin{enumerate}
+  \item \textbf{Nothing is forfeited on revocation.} Unlike moderation eviction
+  (\Cref{rem:o16-burn}), revocation is the owner's own act against their own agent, not against the
+  deployment: the paid term is consumed as for any other paid application, and there is no
+  counterparty and no forfeiture event.
+  \item \textbf{Revocation cannot be used to escape a moderation ban.} Because revocation touches
+  acceptance and nothing else, an owner revoking their own certificate after a ban has been carried
+  changes nothing: the application was already stopped by the ban, and revocation is not a path back
+  to any state.
+\end{enumerate}
+\end{remark}
+
+\paragraph{The relay as a withholding adversary.} The relay cannot sign (\cref{tab:agent-today}), so
+it cannot forge a certificate. It can withhold, and for an autonomous agent withholding is a liveness
+attack against certificate \emph{issuance}. The mitigation is structural rather than added:
+certificates are issued once and used many times, and by \cref{prop:local} a node validating an
+agent's specification consults no relay, so a withholding relay delays a new delegation and does not
+interrupt a running one. Separately, and more urgently: the unauthenticated coordination endpoints
+flagged in the shipped source \srccode{ssp-relay/\allowbreak{}src/\allowbreak{}routes.ts}{253--301} let a party who learns a
+\texttt{wkIdentity} string join that identity's room and post payloads for it. Delegation should not
+be built on top of those endpoints until they are closed, and this section treats closing them as a
+precondition rather than as a parallel improvement.
+
+\paragraph{Sybil agents.} Irrelevant by construction. Authority flows from a certificate, not from an
+identity, so $\adv$ generating $n$ agent key pairs holds $n$ keys and zero authority; each would
+require its own signature under (A1). This is the one adversary in \S2's catalogue that this
+mechanism defeats for free, and the reason is worth naming: nothing in the design is per-identity
+rate-limited or per-identity funded, so there is nothing for extra identities to multiply.
+
+\subsection{Open parameters}
+\label{sec:agent-identity:open}
+
+\begin{remark}[Certificate encoding and location --- resolved by splitting the two authorities]
+\label{rem:cert-location}
+The three candidate locations --- a \specv{9} specification field, a separate broadcast message, or an
+on-chain commitment with off-chain retrieval --- were carried as an undecided choice. They are
+resolvable once the certificate's two halves are separated, because the halves have different
+enforceability and therefore different homes.
+
+\textbf{Deployment authority belongs in a \specv{9} specification field.} It is genuinely
+enforceable: a node validating a deployment already holds the specification, so it can check the
+scope tuple against what is being deployed at exactly the point where the constraint bites, with no
+new message type, no second propagation path, and no retrieval availability problem. The cost is
+real and bounded --- it binds the mechanism to the \specv{9} enforcement height (\S\ref{sec:appspec-v9})
+--- and is worth paying, because the alternatives buy schedule independence with a permanent
+consistency obligation between two propagation paths.
+
+\textbf{Spending authority has no home, because it has no enforcement.}
+\Cref{prop:budget-balance} shows that neither $b_{\mathrm{rate}}$ nor $b_{\mathrm{total}}$ is
+enforceable by consensus on a Bitcoin-derived chain without covenants or introspection; the only
+bound that survives is the balance of the key the agent can spend. Encoding an unenforceable bound
+on-chain would state a guarantee the chain does not provide, which is worse than stating none. The
+spending half of the certificate is therefore advisory: meaningful to an operator or a wallet that
+chooses to honour it, and invisible to consensus.
+
+This split is also what the team's own settled position implies. The protocol offers no automatic
+renewal and no standing spend authority (\Cref{rem:no-protocol-renewal}); convenience of that kind
+is a service-layer product. A certificate scheme that tried to carry enforceable spending limits
+would be reintroducing at the consensus layer precisely what that decision removed.
+\end{remark}
+
+\begin{remark}[What this costs the agent-native claim, stated plainly]
+\label{rem:agent-must-hold-keys}
+Two settled decisions --- no protocol auto-renewal, and spending bounds that collapse to balance ---
+have a consequence for the thesis that should be stated rather than left for a reader to derive. An
+autonomous tenant that provisions, pays and renews without a human \textbf{must hold a signing key
+and use it}, and the only way to bound its exposure is to fund that key with no more than the
+operator is willing to lose. There is no protocol object that says ``this agent may spend at most
+$x$ per day''; \Cref{prop:budget-balance} shows there cannot be one on this chain without a
+consensus change of the class \S\ref{sec:feasibility} calls Research.
+
+The alternative --- delegating to a custodial operator that renews on the tenant's behalf --- works
+today and is what the team expects most users to choose \srcintent{08-answers-round-2.md, round 9},
+but it reintroduces exactly the intermediary the agent-native claim is about removing. The honest
+statement of the target architecture is therefore narrower than ``agents transact without
+intermediaries'': agents transact without intermediaries \emph{if they hold keys}, and the risk of
+holding them is bounded only by funding discipline. The paper makes that claim and not the broader
+one.
+\end{remark}
+
+\proposednote{Whether the scope $\scopeset$ also constrains where value may be sent: it does not.
+\cref{def:scope} bounds what may be deployed and says nothing about
+where value may go, and that asymmetry is kept deliberately. A destination constraint would be
+unenforceable for the same reason a spending cap is (\Cref{prop:budget-balance}): script validation
+cannot observe where a future transaction sends value. Writing an unenforceable constraint into the
+scope tuple would state a guarantee the chain does not provide, which is worse than stating none.}
+
+\proposednote{$t_1 - t_0 = \num{8640}$ blocks, i.e.\ \SI{3}{\day} at the tooling's \num{2880}
+blocks per day. Reasoning: the window is the exposure period after a compromise the owner has not
+noticed, so it should be short; but it is also the re-issuance cadence an autonomous agent must
+survive, so an over-short window converts routine key rotation into a liveness dependency on the
+owner being awake. Three days spans a weekend, which is the shortest interval that does not require
+weekend attention, and it bounds undetected-compromise exposure at three days of the agent's funded
+balance --- a quantity the owner already controls directly. \srcinferred.}
+
+\begin{remark}[\FluxEdge{} scoped tokens fold into the certificate scheme --- settled]
+\label{rem:fold-scoped-tokens}
+\FluxEdge{}'s scoped-token model is to be \textbf{folded into this certificate scheme} rather than
+kept as a separate API-layer authority \srcintent{08-answers-round-2.md, round 16} (\planned). One
+delegation object covers the platform: the same scope tuple, the same revocation semantics, and one
+thing to audit rather than two systems with different trust properties to explain and keep aligned.
+
+The cost is a real coupling and the paper states it: folding binds \FluxEdge{}'s API-layer
+authorisation to the \specv{9} enforcement height (\Cref{rem:cert-location}), because the certificate
+travels in a \specv{9} specification field. Until $\hstar$, \FluxEdge{} necessarily keeps its
+existing tokens, so the convergence is a target state rather than a description of today. The
+alternative --- decoupled schedules --- was available and was not taken, which means the two systems
+must not be allowed to drift apart in the interval.
+\end{remark}
+
+\proposednote{The tooling changes, not the requirement. \Cref{rem:digest} requires $\mathcal{I}$ to
+hold image digests, and the deployed tooling emits a tag; the resolution is that the tooling resolves
+the tag to a digest at specification time and emits the digest. Enforcing at the node instead would
+mean nodes resolving tags themselves at install time, which reintroduces exactly the mutable-reference
+problem digest pinning exists to remove --- two nodes resolving the same tag at different moments can
+legitimately obtain different images. \srcinferred.}
+
+\subsection{Comparison with prior art}
+\label{sec:agent-identity:compare}
+
+\textbf{ERC-4337 session keys} \citep{erc4337} solve authority (B) directly, and the reason they can
+is worth stating precisely rather than gesturing at: an EVM account is a program with persistent
+state, so a validation function can read how much a session key has already spent and refuse the next
+transaction on that basis. The predicate that \cref{prop:budget-balance} shows is inexpressible in
+Bitcoin script is an ordinary storage read in an EVM account. \Flux's parallel-chain accounts inherit
+this capability and do not currently use it; the \Flux\ L1 cannot inherit it at all. The asymmetry is
+not a gap in \Flux's engineering, it is a property of the two execution models, and the paper is more
+useful stating it than pretending to a uniform design across both.
+
+\textbf{Macaroons} \citep{birgisson2014macaroons} are the closest analogue for authority (A), and the
+correspondence is close enough to be worth taking seriously as a design check. A macaroon is a bearer
+credential carrying attenuable caveats that a verifier checks locally, without a lookup against an
+issuing service. \Cref{def:cert} is a macaroon whose caveats are specification predicates
+(\cref{def:scope}), whose verification is \cref{alg:accept}, and whose revocation --- the part
+macaroons conventionally handle worst, since local verification and central revocation pull against
+each other --- is a UTXO spend that every verifier can already see. That is the one place where
+sitting on a chain buys something a general-purpose authorisation scheme does not get for free.
+
+\textbf{Bitcoin covenant proposals} (\texttt{OP\_CHECKTEMPLATEVERIFY}, \texttt{OP\_VAULT}) are the
+primitive that would make (B) enforceable on a UTXO chain \emph{without} a new trusted party, by
+letting an output constrain the transactions that spend it. \Flux\ does not have them. They are the
+correct reference for what construction (c) of \cref{sec:agent-identity:spend} would cost and for what
+it would buy, and they are also the reason the honest framing of row 13 in \S\ref{sec:feasibility} is ``not possible
+here'' rather than ``not possible''.
+
+\textbf{Filecoin} \citep{filecoin2017} payment channels and \textbf{Akash} \citep{akash} lease escrow
+bound a client's spend by pre-funding a channel or an escrow account, which is
+\cref{con:allowance} with better ergonomics and a settlement path attached. The honest framing is
+that \Flux's deployable answer for spending is the same as theirs --- fund a dedicated balance, and
+the balance is the bound --- and that \Flux's advantage is not there. It is in (A): collateralised
+nodes, each independently validating a signed scope predicate over the specification they are about
+to run, is a stronger enforcement story for deployment authority than a marketplace whose provider
+accepts a lease because a broker told it to. That is the claim this section is willing to make, and
+it is deliberately narrower than the one a reader might expect.
+
+%% Drain this section's float queue before the next begins.
+\FloatBarrier

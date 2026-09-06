@@ -1,0 +1,10 @@
+# Tron / Kadena, retrieved 2026-09-04T10:32:49Z
+  TRON TSHXNnsrKGf6KAfosq5mckCnaY7gUfGwBJ    129655.79040299
+  TRON TVkT9g2zzgcztm81RozqBA1UbwzZpoN8cM                 NA
+  TRON TA7U2PTnHDyhHBns3X6NsDndjZDBUE3oUa                 NA
+  TRON THV8NGvAwyaL22kkhkXHVhL7JBDyxRs3BZ                 NA
+  TRON TNSgkA1VqiZ4KDJrVKGoy2f9TgGoNjDFWC                 NA
+  TRON TGwJYVkJGEnS5mWP1SE9zaiXMQ7frCzitj                 NA
+TRON: TronGrid returned no usable data without an API key
+KADENA: the Pact module exposes no total-supply function and balances are per-chain-id;
+        not retrievable from a single key-free endpoint. Left unmeasured.

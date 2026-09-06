@@ -1,0 +1,10 @@
+# FLUX parallel-asset supply, retrieved 2026-09-03T10:09:50Z
+# EVM values assume 8 decimals (FLUX convention); verify per contract.
+ethereum	FAIL	error code: 521
+bsc	440000000.00000000	(raw 44000000000000000)
+polygon	FAIL	{"error":"message: API key disabled, reason: tenant disabled, json-rpc code: -32051, rest code: 403"}
+avalanche	440000000.00000000	(raw 44000000000000000)
+base	440000000.00000000	(raw 44000000000000000)
+solana	59999990.375
+algorand	440000000.0
+ergo	440000000.0

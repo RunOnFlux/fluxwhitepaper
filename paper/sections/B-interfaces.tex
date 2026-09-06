@@ -1,0 +1,563 @@
+\section{Interface specifications}\label{sec:app-interfaces}\label{sec:B-interfaces}
+
+This appendix collects the interface surfaces cited elsewhere in the paper: the \appspec
+that a workload's owner submits and signs, the provisioning APIs an autonomous \agent uses
+to act on it, and the HTTP/RPC surfaces of the running node. A table or listing in this
+appendix shows the \emph{shape} of an interface — its fields, routes, or methods, as they
+appear in the schema or the code that parses it; the claim that a field, route, or method is
+actually exercised by a live consumer rests entirely on the citation printed beside it, never
+on the listing itself, and several rows below are explicitly marked where no such consumer was
+found.
+
+\subsection{The application specification}
+\label{app:appspec}
+
+\subsubsection{The deployed version (\specv{8})}
+\shipped
+
+The evidence establishes \specv{8}'s permitted top-level and per-component keys as an
+explicit whitelist enforced in code — any other key is a hard validation failure — together
+with the chain height at which several fields became legal and two numeric constraints
+(name length, minimum instance count). It does \emph{not} include a machine-readable
+\specv{8} JSON Schema, so the \emph{Type} and \emph{Required} columns below are left blank
+except where a constraint is independently evidenced; where evidence gives a field but not
+its type, required/optional status, or introducing version, the corresponding cell is left
+blank rather than guessed, consistent with this appendix's rule.
+
+\begingroup
+\footnotesize
+\begin{longtable}{@{}p{1.0cm}p{2.1cm}p{1.1cm}p{3.6cm}p{0.9cm}p{1.3cm}p{3.4cm}@{}}
+\caption{\specv{8} field table (deployed FluxOS application specification). ``Introduced''
+gives the enforcement height's version per Table~\ref{tab:v8-heights}, where evidence dates
+the field.}
+\label{tab:v8-fields}\\
+\toprule
+Scope & Field & Type & Constraint & Req. & Introduced & Source \\
+\midrule
+\endfirsthead
+\multicolumn{7}{l}{\small\itshape (Table~\ref{tab:v8-fields} continued)}\\
+\toprule
+Scope & Field & Type & Constraint & Req. & Introduced & Source \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+root & \texttt{version} & --- & height-gated 1--8, see Table~\ref{tab:v8-heights} & --- & v1 (core)\srcinferred & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{1063-1067} \\
+root & \texttt{name} & --- & max length 63 (\specv{8}+), 32 (older) & --- & v1 (core)\srcinferred & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{577,713,1063-1067} \\
+root & \texttt{description} & --- & --- & --- & v1 (core)\srcinferred & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{1063-1067} \\
+root & \texttt{owner} & --- & --- & --- & v1 (core)\srcinferred & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{1063-1067} \\
+root & \texttt{compose} & array & array of components (see below) & --- & v4, 1{,}004{,}000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{231-240} \\
+root & \texttt{instances} & --- & minimum 1 (\specv{8}+, height $\ge$ 2{,}176{,}519), else minimum 3 & --- & not dated in evidence & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{820-831} \\
+root & \texttt{contacts} & --- & --- & --- & v5, 1{,}142{,}000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{231-240} \\
+root & \texttt{geolocation} & --- & \texttt{acXX}\slash\texttt{a!cXX} allow/deny prefix codes & --- & v5, 1{,}142{,}000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{231-240} \\
+root & \texttt{expire} & --- & --- & --- & v6, 1{,}300{,}000 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{231-240} \\
+root & \texttt{nodes} & array & IP allow-list; strict for enterprise apps, advisory only for non-enterprise \specv{8}+ apps & --- & v7 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{231-240}; \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{288-296,295} \\
+root & \texttt{staticip} & --- & --- & --- & v7 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{231-240} \\
+root & \texttt{datacenter} & --- & routes to enterprise-owner nodes; the deferral branch written for it is dead code per one code comment & --- & not dated in evidence & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{568} \\
+root & \texttt{enterprise} & boolean & gates the encryption envelope; ArcaneOS apps & --- & v8, 1{,}932{,}380 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{231-240} \\
+component & \texttt{name} & --- & --- & --- & --- & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{1068-1071} \\
+component & \texttt{description} & --- & --- & --- & --- & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{1068-1071} \\
+component & \texttt{repotag} & --- & Docker Hub \texttt{repo:tag}; whitelist, existence and architecture checked (\texttt{imageManager.\allowbreak{}verifyRepository}) & --- & --- & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{1068-1071,1243-1400} \\
+component & \texttt{ports} & --- & --- & --- & --- & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{1068-1071} \\
+component & \texttt{containerPorts} & --- & --- & --- & --- & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{1068-1071} \\
+component & \texttt{environment\allowbreak{}Parameters} & --- & --- & --- & --- & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{1068-1071} \\
+component & \texttt{commands} & --- & --- & --- & --- & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{1068-1071} \\
+component & \texttt{containerData} & string & persistent-storage mount path (contrast \texttt{volumes} in \specv{9}, Table~\ref{tab:v9-fields}) & --- & --- & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{1068-1071} \\
+component & \texttt{domains} & --- & --- & --- & --- & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{1068-1071} \\
+component & \texttt{repoauth} & --- & private-image credential; when set, skips the Docker Hub whitelist/existence check path & --- & v7 & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{231-240}; \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{1243-1400} \\
+component & \texttt{cpu} & --- & --- & --- & --- & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{1068-1071} \\
+component & \texttt{ram} & --- & --- & --- & --- & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{1068-1071} \\
+component & \texttt{hdd} & --- & --- & --- & --- & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{1068-1071} \\
+\end{longtable}
+\endgroup
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{@{}lllp{6.5cm}@{}}
+\toprule
+Version & Mainnet height & Dev height & Notes \\
+\midrule
+1 & 0 & 0 & deprecated for fresh submissions \\
+2 & 0 & 0 & --- \\
+3 & 983{,}000 & 983{,}000 & \specv{1}/\specv{2} still submittable by users; UI allows only \specv{2}/\specv{3} \\
+4 & 1{,}004{,}000 & 1{,}004{,}000 & \texttt{compose} array (composition) \\
+5 & 1{,}142{,}000 & 1{,}142{,}000 & \texttt{contacts}, \texttt{geolocation} \\
+6 & 1{,}300{,}000 & 1{,}300{,}000 & \texttt{expire}, app price change, tier \texttt{t3} \\
+7 & 1{,}420{,}000 & 1{,}390{,}000 & \texttt{nodes} targeting, \texttt{secrets}, \texttt{repoauth}, \texttt{staticip} \\
+8 & 1{,}932{,}380 & 1{,}921{,}500 & \texttt{enterprise}/ArcaneOS apps \\
+\bottomrule
+\end{tabular}
+\caption{\specv{1}--\specv{8} enforcement heights,
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{231-240}.}
+\label{tab:v8-heights}
+\end{table}
+
+\subsubsection{The draft \specv{9} schema}
+\inprogress
+
+The \specv{9} draft is a JSON Schema (draft 2020-12), and unlike \specv{8} its full field-level
+type and constraint information is available \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{2-3}. Every
+object in the schema sets \texttt{additionalProperties:\allowbreak false}, so an unlisted key
+at any level is a validation failure, not a silent drop
+\srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{7}. Ten fields are required at the root; three of them
+(\texttt{paymentMemo}, \texttt{referralCode}, \texttt{machineType}) have zero occurrences
+anywhere in the \FluxOS fork that otherwise implements most of \specv{9}'s substrate — no
+billing, referral, or capacity-tier code reads them
+\srcbranch{MorningLightMountain713/\allowbreak{}flux}{feat/fluxos-v9}{ZelBack/src/services/pricing/v9PricingRegime.js
+(grep: zero hits for paymentMemo, referralCode, machineType)}. If \texttt{route.protocol} is
+\texttt{tcp}, the fields \texttt{scheme}, \texttt{httpsRedirect}, \texttt{customDomains} and
+\texttt{managed\allowbreak{}Certificates} are structurally forbidden by an \texttt{if}\slash\texttt{then} block,
+not merely ignored \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{336-350}.
+
+\begingroup
+\footnotesize
+\begin{longtable}{@{}p{1.1cm}p{2.3cm}p{5.4cm}p{1.3cm}p{2.6cm}@{}}
+\caption{\specv{9} draft field table (\texttt{flux-spec/\allowbreak{}schema/\allowbreak{}v9.\allowbreak{}json}, RFC-0). \texttt{\$defs.component}
+values sit under \texttt{components.*}; \texttt{\$defs.route} values sit under
+\texttt{loadBalancing.\allowbreak{}routes.\allowbreak{}*}.}
+\label{tab:v9-fields}\\
+\toprule
+Scope & Field & Type / constraint & Req. & Source (schema/v9.json) \\
+\midrule
+\endfirsthead
+\multicolumn{5}{l}{\small\itshape (Table~\ref{tab:v9-fields} continued)}\\
+\toprule
+Scope & Field & Type / constraint & Req. & Source (schema/v9.json) \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+root & \texttt{version} & \texttt{const: 9} & yes & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{21-24} \\
+root & \texttt{name} & pattern \texttt{\^{}[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\$}, maxLength 63 & yes & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{25-28,85-90} \\
+root & \texttt{description} & string, minLength 1, maxLength 256 & yes & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{29-34} \\
+root & \texttt{owner} & string, minLength 1 & yes & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{35-39} \\
+root & \texttt{components} & object map, minProperties 1, keys=\texttt{dnsLabel} & yes & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{40-46} \\
+root & \texttt{loadBalancing} & object, \texttt{additional\allowbreak{}Properties:\allowbreak{}false}, requires \texttt{routes} & yes & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{47-61} \\
+root & \texttt{loadBalancing.\allowbreak{}routes} & object map, minProperties 1, keys=\texttt{dnsLabel} & yes (nested) & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{53-59} \\
+root & \texttt{duration} & integer, minimum 1 (seconds; example 2{,}592{,}000 = 30 days) & yes, new & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{62-66} \\
+root & \texttt{paymentMemo} & string, minLength 1, maxLength 512 (provisional) & yes, new & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{67-72} \\
+root & \texttt{referralCode} & string, minLength 1, maxLength 64 (provisional) & yes, new & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{73-78} \\
+root & \texttt{machineType} & enum \texttt{standard\char`|gpu\char`|vps} & yes, new & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{79-82} \\
+component & \texttt{image} & string, minLength 1 (replaces \texttt{repotag}) & yes & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{103-107} \\
+component & \texttt{cpu} & number, exclusiveMinimum 0 (cores, decimal) & yes & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{108-112} \\
+component & \texttt{memory} & integer, exclusiveMinimum 0 (MiB; replaces \texttt{ram}) & yes & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{113-117} \\
+component & \texttt{rootFsGb} & integer, minimum 1 (GiB; replaces \texttt{hdd}) & yes & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{118-122} \\
+component & \texttt{replicas} & integer, minimum 1, default 1 & yes & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{123-128} \\
+component & \texttt{ports} & object map, keys=\texttt{dnsLabel} & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{129-150} \\
+component & \texttt{ports.\allowbreak{}*.\allowbreak{}containerPort} & integer, 1--65535 & yes (in obj) & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{138-142} \\
+component & \texttt{ports.\allowbreak{}*.\allowbreak{}protocol} & enum \texttt{tcp\char`|http} & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{144-147} \\
+component & \texttt{volumes} & object map, keys=\texttt{dnsLabel} (replaces \texttt{containerData} string) & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{151-172} \\
+component & \texttt{volumes.\allowbreak{}*.\allowbreak{}size\allowbreak{}Gb} & integer, minimum 1 & yes (in obj) & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{160-163} \\
+component & \texttt{volumes.\allowbreak{}*.\allowbreak{}mount\allowbreak{}Path} & string, pattern \texttt{\^{}/} & yes (in obj) & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{165-168} \\
+component & \texttt{placement} & object, \texttt{additional\allowbreak{}Properties:\allowbreak{}false} & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{173-188} \\
+component & \texttt{placement.mode} & enum \texttt{active-standby\char`|active-active} & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{178-181} \\
+component & \texttt{placement.\allowbreak{}syncBeforeStart} & boolean, default false & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{182-185} \\
+route & \texttt{protocol} & enum \texttt{http\char`|tcp} & yes & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{197-200} \\
+route & \texttt{targetPort} & string, pattern \texttt{<component>/\allowbreak{}<port>}, maxLength 127 & yes & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{201-206} \\
+route & \texttt{scheme} & enum \texttt{http\char`|https} (HTTP only) & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{207-210} \\
+route & \texttt{httpsRedirect} & boolean (HTTP only) & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{211-214} \\
+route & \texttt{customDomains} & array of FQDN, minItems 1, uniqueItems, item maxLength 253 (HTTP only) & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{215-226} \\
+route & \texttt{managed\allowbreak{}Certificates} & boolean (HTTP only) & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{227-230} \\
+route & \texttt{healthCheck} & object, \texttt{additional\allowbreak{}Properties:\allowbreak{}false} & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{231-257} \\
+route & \texttt{health\allowbreak{}Check.\allowbreak{}path} & string, pattern \texttt{\^{}/} & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{236-240} \\
+route & \texttt{healthCheck.\allowbreak{}intervalSeconds} & integer, minimum 1 & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{241-245} \\
+route & \texttt{healthCheck.\allowbreak{}timeoutSeconds} & integer, minimum 1 & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{246-250} \\
+route & \texttt{healthCheck.\allowbreak{}unhealthyThreshold} & integer, minimum 1 & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{251-255} \\
+route & \texttt{timeouts} & object, \texttt{additional\allowbreak{}Properties:\allowbreak{}false} & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{258-274} \\
+route & \texttt{timeouts.\allowbreak{}requestSeconds} & integer, minimum 1 & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{263-267} \\
+route & \texttt{timeouts.\allowbreak{}idleSeconds} & integer, minimum 1 & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{268-272} \\
+route & \texttt{stickySessions} & boolean & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{275-278} \\
+route & \texttt{connection\allowbreak{}Limits} & object, \texttt{additional\allowbreak{}Properties:\allowbreak{}false} & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{279-290} \\
+route & \texttt{connectionLimits.\allowbreak{}maxConnections} & integer, minimum 1 & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{284-288} \\
+route & \texttt{retries} & integer, minimum 0 & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{291-295} \\
+route & \texttt{backendTls} & object, \texttt{additional\allowbreak{}Properties:\allowbreak{}false}, requires \texttt{enabled} & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{296-317} \\
+route & \texttt{backend\allowbreak{}Tls.\allowbreak{}enabled} & boolean & yes (in obj) & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{301-304} \\
+route & \texttt{backendTls.\allowbreak{}certificateAuthorities} & array of PEM strings, minItems 1 & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{306-315} \\
+route & \texttt{connection\allowbreak{}Draining} & object, \texttt{additional\allowbreak{}Properties:\allowbreak{}false}, requires \texttt{enabled} & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{318-334} \\
+route & \texttt{connectionDraining.\allowbreak{}enabled} & boolean & yes (in obj) & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{323-326} \\
+route & \texttt{connectionDraining.\allowbreak{}drainSeconds} & integer, minimum 1 & no & \srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{328-332} \\
+\end{longtable}
+\endgroup
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{@{}lllp{5.4cm}@{}}
+\toprule
+Change & \specv{8} & \specv{9} & Note \\
+\midrule
+Renamed & \texttt{compose} & \texttt{components} & positional array $\to$ keyed map, order carried by key name \\
+Renamed & \texttt{repotag} & \texttt{image} & \\
+Renamed & \texttt{ram} & \texttt{memory} & \\
+Renamed & \texttt{hdd} & \texttt{rootFsGb} & \\
+Reshaped & \texttt{containerData} (string) & \texttt{volumes} (map) & sized, per-volume \texttt{mountPath} \\
+Reshaped & \texttt{ports}\slash\texttt{containerPorts} & \texttt{ports} (named) & \\
+Removed & \texttt{enterprise} & --- & no replacement in the draft; the private-deployment encryption envelope is deferred to a future revision \\
+Added, required & --- & \texttt{loadBalancing} & routes, health checks, TLS, draining declared in-spec \\
+Added, required & --- & \texttt{duration} & \\
+Added, required & --- & \texttt{paymentMemo} & no consumer implementation found \\
+Added, required & --- & \texttt{referralCode} & no consumer implementation found \\
+Added, required & --- & \texttt{machineType} & no consumer implementation found \\
+\bottomrule
+\end{tabular}
+\caption{\specv{9} vs.\ \specv{8} delta.
+\srccode{flux-spec/\allowbreak{}README.md}{13-21,58-67,95-96};
+\srcbranch{MorningLightMountain713/\allowbreak{}flux}{feat/fluxos-v9}{ZelBack/src/services/pricing/v9PricingRegime.js
+and ZelBack/, tests/ (grep: zero hits for paymentMemo, referralCode, machineType)}.}
+\label{tab:v9-delta}
+\end{table}
+
+\subsubsection{Two artifacts, not one}
+
+The name ``\specv{9}'' is claimed by two objects that are not the same artifact. The first is
+\texttt{Run\allowbreak{}On\allowbreak{}Flux/\allowbreak{}flux-\allowbreak{}spec}, the RFC-0 draft repository tabulated above: schema-only, two
+commits on one day, \texttt{private:\allowbreak true}, no \texttt{bin}\slash\texttt{main}\slash\texttt{exports} field, no CI, and
+explicitly self-described as ``\emph{not live on the network}''
+\srcdoc{flux-spec/README.md:3}. The second is what the active contributor fork's \FluxOS
+code actually requires at runtime: \texttt{specLibs.js} pulls
+\texttt{@runonflux/\allowbreak{}flux-spec-cjs} from a \emph{different}, monorepo-structured,
+commit-pinned private package (\texttt{packages/spec}, \texttt{spec-backend},
+\texttt{spec-policy}) that is not present in this paper's evidence corpus at all
+\srcbranch{MorningLightMountain713/\allowbreak{}flux}{feat/fluxos-v9}{package.json:87-90};
+\srcbranch{MorningLightMountain713/\allowbreak{}flux}{feat/fluxos-v9}{ZelBack/src/services/utils/specLibs.js:1-30}.
+No evidence available to this paper shows the RFC-0 repository's \texttt{schema/v9.json}
+being read by \FluxOS, \texttt{fluxos-\allowbreak{}frontend}, or any other deployed service
+\srcdoc{flux-spec/README.md:120-125}. This paper therefore does not present the RFC-0 draft
+and the fork's implementation as one object.
+
+One concrete divergence was found between them, and it is left unresolved because the
+evidence does not resolve it: RFC-0's schema names the duration field \texttt{duration}
+\srccode{flux-spec/\allowbreak{}schema/\allowbreak{}v9.json}{15,62}, while the fork's pricing code reads the same
+concept off \texttt{spec.ttl} in six places
+\srcbranch{MorningLightMountain713/\allowbreak{}flux}{feat/fluxos-v9}{ZelBack/src/services/pricing/v9PricingRegime.js:95,108,122,128,183,228,279,308}.
+Whether this is an internal rename inside an unavailable vendored class or a genuine
+schema/implementation drift could not be determined from the evidence available to this
+paper; the two names are reported here, not merged.
+
+\subsubsection{Canonicalization}
+
+Canonicalization matters because it is what a fingerprint — and, by extension, a signature
+over that fingerprint — would cover. The RFC-0 draft specifies, as prose, RFC~8785 JSON
+Canonicalization Scheme (JCS) as its base: UTF-8 encoding, no insignificant whitespace,
+object keys sorted lexicographically by UTF-16 code unit, RFC~8785 minimal string escaping,
+and ECMAScript \texttt{Number::\allowbreak{}to\allowbreak{}String} shortest-round-trip number formatting
+\srcdoc{flux-spec/validation/canonicalization.md:9-20}. On top of JCS it adds three
+\specv{9}-specific rules: keyed maps (\texttt{components}, \texttt{ports}, \texttt{volumes},
+\texttt{loadBalancing.\allowbreak{}routes}) carry ordering structurally through key-sort, so no
+positional normalization is needed \srcdoc{flux-spec/validation/canonicalization.md:24-29};
+order-insensitive arrays (\texttt{customDomains}, \texttt{certificate\allowbreak{}Authorities})
+\emph{must} be sorted lexicographically by the producer before serialization
+\srcdoc{flux-spec/validation/canonicalization.md:31-38}; and defaults
+(\texttt{replicas:\allowbreak 1}, \texttt{placement.syncBeforeStart:\allowbreak false})
+\emph{must} be materialized explicitly before serialization, so an omitted field and its
+explicit default hash identically \srcdoc{flux-spec/validation/canonicalization.md:40-45}.
+A fingerprint is then defined as \texttt{hex(SHA256(SHA256(canonical\_bytes)))}, labelled
+``recommended,'' not required \srcdoc{flux-spec/validation/canonicalization.md:53-63}.
+
+These three \specv{9}-specific rules are stated with the normative word \texttt{MUST} and
+have \emph{no schema-level or code-level enforcement anywhere in the evidence}: JSON Schema
+has no array-sort keyword, and nothing in the repository's own validation harness checks
+array order or default materialization
+\srcdoc{flux-spec/validation/canonicalization.md:31-38,40-45}. A document can therefore be
+schema-\emph{valid} and canonically \emph{invalid} — two producers who disagree only on
+array order or on whether they wrote out a default will validate identically and fingerprint
+differently, with nothing in the evidence-cited code path that would detect it. Separately,
+and independent of the enforcement gap: \texttt{schema/v9.json} contains \emph{no
+\texttt{signature} field anywhere}, confirmed by grep across the RFC-0 repository
+\srcdoc{flux-spec/schema/v9.json (grep: no signature/signed field)}. The draft defines a
+fingerprint recipe for comparing two documents; it does not define who signs a submitted
+\specv{9} specification, or what exactly is signed.
+
+\begin{lstlisting}[caption={A schema-conformant \specv{9} specification. Note the four
+required, new-in-\specv{9} fields (\texttt{duration}, \texttt{paymentMemo},
+\texttt{referralCode}, \texttt{machineType}) with no \FluxOS consumer
+(Table~\ref{tab:v9-delta}); the keyed \texttt{components} map replacing \specv{8}'s
+positional \texttt{compose} array; and \texttt{customDomains} pre-sorted per the
+canonicalization \texttt{MUST} rule that nothing here enforces.},
+label=lst:v9-example, language=json, basicstyle=\footnotesize\ttfamily]
+{
+  "version": 9, "name": "orbit-demo",
+  "description": "Reference Orbit deployment",
+  "owner": "1FluxOwnerZelIDxxxxxxxxxxxxxxxx",
+  "components": { "web": {
+    "image": "runonflux/orbit:latest",
+    "cpu": 1, "memory": 2048, "rootFsGb": 10, "replicas": 2
+  }},
+  "loadBalancing": { "routes": { "web": {
+    "protocol": "http", "targetPort": "web/http",
+    "customDomains": ["example.com", "www.example.com"]
+  }}},
+  "duration": 2592000,
+  "paymentMemo": "sub-2026-09",
+  "referralCode": "none",
+  "machineType": "standard"
+}
+\end{lstlisting}
+
+\subsection{The Provider Runtime Contract v0}
+\inprogress
+
+The Provider Runtime Contract v0 is an RFC draft with no consumer: its own text states it is
+``published for FluxCore-team sign-off \dots{} nothing here is live''
+\srcdoc{flux-spec/provider-runtime/contract.md:3-8}, and no code outside this schema and its
+fixture harness reads it.
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{@{}p{3.1cm}p{6.5cm}p{1.1cm}p{3.2cm}@{}}
+\toprule
+Field & Type / constraint & Req. & Source \\
+\midrule
+\texttt{contract\allowbreak{}Version} & \texttt{const: 0} & yes & \srccode{flux-spec/\allowbreak{}provider-runtime/\allowbreak{}provider-registration.schema.json}{16-18} \\
+\texttt{providerId} & string, minLength 1, maxLength 128, opaque to platform & yes & \srccode{flux-spec/\allowbreak{}provider-runtime/\allowbreak{}provider-registration.schema.json}{20-24} \\
+\texttt{capabilities} & object, \texttt{additional\allowbreak{}Properties:\allowbreak{}false}, requires \texttt{bonded}, \texttt{gpu}, \texttt{staticIP} & yes & \srccode{flux-spec/\allowbreak{}provider-runtime/\allowbreak{}provider-registration.schema.json}{26-45} \\
+\texttt{capabilities.\allowbreak{}bonded} & boolean & yes (in obj) & \srccode{flux-spec/\allowbreak{}provider-runtime/\allowbreak{}provider-registration.schema.json}{32-35} \\
+\texttt{capabilities.\allowbreak{}gpu} & boolean & yes (in obj) & \srccode{flux-spec/\allowbreak{}provider-runtime/\allowbreak{}provider-registration.schema.json}{36-39} \\
+\texttt{capabilities.\allowbreak{}staticIP} & boolean & yes (in obj) & \srccode{flux-spec/\allowbreak{}provider-runtime/\allowbreak{}provider-registration.schema.json}{40-43} \\
+\texttt{heartbeat\allowbreak{}Interval\allowbreak{}Seconds} & integer, [10, 300]; 60 stated as ``expected default,'' not a schema \texttt{default} & yes & \srccode{flux-spec/\allowbreak{}provider-runtime/\allowbreak{}provider-registration.schema.json}{46-50} \\
+\texttt{attestations} & array, minItems 1, absence = standard trust tier & no & \srccode{flux-spec/\allowbreak{}provider-runtime/\allowbreak{}provider-registration.schema.json}{52-75} \\
+\texttt{attestations[].\allowbreak{}evidenceType} & string, pattern \texttt{\^{}[a-z0-9]([a-z0-9-]*[a-z0-9])?\$}, maxLength 63; open token registry, not a closed enum & yes (in item) & \srccode{flux-spec/\allowbreak{}provider-runtime/\allowbreak{}provider-registration.schema.json}{60-65} \\
+\texttt{attestations[].\allowbreak{}reference} & string, minLength 1, maxLength 512 & yes (in item) & \srccode{flux-spec/\allowbreak{}provider-runtime/\allowbreak{}provider-registration.schema.json}{66-71} \\
+\texttt{payout\allowbreak{}Destination} & string, minLength 1, maxLength 128 (ZelID today) & yes & \srccode{flux-spec/\allowbreak{}provider-runtime/\allowbreak{}provider-registration.schema.json}{76-80} \\
+\bottomrule
+\end{tabular}
+\caption{Provider Runtime Contract v0 — provider-registration schema, 11 fields (12 counting
+the nested \texttt{capabilities} object separately).}
+\label{tab:provider-registration}
+\end{table}
+
+The heartbeat ladder itself is specified only in prose, with no implementation of the state
+machine anywhere in the evidence \srcdoc{flux-spec/provider-runtime/contract.md:63-85}. A
+heartbeat is defined payload-agnostically, as any authenticated message from the provider
+within the interval \srcdoc{flux-spec/provider-runtime/contract.md:67-69}, and clock
+authority is stated to be the platform's, not the provider's
+\srcdoc{flux-spec/provider-runtime/contract.md:83}.
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{@{}p{2.6cm}p{5.5cm}p{2.6cm}p{2.5cm}@{}}
+\toprule
+From & Trigger & To & Source \\
+\midrule
+registered, on-time & interval expires, no heartbeat & LATE (recorded, no action) & \srcdoc{flux-spec/provider-runtime/contract.md:63-85} \\
+LATE & 3 consecutive expired intervals & SUSPENDED (no new work; in-flight work runs to its booking boundary) & \srcdoc{flux-spec/provider-runtime/contract.md:75-80} \\
+SUSPENDED & 10 consecutive expired intervals (total) & LAPSED (registration removed from scheduling) & \srcdoc{flux-spec/provider-runtime/contract.md:78-81} \\
+LAPSED & --- & only path back is a fresh registration (full payload, current evidence); no silent resume & \srcdoc{flux-spec/provider-runtime/contract.md:63-85} \\
+any state & authenticated heartbeat within interval & on-time & \srcdoc{flux-spec/provider-runtime/contract.md:63-85} \\
+\bottomrule
+\end{tabular}
+\caption{Provider Runtime Contract v0 heartbeat state machine (prose specification; no code
+implementation found in the evidence).}
+\label{tab:heartbeat}
+\end{table}
+
+\subsection{The agent-facing provisioning API}
+\inprogress
+\label{app:agentapi}
+
+\textbf{\shipped\ parts of this surface are cited individually below}; the section as a
+whole mixes a shipped API (FluxEdge) with an early-stage one (the MCP server), so the
+maturity tag is attached per claim rather than once for the section.
+
+\subsubsection{MCP tools: \texttt{deploy\_app}, \texttt{update\_app}, \texttt{renew\_app}}
+\shipped
+
+\texttt{deploy-\allowbreak{}with-\allowbreak{}git-\allowbreak{}frontend} exposes an MCP server (\texttt{POST /mcp}, bearer-token
+authenticated, JSON-RPC) with fifteen tools, of which \texttt{deploy\_app},
+\texttt{update\_app} and \texttt{renew\_app} are the non-read-only, state-changing ones
+relevant here \srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}mcp/\allowbreak{}createServer.js}{13-53,66-266};
+\srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}mcp/\allowbreak{}router.js}{13-44}.
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{@{}p{2.1cm}p{6.3cm}p{4.9cm}@{}}
+\toprule
+Tool & What it does & Source \\
+\midrule
+\texttt{deploy\_app} & ``Revalidate, Firebase-sign, register, and test-install an Orbit
+app'' (tool's own description) & \srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}mcp/\allowbreak{}createServer.js}{174-177} \\
+\texttt{update\_app} & submits a signed update to an existing app spec via
+\texttt{UpdateService.\allowbreak{}submit()}, which relays the message through the same Firebase-sign
+path as \texttt{deploy\_app} & \srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}orbit/\allowbreak{}updateService.js}{68-79} \\
+\texttt{renew\_app} & listed as an MCP tool; evidence does not give a description string or
+locate its backing service function beyond its inclusion among the tools flagged
+\texttt{destructiveHint:\allowbreak true} & \srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}mcp/\allowbreak{}createServer.js}{170-266} \\
+\bottomrule
+\end{tabular}
+\caption{MCP provisioning tools. All three are \texttt{destructive\allowbreak{}Hint:\allowbreak{}true}, non-read-only
+tools that execute against live Flux state given only a Firebase bearer token
+\srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}mcp/\allowbreak{}createServer.js}{170-266}.}
+\label{tab:mcp-tools}
+\end{table}
+
+\notestablished{the exact JSON-RPC parameter schema (argument names and types) for
+\texttt{deploy\_app}, \texttt{update\_app} and \texttt{renew\_app} is not given in the
+available evidence beyond the underlying app-spec fields the frontend assembles from a
+wizard (repo URL, branch, plan, ports, domain, \dots{}) — those are documented for the
+web-wizard flow, not confirmed as the literal MCP tool-call parameter names
+\srccode{deploy-with-git-frontend/\allowbreak{}src/\allowbreak{}services/\allowbreak{}deployService.js}{194-219,334-343,451,453-490}.}
+
+For the Firebase/FluxCore-SSO path — which is what every server-side MCP call above uses —
+signing is remote and custodial: the frontend server POSTs the message and the caller's
+Firebase ID token to \texttt{service.\allowbreak{}fluxcore.\allowbreak{}ai/\allowbreak{}api/\allowbreak{}signMessage}, a remote service that
+signs on the user's behalf, authorized only by that bearer token
+\srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}flux/\allowbreak{}fluxSession.js}{60-73};
+\srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}orbit/\allowbreak{}deploymentService.js}{158-173}. Given a valid
+Firebase bearer token, an MCP client can drive spec construction through signed,
+on-chain registration submission with no client-side wallet interaction at all
+\srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}mcp/\allowbreak{}createServer.js}{66-266}.
+
+\subsubsection{The FluxEdge OpenAPI surface and \texttt{fluxedge-cli}}
+\shipped
+
+FluxEdge (\texttt{pouwbackend}) publishes an OpenAPI~3.1.1 REST~v1 surface at
+\texttt{/api/v1} \srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}v1/\allowbreak{}openapi.yaml}{1-4}, with paths including
+\texttt{GET /gpus}, \texttt{GET /computers}, \texttt{GET /\allowbreak{}hardware\_offers},
+\texttt{POST /\allowbreak{}rental/\allowbreak{}start}, \texttt{POST /\allowbreak{}rental/\allowbreak{}stop}, \texttt{POST /\allowbreak{}rental/\allowbreak{}stopAll},
+\texttt{POST /\allowbreak{}rental/\allowbreak{}startPremium}, \texttt{GET /\allowbreak{}deployments},
+\texttt{POST /\allowbreak{}deployment/\allowbreak{}start}, \texttt{POST /\allowbreak{}deployment/\allowbreak{}stop},
+\texttt{POST /\allowbreak{}deployment/\allowbreak{}stopAll}, \texttt{POST /\allowbreak{}deployment/\allowbreak{}redeploy}, and
+\texttt{POST /\allowbreak{}deployment/\allowbreak{}update} \srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}v1/\allowbreak{}openapi.yaml}{463-2193}.
+\texttt{fluxedge-cli} is a cross-platform Go CLI wrapping this surface, with key precedence
+\texttt{FLUXEDGE\_API\_KEY} env var $>$ \texttt{\textasciitilde{}/.fluxedge/fluxedge.yaml}
+$>$ \texttt{--api-key} flag, and \texttt{-o json} output explicitly recommended for
+scripting \srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}v1/\allowbreak{}openapi.yaml}{127-156}.
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{@{}p{3.0cm}p{6.5cm}p{2.9cm}@{}}
+\toprule
+Token scope & Enforced against & Source \\
+\midrule
+\texttt{start\_rental} & \texttt{POST /\allowbreak{}v1/\allowbreak{}rental/\allowbreak{}start} & \srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}ratelimit.go}{378-390} \\
+\texttt{stop\_rental} & \texttt{POST /\allowbreak{}v1/\allowbreak{}rental/\allowbreak{}stop}, \texttt{POST /\allowbreak{}v1/\allowbreak{}rental/\allowbreak{}stopAll} & \srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}ratelimit.go}{378-390} \\
+\texttt{start\_deployment} & \texttt{POST /\allowbreak{}v1/\allowbreak{}deployment/\allowbreak{}start} & \srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}ratelimit.go}{378-390} \\
+\texttt{stop\_deployment} & \texttt{POST /\allowbreak{}v1/\allowbreak{}deployment/\allowbreak{}stop} & \srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}ratelimit.go}{378-390} \\
+\texttt{get\_balance} & enumerated in the same privilege block; no path mapping given in evidence & \srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}v1/\allowbreak{}openapi.yaml}{2576-2581} \\
+\bottomrule
+\end{tabular}
+\caption{FluxEdge bearer-token scopes,
+\srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}v1/\allowbreak{}openapi.yaml}{2571-2581}. Auth scheme:
+\texttt{BearerAuth}, \texttt{bearer\allowbreak{}Format:\allowbreak{} API\_KEY}.}
+\label{tab:fluxedge-scopes}
+\end{table}
+
+Rate limiting and abuse handling are both real, shipped code, keyed independently on the
+hashed API key and on the caller's IP: 2 requests/second, reset window 1\,s
+\srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}ratelimit.go}{41-42,79-88}; a key or IP that accumulates 5
+violations within a rolling 5-minute window is automatically revoked
+(\texttt{db.\allowbreak{}Revoke\allowbreak{}APIKey}, owner email, cache eviction, HTTP~403)
+\srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}ratelimit.go}{143-222}; violations themselves auto-expire
+after 1 hour \srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}ratelimit.go}{45}.
+
+\begin{lstlisting}[caption={A criteria-based rental request and its response. The token that
+issues this call is scoped to \texttt{start\_rental} (Table~\ref{tab:fluxedge-scopes}) but
+carries no bound on \texttt{max\_price\_per\_hour} or \texttt{nb\_computers} beyond what the
+caller writes into the request body.}, label=lst:fluxedge-rental-schema, language=json,
+basicstyle=\footnotesize\ttfamily]
+// POST /rental/start
+{"min_memory":16,"min_storage":500,"gpu":"RTX3080","nb_gpu":1,
+ "region":"NorthAmerica","max_price_per_hour":0.5,
+ "nb_computers":3,"premium":"none"}
+// 200
+{"rentals":[{"rental_id":8782678,"price_per_hour":0.5,
+ "status":"active","computer":{"hash":"e5b37bd2716472",
+ "memory":16,"storage":500,"gpus":["RTX3080"],"nb_gpu":1,
+ "region":"NorthAmerica","cluster_name":"us-east-1",
+ "price_per_hour":0.5}}]}
+\end{lstlisting}
+\srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}v1/\allowbreak{}openapi.yaml}{1330-1338,1358-1382}
+
+\paragraph{Two properties a reader needs in order to evaluate this surface.} First, there is
+no self-service key issuance: key issuance is not exposed anywhere in the REST~v1/OpenAPI
+surface, and the CLI documentation itself points callers to a web dashboard
+(\texttt{pouwmarketplace.runonflux.io/\#/account/api}) — a human must mint a token before an
+agent can use this API at all \srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}v1/\allowbreak{}openapi.yaml}{170};
+\srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}ratelimit.go}{375-390}. Second, a token carries no spend
+bound: its scopes bound which \emph{actions} it may call (Table~\ref{tab:fluxedge-scopes}),
+not the \emph{value} those actions commit — there is no per-transaction cap, no rate limit
+on value, no budget, no scope over value, and no revocation mechanism beyond invalidating
+the token outright on abuse (Table~\ref{tab:fluxedge-scopes}'s rate-limit/revocation
+mechanism triggers on request volume, never on spend). \S17 specifies the delegation
+primitive that would bound this; as deployed today, authority is bounded by action and
+unbounded by value.
+
+\subsection{The FluxOS HTTP surface}
+\shipped
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{@{}p{1.6cm}p{7.4cm}p{2.8cm}p{2.9cm}@{}}
+\toprule
+Route group & Representative endpoints & Privilege tier & Source \\
+\midrule
+\texttt{/daemon/*} & \texttt{getinfo}, \texttt{listfluxnodes}, \texttt{getbestblockhash} (GET) & public/cached & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}routes.js}{78-120} \\
+& \texttt{prioritisetransaction}, \texttt{submitblock} (GET) & \texttt{user} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}routes.js}{501-507} \\
+& \texttt{stop}, \texttt{reindex}, \texttt{createfluxnodekey} (GET) & \texttt{admin} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}routes.js}{741-760} \\
+& \texttt{start}, \texttt{restart}, \texttt{ping}, \texttt{startbenchmark} (GET) & \texttt{adminandfluxteam} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}routes.js}{1010-1022} \\
+& \texttt{signrawtransaction}, \texttt{sendfrom}, \texttt{sendtoaddress} (POST) & \texttt{admin} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}routes.js}{1393-1408} \\
+\texttt{/apps/*} & \texttt{listrunningapps}, \texttt{globalappsspecifications}, \texttt{appspecifications}, \texttt{calculateprice}, \texttt{deploymentinformation} & public/cached & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}routes.js}{372-468} \\
+& \texttt{appstart}, \texttt{appstop}, \texttt{apprestart}, \texttt{appexec}, \texttt{appremove}, \texttt{redeploy} & \texttt{appownerabove} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}routes.js}{1196-1265} \\
+& \texttt{appregister} (POST) & \texttt{user} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}routes.js}{1383-1385} \\
+& \texttt{appupdate} (POST) & \texttt{user} (self) or \texttt{adminandfluxteam} (on owner's behalf) & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}routes.js}{1386-1388} \\
+\texttt{/id/*} (and deprecated \texttt{/zelid/*}) & \texttt{loginphrase}, \texttt{verifylogin}, \texttt{loggedsessions} & \texttt{user} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}routes.js}{508-518} \\
+& \texttt{logoutallsessions} & \texttt{admin} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}routes.js}{508-518} \\
+\texttt{/benchmark/*} & \texttt{getbenchmarks}, \texttt{getstatus}, \texttt{getinfo}, \texttt{getpublicip}, \texttt{restartnodebenchmarks} & not specified in evidence & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}benchmarkService.js}{126-427} \\
+\texttt{/flux/*} & \texttt{startbenchmark}; \texttt{broadcastmessage}, \texttt{broadcas\allowbreak{}tmessage\allowbreak{}tooutgoi\allowbreak{}ng}, \texttt{broadcas\allowbreak{}tmessage\allowbreak{}toincomi\allowbreak{}ng}; \texttt{/syncthing/*} config writes & \texttt{adminandfluxteam} & \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}routes.js}{1022,1429-1441} \\
+\bottomrule
+\end{tabular}
+\caption{\FluxOS HTTP route groups and privilege tiers.}
+\label{tab:fluxos-http}
+\end{table}
+
+Privilege is resolved by \texttt{verify\allowbreak{}Privilege}, dispatching to one of six checks keyed on
+a \texttt{zelidauth} header verified against the caller's ZelID
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}verificationHelper.js}{17-48,90-106}: \texttt{admin}
+(caller's ZelID equals the node operator's), \texttt{fluxteam} (caller's ZelID is one of two
+hardcoded team ZelIDs), \texttt{adminandfluxteam} (union of the two), \texttt{appowner}/
+\texttt{appownerabove} (caller resolved as the app's current owner, plus admin/fluxteam for
+the \texttt{-above} variant), and \texttt{user} (any ZelID with a signature over a
+loginPhrase no older than 16 hours, 2 hours for the \texttt{appowner} checks)
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}verificationHelperUtils.js}{19-46,54-88,96-122,130-156,164-248,180-188,226-234}.
+
+\subsection{The \fluxbench RPC surface and the \fluxsas protocol}
+
+\FluxOS proxies a fixed set of \fluxbench RPC methods over its own \texttt{/benchmark/*}
+route group \shipped. \fluxsas exposes a separate, internally-bound HTTP namespace whose
+route-level detail is only partially covered by the available evidence.
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{@{}p{2.0cm}p{3.4cm}p{3.6cm}p{4.5cm}@{}}
+\toprule
+Component & Method / route & Transport & Notes \\
+\midrule
+\fluxbench (via \FluxOS proxy) & \texttt{getbenchmarks} & HTTP, \texttt{/benchmark/*} on \FluxOS & return schema not detailed in evidence \\
+& \texttt{getstatus} & HTTP, \texttt{/benchmark/*} & \\
+& \texttt{getinfo} & HTTP, \texttt{/benchmark/*} & \\
+& \texttt{getpublicip} & HTTP, \texttt{/benchmark/*} & \\
+& \texttt{restartnodebenchmarks} & HTTP, \texttt{/benchmark/*} & \\
+\fluxsas & \texttt{/v2/*} namespace, purpose-scoped keys (\texttt{default}, \texttt{cdn}, \texttt{mesh}, \texttt{app}) & HTTPS, internal mTLS client certificate required, bound to \texttt{127.0.0.1:\allowbreak{}16100} & no tenant-facing verification path exists; \texttt{purpose=\allowbreak{}mesh} is present in code with no known consumer \\
+\bottomrule
+\end{tabular}
+\caption{\fluxbench proxy methods,
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}benchmarkService.js}{126-427}; \fluxsas namespace,
+\srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{411-481}; \srccode{fluxsas/\allowbreak{}src/\allowbreak{}watchdog.h}{566-596,727-754}.}
+\label{tab:fluxbench-fluxsas}
+\end{table}
+
+\notestablished{individual \fluxsas \texttt{/v2/*} method names, per-method transport
+detail, and per-method return schemas are not enumerated in the evidence available to this
+section. The evidence establishes the namespace's authentication binding and that the
+\texttt{mesh}-purpose key has no known consumer, but not a method-by-method dispatch table
+comparable to the \fluxbench row above.}
+
+%% Drain this section's float queue before the next begins.
+\FloatBarrier

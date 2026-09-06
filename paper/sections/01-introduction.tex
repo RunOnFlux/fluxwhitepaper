@@ -1,0 +1,263 @@
+\section{Introduction}
+\label{sec:introduction}
+
+\subsection{The problem, not the product}
+\label{sec:intro-problem}
+
+\paragraph{Where this comes from.} \Flux{} is not a proposal. The chain has produced blocks
+continuously since \textbf{2018}: mainnet genesis carries UNIX timestamp \num{1516980000} ---
+2018-01-26T15:20:00Z --- and its coinbase still reads \texttt{Zelcash06f40b01\ldots}, the name the
+project launched under and the rebrand the consensus code has never shed, as \texttt{determ\_zelnodes},
+\texttt{zelid} and \texttt{ZelBack} attest throughout this paper \shipped
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{65,185}. The tiered node network was
+announced in October 2018 \citep{zelnodes2018}; its orchestration layer --- \FluxOS{}, then ZelFlux
+--- debuted in the autumn of \textbf{2019} \citep{zelflux2019}. Eight years of continuous operation
+is the reason this paper can describe half its subject in the past tense at all, and the reason its
+claims about deployed behaviour are checkable against running code rather than argued from a design.
+
+That history has been written about before, and this paper does not restate it. The chain was
+specified in the \textbf{ZelCash whitepaper v2} of July 2018 \citep{zelcashwp2018}; the consensus
+mechanism now called Proof of Node was specified in the Proof-of-Useful-Work v2 whitepaper
+\citep{fluxpouw2}, still linked from \fluxd's own README; and the immediate predecessor to this
+document is \textbf{Flux Whitepaper 2.1} \citep{fluxwp21}, which this paper supersedes rather than
+amends. The author's own contemporaneous descriptions of node tiering \citep{kmentazelnode2020} and
+of the \FluxOS{} architecture \citep{kmentaflux2020} are prior art for parts of \S\ref{sec:consensus}
+and Part~III, and the per-tier benchmark thresholds \S\ref{sec:consensus} reads out of \fluxbench{}
+were published as an operator guide \citep{zelbenchguide}.
+
+\notestablished{the publication dates of the historical Medium articles cited above, with one
+exception. Medium returns HTTP 403 to scripted retrieval, so only \citet{kmentaflux2020} carries an
+independently confirmed timestamp (2020-03-18T03:17:28Z, read from the \texttt{datePublished}
+metadata of an Internet Archive capture of 2020-11-06); the remaining dates are those of the
+compiled index this paper was given. Both articles under the author's own byline do carry confirmed
+archival fixity --- the Wayback availability API reported status-200 captures for each on
+2026-09-06 --- so the \emph{content} is anchored even where the publication date is not. None of the
+arguments in this paper depends on those dates in any case: the 2018 and 2019 anchors above rest on
+the genesis block and on \fluxd's source, not on any article.}
+
+
+A cloud provider today sells capacity to people. A human opens an account, attaches a card or signs
+a contract, and later closes the account when the capacity is no longer needed. Every part of that
+sentence is an assumption about who the customer is, and the assumption is load-bearing: the account
+presumes an identity a provider can bill, the card presumes a payment network built around recurring
+consent from a person, and the contract presumes a party who can be sued, renegotiated with, or
+simply asked. This paper's premise is that if the dominant consumer of cloud capacity becomes
+autonomous software rather than people, each of those three assumptions has to be replaced with
+something a program can satisfy entirely on its own — an identity a piece of code can hold, a payment
+a piece of code can make without a human tapping a button, and an authority a piece of code can prove
+it has without a lawyer's signature. That is a bet about demand, stated here as the premise the rest
+of the paper works from, and not a prediction this paper defends. \Flux's own public roadmap states
+the destination directly: ``a cloud that serves software agents as first-class customers\ldots no
+account, no card, no human in the loop'' \vision \srcroadmap{flux-roadmap-public.md:7}. Whether that
+demand materializes is outside this paper's scope; whether the architecture that follows from betting
+on it is coherent, and how much of it is actually built, is the whole of it.
+
+There is a second, narrower observation about \emph{what} such software would run, and it turns out to
+have architectural consequences rather than only commercial ones. Much of the work an autonomous agent
+does for an ordinary person --- drafting text, triaging mail, summarising a document, keeping a
+schedule --- is served adequately by small models specialised to a task, not by frontier ones. That
+distinction matters here because the two have different physics. Frontier inference splits a model
+across many accelerators and exchanges state between them on every token, so it is bound to an
+interconnect one to two orders of magnitude faster than wide-area networking; that is why it
+concentrates in single datacentres, and it is a topology constraint rather than a preference. A model
+that fits on one device exercises no such interconnect, and concurrent requests to it are mutually
+independent. \textbf{For that class of work the structural advantage of centralisation is not reduced
+--- it is absent}, and a dispersed fleet of collateralised commodity machines becomes an appropriate
+substrate rather than a compromised one. \S\ref{sec:ac-workload-fit} argues this properly, including
+the part that cuts the other way: \Flux allocates accelerators whole, and serving many small models
+economically requires subdividing them, which is the one thing the current allocation model cannot do.
+
+\subsection{\Flux today, measured}
+\label{sec:intro-today}
+
+Before any forward-looking claim, the paper establishes what is running. \Flux is not a proposal: on
+2026-09-03 the network carried \num{6489} collateralised nodes across three tiers — Cumulus,
+Nimbus and Stratus — backing \num{88514500}\flux\ of locked collateral
+\shipped \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}; \num{1195} applications were
+deployed across \num{7486} requested instances
+\shipped \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}; and since block
+height \num{2020000} the chain has produced every block through a collateral-gated lottery over the
+registered node set rather than through Equihash proof-of-work
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{153} (\S\ref{sec:consensus}). These numbers are the
+yardstick for everything that follows: a paper about restructuring a chain's incentives and execution
+layer around autonomous demand is a different exercise when the chain in question already has real
+operators, real collateral and real deployed workloads than when it does not. \S3 gives the full
+measured baseline, with every figure in this section reproducible from the same public API on the
+same date.
+
+\subsection{The three changes}
+\label{sec:intro-changes}
+
+\Flux describes itself as restructuring three things at once: how a node operator is paid, what a
+node operator's hardware can be trusted to have actually run, and how value moves between a tenant
+and the network. Each is at a different point between specification and deployment, and this paper
+states that difference for each rather than presenting all three as equally real.
+
+\paragraph{Emission replaced by demand-funded operator compensation.}
+Every payment a tenant makes for an application today lands, in full, at a single transparent
+address, and every unit a node operator earns is newly issued rather than routed from that payment
+\shipped \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03}. Progressive Node
+Rewards (\PNR) is the specified replacement: a consensus-enforced fraction of each application
+payment would be diverted into a protocol-held fee pool and paid out to operators through the
+existing block-production rotation, one small increment per block, so that operator income begins to
+track what tenants actually pay rather than a fixed issuance schedule alone. \PNR is specified to
+implementation depth in \S\ref{sec:pnr} — the consensus rule, the pool's per-block update, and two
+fairness proofs — but nothing in it exists in any repository surveyed for this paper
+\planned \srcintent{evidence/design/02-pnr.md}. It is a design, stated precisely enough to build, not
+a description of running code.
+
+\paragraph{The substrate hardened by attested execution.}
+\ArcaneOS pairs a measured Secure Boot chain with disk encryption and a signed, \texttt{dm-verity}
+root filesystem, and a local attestation service (the \SAS) that other components can query for a
+signed claim about what a node has booted. That boot chain and that service run today
+\shipped (\S\ref{sec:attested-execution}). What they do not yet provide is named precisely in that
+section rather than left implicit: the resulting signature is not bound to the specific machine that
+produced it, so a bond placed against it would secure a claim any operator's own software could
+reproduce, not a claim about a particular piece of hardware. The bonded attestation network proposed
+to close that gap — committee sampling, a challenge protocol, slashing against a separate bond — is
+\planned and, as \S\ref{sec:feasibility} argues at length, is a precondition for the first change
+above rather than an independent workstream, because a compensation mechanism that pays every
+eligible node raises the payoff to passing an eligibility gate that is not yet machine-bound by
+exactly what it pays.
+
+\paragraph{Value settled transparently, on rails whose privacy layer is being withdrawn.}
+\fluxd is a Zcash fork, and its shielded-transaction machinery — Sprout and Sapling notes, encrypted
+outputs, a note commitment tree, Groth16 proofs — is inherited, compiled into every node, and running
+today \shipped (\S\ref{sec:shielded-value}). The shielded pools presently hold
+\num{96479.94}\flux, against a total issued supply of \num{429466823.97}\flux\ at height
+\num{2912015} — \SI{0.0225}{\percent} of supply
+\shipped \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}getblockchaininfo}{2026-09-03}. The pool is closed by
+consensus: transparent-to-shielded transfers have been rejected since height \num{835554}
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{1398--1408}, so every shielded unit on the chain today predates
+the measured tip by over two million blocks. \textbf{Both pools are to be retired}
+\srcintent{08-answers-round-2.md, round 10} (\planned). The measurement above is most of the
+argument: a mechanism holding \SI{0.0225}{\percent} of supply, unable to grow, and requiring a Rust
+proving stack in the consensus path is a poor trade against a stated goal of less code and a more
+thorough audit (\S\ref{sec:shielded-retirement}). The decisive argument is narrower and is worth
+stating here rather than only in \S20: a shielded pool would not hide what a tenant most plausibly
+wants hidden, because a \Flux{} application specification is a public on-chain message and the
+control plane serves the global specification set over a public endpoint. The workload is public by
+construction; shielding the payment hides the funding source, not the workload graph.
+
+So the honest statement of this pillar is the one the paper makes and defends rather than the one an
+earlier draft asserted: \textbf{\Flux{} settles transparently, and treats payment privacy as an
+unsolved problem rather than a delivered feature}. \S\ref{sec:private-payment} states the
+requirement formally and proves two results that outlast the decision --- that amount hiding is
+unsatisfiable under \PNR{}, and that the residual problem is confined to one optional path --- but
+its constructions are inapplicable to a chain with no pool, and it says so.
+
+\subsection{What is new in this paper}
+\label{sec:intro-new}
+
+Nothing below claims novelty for what \Flux inherited outright — the shielded transaction machinery
+is Zcash's (\S\ref{sec:shielded-value}), the UTXO model and the limits on what its scripts can express
+are Bitcoin's (\S\ref{sec:agent-identity}), and the sortition-based block production that replaced
+mining is deployed, described, and not invented here (\S\ref{sec:consensus}). Four results in this
+paper are, to the corpus surveyed, new.
+
+First, a proof that pooling and dripping fee revenue — rather than paying it out to next block's
+payee directly — defeats a specific timing attack that deterministic payee rotation otherwise admits.
+Under a next-block payout rule, an operator who is also a tenant can time its own payment to land just
+before a block it is scheduled to receive, and for a single node in the highest tier this recaptures
+up to roughly a third of the operator's own payment at the design's proposed parameters; under a
+fee-pool drip the same attack recaptures a fraction bounded by that tier's share of one drip step,
+several orders of magnitude smaller for the recommended drip constant
+\planned (\S\ref{sec:pnr}).
+
+Second, a measurement, not merely a construction, that collateral-weighted moderation is
+Sybil-resistant by construction and, at the distribution measured on 2026-09-03, not
+censorship-resistant. Voting weight cannot be increased without locking additional collateral, which
+is the resource-cost property the design is built on; measured against the live node-weight
+distribution, four owner identities already hold enough collateral-weighted voting power to reach the
+proposed \SI{25}{\percent} removal threshold on their own
+\shipped \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03} (\S\ref{sec:23-governance}).
+Both properties are true of the same mechanism, and the paper states both.
+
+Third, an observation about the consensus header format, offered with an explicit hedge because it
+has not been checked against a bridge implementation \srcinferred. Every block produced under the
+current consensus rule carries a fixed chainwork value of $2^{40}$, a choice made so that fork choice
+is a block-count race rather than a work comparison \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}pow.cpp}{284--290}
+(\S\ref{sec:consensus}). A header chain with identical work per block carries no signal a light
+client could use to prefer one candidate chain over another beyond counting blocks, which is not the
+guarantee header-only verification is built to provide; if that reading holds, it forecloses the kind
+of header-only light-client bridge design a work-bearing chain would otherwise support, a constraint
+this paper argues \S22 must design around rather than treat as incidental.
+
+Fourth, a separation of an agent's \emph{deployment} authority from its \emph{spending} authority
+that makes the first tractable with machinery already running and states precisely why the second is
+not tractable on the \Flux\ L1 at all without either a new trusted party or new consensus state:
+script validation on a Bitcoin-derived chain is a pure function of the spending transaction and the
+outputs it consumes, so no script can read how much a key has already spent and therefore no script
+can enforce a rate limit or a cumulative cap \planned (\S\ref{sec:agent-identity}).
+
+\subsection{What this paper does not claim}
+\label{sec:intro-not}
+
+The paper makes no price claim, sets no target, and uses no investment framing anywhere; it confines
+itself to issuance, supply, operator income and demand
+\srcintent{evidence/design/00-scope.md}. It does not assert that the agent-demand premise stated in
+\S\ref{sec:intro-problem} is correct — only that the architecture described in the rest of the paper
+follows from betting that it is. And it does not claim that the work remaining to reach that
+architecture is uniformly straightforward. \S\ref{sec:feasibility} classifies every planned mechanism
+by what kind of work it needs and finds four that are Research rather than Engineering or Extension:
+post-quantum migration, for which nothing exists in the surveyed repositories and no scheme yet
+addresses outputs whose keys the protocol cannot move; bounded spending authority for an autonomous
+agent on the \Flux\ L1, which the UTXO script model cannot express without a new trusted party or new
+consensus state; a shielded payment provably funding one specific, unlinked deployment, which is hard
+because an application's address is itself a workload identifier; and the moderation quorum's
+concentration problem, where no reweighting, threshold change or eligibility gate the paper considered
+raises the number of colluding parties needed to censor an application above single digits at the
+measured distribution.
+
+\subsection{How to read this paper}
+\label{sec:intro-howtoread}
+
+Every substantive claim in this document carries two tags. A \emph{maturity} tag — \shipped,
+\inprogress, \planned or \vision — states how real the claim is: \shipped means it runs today and is
+written in the present tense; \planned and \vision describe what does not yet exist and are written
+in the future or the subjunctive, never in the present. A \emph{provenance} tag states where the claim
+comes from: a code citation (\srccode{repo/\allowbreak{}file}{line}), a roadmap citation
+(\srcroadmap{item}), a design-intent citation (\srcintent{\S n}), a measurement
+(\srcmeasured{endpoint}{date}), or an explicit hedge (\srcinferred) for a conclusion this paper draws
+rather than one the evidence states outright. The rule that makes the pairing meaningful is strict:
+\emph{only} a code citation --- to deployed source or to a named branch --- can support a \shipped
+claim about behaviour, and \emph{only} a measurement can support a \shipped claim about a fact of the
+live network, such as a node count, a balance or a price, which no line of code can establish. A
+roadmap item or a design-intent note can
+describe an aspiration precisely, and this paper cites them precisely, but neither can promote a claim
+to \shipped on its own. At any sentence, this pairing is meant to let a reader answer two questions
+without searching elsewhere in the document: does this exist, and how do we know. Where a
+\emph{Settled}, \emph{Not established by this survey} or \emph{Proposed by this paper} callout
+appears, it marks respectively a decision that has been taken together with the value chosen, a fact
+no artefact read for this paper carries, or a construction the author has not ruled on — never a gap
+the authors failed to notice.
+
+The document is organized in five parts and a bridge between them. Part~I fixes the system and
+adversary model and the measured baseline this section previews. Parts~II and~III describe the
+deployed system — consensus, monetary policy, the orchestration layer, networking, attested
+execution — at a depth intended to support reimplementation, including the parts that do not work the
+way a casual description would suggest. Part~IV specifies the target architecture for agents and
+value at the same depth, with every undecided parameter named rather than smoothed over. Part~IV.5
+composes the whole of it into one operational walkthrough, run once against the deployed system and
+once against the target. Part~V tests the claim that the remaining distance is extension rather than
+invention and reports, in \S\ref{sec:feasibility}, that it is not uniformly so.
+
+\subsection{Method}
+\label{sec:intro-method}
+
+Three different activities produced the claims in this paper, and keeping them visibly separate is
+the single most important discipline it follows. What was \emph{read} is a corpus of \Flux
+repositories, including private ones that the team has agreed may be cited freely by file and line in
+this public document \srcintent{evidence/design/00-scope.md}; every \shipped claim about behaviour
+traces to a specific file and line range in that corpus. What was \emph{measured} is a set of named public
+endpoints — chiefly \texttt{api.\allowbreak{}runonflux.\allowbreak{}io}'s node, application and blockchain-info routes — queried
+on 2026-09-03 at chain height \num{2917115}, with every figure reproducible by running the
+accompanying scripts against the same live API. What was \emph{designed} is different in kind from
+both: mechanisms specified in this paper's own design-intake documents
+(\srcintent{evidence/design/*.md}) that do not exist in any repository and are not measurements of
+anything running, but are this paper's own construction, stated to a level of precision that a reader
+could implement and that a reviewer could attack. A reader who cannot tell, at any given sentence,
+which of these three produced it has found a defect in this paper, not a subtlety to be inferred.
+
+%% Drain this section's float queue before the next begins.
+\FloatBarrier

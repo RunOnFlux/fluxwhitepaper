@@ -1,0 +1,349 @@
+\section{Flux as deployed today}
+\label{sec:deployed-today}\label{sec:baseline}
+
+Most descriptions of \Flux in circulation — including earlier drafts of this paper's own
+introduction — are anchored to whatever fleet size was true when someone last looked. The network
+does not stand still, and a reader who has not looked recently will underestimate both its scale
+and its heterogeneity: how many nodes, how much collateral is actually locked behind them, how many
+applications are running, and how old some of those applications' specifications are. This section
+replaces impression with a single dated measurement, taken directly from the public API surface
+that any third party can query, and states the numbers that the rest of this paper treats as the
+baseline against which every later claim — about consensus, about pricing, about the target
+architecture — is measured.
+
+\subsection{Methodology}
+\label{sec:deployed-today-methodology}
+
+Two conventions matter for reading every figure in this paper. First, the snapshot was taken over a
+short window on 2026-09-03 rather than at a single instant: the API captures correspond to chain
+height 2{,}917{,}115, while the supply figures computed by the emission model are stated at height
+2{,}912{,}015, roughly 42 hours earlier at the \SI{30}{\second} target spacing. \textbf{Every figure
+therefore names the height it was taken at}, and heights, not wall-clock times, are the primary
+index. Second, the \PoN transition quadrupled the block rate, so block-denominated durations carry a
+fork-aware $4\times$ multiplier: a constant of 22{,}000 blocks corresponds to an effective
+88{,}000 blocks after activation, and this paper gives the constant together with the multiplier
+rather than silently reporting one of the two.
+
+
+Every number in this section is computed from a live query against four endpoints of the public
+\texttt{api.\allowbreak{}runonflux.\allowbreak{}io} API, retrieved on 2026-09-03:
+\texttt{/\allowbreak{}daemon/\allowbreak{}getzelnodecount} (fleet totals by tier and address family),
+\texttt{/\allowbreak{}daemon/\allowbreak{}listzelnodes} (the full per-node record set, from which tier collateral, node
+tenure, and the tier table below are recomputed directly from the records rather than trusted from
+the summary counts), \texttt{/\allowbreak{}apps/\allowbreak{}globalappsspecifications} (the full set of currently registered
+application specifications), and \texttt{/\allowbreak{}apps/\allowbreak{}deploymentinformation} (the height-indexed pricing
+table and deployment limits currently enforced by \FluxOS). No other data source is used in this
+section. The snapshot is reproducible: \texttt{scripts/\allowbreak{}05-network-analysis.\allowbreak{}py} issues the same four
+queries and recomputes every table and figure below from the raw response bodies, so a reader can
+re-run it against the live network and obtain a different, equally valid snapshot for a later date.
+Every figure, table, and number below carries its endpoint and the 2026-09-03 retrieval date
+explicitly, following the citation convention used throughout this paper
+(\shipped; \srcmeasured{api.runonflux.io}{2026-09-03}). This methodology is stated in full here
+because later evaluation (\S\ref{sec:evaluation}) reuses it without repeating it.
+
+\subsection{The fleet}
+\label{sec:deployed-today-fleet}
+
+At retrieval time the network comprised \textbf{6,489} \FluxNode{}s, all reported as
+\texttt{stable} \shipped\ \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}getzelnodecount}{2026-09-03}. Of
+these, \textbf{2,322} report an IPv4 endpoint; \textbf{0} report IPv6, and \textbf{0} report an
+onion (Tor) endpoint \shipped\ \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}getzelnodecount}{2026-09-03}.
+Recomputing tier membership and collateral directly from the \texttt{/\allowbreak{}daemon/\allowbreak{}listzelnodes} record
+set (rather than trusting the summary counter) gives the following:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrr}
+\hline
+Tier & Nodes & Collateral per node (\flux) & Tier collateral (\flux) \\
+\hline
+Cumulus & 3,247 & 1,000 & 3,247,000 \\
+Nimbus  & 1,615 & 12,500 & 20,187,500 \\
+Stratus & 1,627 & 40,000 & 65,080,000 \\
+\hline
+\textbf{Total} & \textbf{6,489} & --- & \textbf{88,514,500} \\
+\hline
+\end{tabular}
+\caption{Fleet composition and locked collateral by tier, recomputed from per-node records
+\shipped\ \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}.}
+\label{tab:fleet-tiers}
+\end{table}
+
+
+\paragraph{What that fleet amounts to, and what it is.} Two aggregates matter and they are not the
+same number. \FluxOS{} declares each tier's allocation in \texttt{flux\allowbreak{}Specifics}, and
+records against each line, in the configuration's own comments, how much of it is available to
+applications after node overhead
+\shipped~\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{380--395}. Multiplying both by the
+census gives
+
+\begin{center}
+\small
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+& \textbf{vCPU} & \textbf{RAM} & \textbf{Storage} \\
+\midrule
+Total allocation & \num{51940} & \SI{166.4}{\tebi\byte} (\num{170426}\,GB) & \SI{2.86}{\peta\byte} (\num{2856700}\,GB) \\
+Usable by applications & \num{45451} & \SI{153.8}{\tebi\byte} (\num{157448}\,GB) & \SI{2.60}{\peta\byte} (\num{2597140}\,GB) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent\shipped \srcdoc{scripts/23-network-capacity.py}. The CPU figures count \emph{threads}, not
+physical cores: \texttt{flux\allowbreak{}Specifics} states Cumulus as 40 tenths of a vCPU, and
+\fluxbench{} states the same machine as 2 cores and 4 threads
+\srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{58--84} --- one machine counted two
+ways, and the smaller number is not the one \FluxOS{} allocates against.
+
+Both rows are floors rather than measurements. The tier line is what a node must provide to be
+confirmed, not a declaration of what it carries, and nothing in the protocol caps a node above its
+tier; the true capacity is larger by an amount this survey does not measure. Storage carries a third
+and stricter figure: the runtime admission check computes usable disk as
+$0.95 \times \text{total} - 60 - 20$ GB
+\shipped~\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}hwRequirements.js}{385},
+which for a \num{220}\,GB Cumulus admits \num{129}\,GB rather than the \num{180}\,GB its tier line
+records, and across the fleet gives \SI{2.19}{\peta\byte} --- \SI{77}{\percent} of the total
+allocation. \decided{both figures are published, because they measure different things and neither substitutes
+for the other \srcintent{08-answers-round-2.md, round 24}. The tier line states what the fleet was
+specified to provide; the runtime check states what a deployment can actually obtain. A reader sizing
+a workload wants the second; a reader assessing what the network was built to hold wants the first.
+The \SI{23}{\percent} gap between them is a real property of the deployed configuration, reported
+rather than resolved away.}
+
+On that basis \Flux{} is, to the author's knowledge, the \textbf{largest decentralized compute
+network by independently-operated nodes} \srcintent{08-answers-round-2.md, round 19}. The paper
+states the measured basis rather than the bare superlative, and does not attempt a comparison table
+against other networks: no such measurement was made for this paper, and a claim of that shape is
+only worth as much as the census behind it. What is measured is the census above --- \num{6489}
+nodes, \num{88514500}\flux{} of operator-posted collateral, every node independently operated and
+independently collateralised.
+
+\notestablished{the exact all-time-high fleet size, though it is narrower than an open question.
+Secondary reports put the peak at over \num{14000} nodes, with about \num{13500} in September 2024
+and over \num{10000} in mid-2025 against the \num{6489} measured here
+\srcintent{08-answers-round-2.md, round 27}; these are marketing and review pages rather than primary
+sources and none is authoritative on its own. One independent check makes the \num{13500} figure
+credible: the same reports state more than \num{107000} CPU cores at that node count, and scaling
+this section's own per-tier method to \num{13500} nodes gives \num{108058} vCPU --- a
+\SI{1}{\percent} agreement, which corroborates both the reported size and the threads-not-cores
+basis used above. The exact number is recoverable without any statistics service, since \FluxNode{}
+start and confirmation transactions are on-chain and the confirmed set at any past height can be
+reconstructed by replaying them; this paper states that method rather than running it.
+
+The contraction is the more consequential fact. \textbf{The fleet stands at roughly half its peak},
+which is why the scale claim above is made against the measured present and not against a historical
+high --- and which bears directly on \Cref{sec:pnr}'s open question about exit composition under a
+demand shortfall: the contraction that section reasons about in the abstract has already happened at
+scale, and whether the operators who left were disproportionately single-node holders is still
+unmeasured.}
+
+
+The total of \textbf{88,514,500}\flux is the sum of collateral each operator has locked to run a
+node at that tier; it is not a measure of trading volume, market value, or any other quantity this
+paper's register excludes. Stratus nodes are the smallest population by count (1,627 of 6,489, or
+25.1\%) but hold the largest share of locked collateral (65,080,000 of 88,514,500\flux, or 73.5\%)
+\shipped\ \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}.
+
+\subsection{Node tenure}
+\label{sec:deployed-today-tenure}
+
+Measuring blocks elapsed since each node's \texttt{added\_height} against the chain tip at
+retrieval time gives a median tenure of \textbf{193,620} blocks (approximately 67 days at the
+current 30-second target spacing), a 10th-percentile tenure of \textbf{12,909} blocks, a
+90th-percentile tenure of \textbf{881,770} blocks, and a maximum of \textbf{1,648,700} blocks
+\shipped\ \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}. The distance between the
+10th and 90th percentiles spans roughly two orders of magnitude, which is consistent with a fleet
+that is simultaneously accumulating a long tail of multi-year operators and continuing to admit new
+entrants rather than having converged to a stable, unchanging membership \srcinferred.
+
+\subsection{Deployed applications}
+\label{sec:deployed-today-apps}
+
+The global application registry held \textbf{1,195} application specifications at retrieval time,
+comprising \textbf{1,371} components (compose entries) across \textbf{7,486} total requested
+instances \shipped\ \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}.
+Summed across all requested instances, the committed resource footprint specified by these
+applications is \textbf{8,972.0} vCPU-equivalents, \textbf{17,544,229}~MB of RAM (17,133.0~GiB),
+and \textbf{160,107}~GB of disk
+\shipped\ \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}. Instances
+requested per application have a median of \textbf{2}, a mean of \textbf{6.26}, a maximum of
+\textbf{100}, and a minimum of \textbf{0}; \textbf{439} applications (36.7\%) sit exactly at the
+network-wide instance floor of 3
+\shipped\ \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}.
+
+These figures are \emph{requested} resources as declared in each application's specification, not
+measured utilisation. No public endpoint reports realised CPU, memory, disk, or bandwidth
+utilisation on running containers across the fleet; this paper does not estimate one, and the
+absence is recorded as an open problem rather than papered over with an inferred figure
+(\S\ref{sec:limitations}).
+
+\subsection{Specification version distribution}
+\label{sec:deployed-today-specversions}
+
+The 1,195 deployed applications are governed by seven distinct \appspec versions, all live
+simultaneously at retrieval time:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrr}
+\hline
+Version & Applications & Share \\
+\hline
+\specv{2} & 2   & 0.2\% \\
+\specv{3} & 27  & 2.3\% \\
+\specv{4} & 11  & 0.9\% \\
+\specv{5} & 3   & 0.3\% \\
+\specv{6} & 70  & 5.9\% \\
+\specv{7} & 209 & 17.5\% \\
+\specv{8} & 873 & 73.1\% \\
+\hline
+\textbf{Total} & \textbf{1,195} & \textbf{100\%} \\
+\hline
+\end{tabular}
+\caption{Distribution of deployed applications by \appspec version
+\shipped\ \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}.}
+\label{tab:specversions}
+\end{table}
+
+Seven \appspec versions are live simultaneously, spanning from \specv{2} (registered years before
+\specv{8} became the newest enforced version) to \specv{8} itself. No version among them has ever
+been forced out of the running population by the introduction of a later one \srcinferred — this
+reading follows from the observed coexistence rather than from a direct record of deprecation
+history, and it is stated hedged for that reason. \S10 examines the version-gating mechanism that
+produces this coexistence, and the pending \specv{9} redesign that would eventually extend it to
+eight.
+
+\subsection{Pricing as deployed}
+\label{sec:deployed-today-pricing}
+
+The rates \FluxOS charges for deployment resources are set by a height-indexed table served from
+\texttt{/\allowbreak{}apps/\allowbreak{}deploymentinformation}. At retrieval time the table held six recorded price states:
+an initial schedule in force from height $-1$ (i.e., from genesis of the pricing mechanism) and five
+subsequent revisions.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{rrrrrrrr}
+\hline
+Height & cpu & ram & hdd & minPrice & port & scope & staticip \\
+\hline
+$-1$       & 3.00 & 1.00 & 0.500 & 1.00 & 2.0 & 6.0 & 3.0 \\
+983,000    & 0.30 & 0.10 & 0.050 & 0.10 & 2.0 & 6.0 & 3.0 \\
+1,004,000  & 0.06 & 0.02 & 0.010 & 0.01 & 2.0 & 6.0 & 3.0 \\
+1,288,000  & 0.15 & 0.05 & 0.020 & 0.01 & 2.0 & 6.0 & 3.0 \\
+1,594,832  & 0.15 & 0.05 & 0.020 & 0.01 & 1.5 & 6.0 & 3.0 \\
+1,597,156  & 0.03 & 0.01 & 0.004 & 0.01 & 0.4 & 0.8 & 0.4 \\
+\hline
+\end{tabular}
+\caption{Height-scheduled deployment pricing table, in \flux per priced unit
+\shipped\ \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03}.}
+\label{tab:pricing-schedule}
+\end{table}
+
+The rates in force at retrieval time are the row at height 1,597,156. Across the six recorded rows,
+the \texttt{cpu} rate has fallen from 3 to 0.03\flux per unit; this is stated as a fact about the
+schedule as recorded, with no comment on cost, value, or trend implied.
+Payments for deployment and renewal are sent to \texttt{t3Nryf\allowbreak{}AQLGe\allowbreak{}Fs9j\allowbreak{}Eoeqsxm\allowbreak{}BN2QLRa\allowbreak{}RKFLUX}
+\shipped\ \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03}. The same endpoint
+reports \texttt{minimum\allowbreak{}Instances} of \textbf{3}, \texttt{maximum\allowbreak{}Instances} of \textbf{100},
+\texttt{blocksLasting} of \textbf{22,000} blocks, \texttt{max\allowbreak{}Blocks\allowbreak{}Allowance} of
+\textbf{1,056,000} blocks, and \texttt{maxImageSize} of \textbf{5,000,000,000} bytes (5~GB)
+\shipped\ \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03}.
+
+\subsection{The multi-chain footprint}
+\label{sec:deployed-today-parallel}
+
+Beyond the main chain, \Flux is represented today by a parallel asset on ten separate chains, each
+carrying its own contract address, mint, or module identifier:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{llp{6cm}}
+\hline
+Chain & Identifier & Provenance \\
+\hline
+Ethereum & \texttt{0x720cd16b011b98\allowbreak{}7da3518fbf38c307\allowbreak{}1d4f0d1495} (ERC-20) & \srccode{holder-snapshot/\allowbreak{}index.js}{22} \\
+BNB Chain & \texttt{0xaff9084f237458\allowbreak{}5879e8b434c399e2\allowbreak{}9e80cce635} (BEP-20) & \srccode{holder-snapshot/\allowbreak{}index.js}{23} \\
+Polygon & \texttt{0xA2bb7A68c46b53\allowbreak{}f6BbF6cC91C865Ae\allowbreak{}247A82E99B} & \srccode{holder-snapshot/\allowbreak{}index.js}{26} \\
+Avalanche C-Chain & \texttt{0xc4B06F17ECcB22\allowbreak{}15a5DBf042C67210\allowbreak{}1Fc20daF55} & \srccode{holder-snapshot/\allowbreak{}index.js}{24} \\
+Base & \texttt{0xb008bdcf9cdff9\allowbreak{}da684a190941dc3d\allowbreak{}ca8c2cdd44} & \srccode{flux-supply-tracker/\allowbreak{}index.html}{346} \\
+Solana & \texttt{FLUX1wa2Gmbt\allowbreak{}SB6ZGi2p\allowbreak{}TNb\allowbreak{}VCw3z\allowbreak{}Ee\allowbreak{}Kna\allowbreak{}PCk\allowbreak{}Pt\allowbreak{}FXxq\allowbreak{}Xe} (SPL mint) & \srccode{holder-snapshot/\allowbreak{}index.js}{20} \\
+Algorand & \texttt{1029804829} (ASA ID) & \srccode{holder-snapshot/\allowbreak{}index.js}{27} \\
+Ergo & \texttt{e8b20745ee9d1881\allowbreak{}7305f32eb2101583\allowbreak{}1a48f02d40980de6\allowbreak{}e849f886dca7f807\allowbreak{}} (token ID) & \srccode{holder-snapshot/\allowbreak{}index.js}{25} \\
+Tron & \texttt{TWr6yzuk\allowbreak{}Rw\allowbreak{}Z53HDe3bzc\allowbreak{}C8RCTbi\allowbreak{}Ka4Zzb6} (TRC-20) & \srccode{holder-snapshot/\allowbreak{}index.js}{21} \\
+Kadena & \texttt{runonflux.flux} (Pact module) & \srccode{flux-supply-tracker/\allowbreak{}index.html}{391} \\
+\hline
+\end{tabular}
+\caption{Chains carrying a \Flux parallel asset, with identifiers as recorded in the team's own
+asset-inventory tooling \shipped.}
+\label{tab:pa-overview}
+\end{table}
+
+These identifiers are as recorded in the codebases that track them (\texttt{holder-\allowbreak{}snapshot},
+\texttt{flux-\allowbreak{}supply-\allowbreak{}tracker}); this survey did not independently re-verify each address against
+its chain's own explorer \srcinferred. \S6 takes this footprint as the starting inventory for an
+argument that consolidating it reduces audit and reserve-accounting surface.
+
+\subsection{The operational layer}
+\label{sec:deployed-today-operational}
+
+Around \FluxOS on every node sits a cluster of smaller, single-purpose daemons that this paper
+returns to in later sections: \texttt{flux-\allowbreak{}telemetryd} ships per-container metrics and logs to a
+backend the application owner — not \Flux — chooses and credentials, never touching data \FluxOS
+has not vouched for \shipped\ \srccode{flux-telemetryd/\allowbreak{}src/\allowbreak{}identity.rs}{1--31,56--74} (\S9);
+\texttt{flux-fstrimd} paces filesystem TRIM operations so that routine storage maintenance does
+not stall a node's I/O \shipped\ \srccode{flux-fstrimd/\allowbreak{}src/\allowbreak{}main.rs}{1--6}; \texttt{flux-shutdownd} is
+building a coordinated, reason-aware graceful-shutdown and upgrade pipeline in place of an
+unceremonious container kill, though at present only its signal-and-cleanup stages run in
+production and its drain and pre-stop execution stages are implemented but not yet wired to real
+events \inprogress\ \srccode{flux-shutdownd/\allowbreak{}crates/\allowbreak{}shutdownd/\allowbreak{}src/\allowbreak{}pipeline/\allowbreak{}state\_machine.rs}{3--7};
+and, operated centrally by the Foundation rather than per-node,
+\texttt{appsmonitor} tracks on-chain application expiry and sends renewal notifications \shipped\
+\srccode{appsmonitor/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appsSubscriptionRenewalMonitor.js}{112--368} (\S16),
+\texttt{fluxstorage} holds oversized environment-variable and command payloads that do not fit an
+on-chain specification \shipped\ \srccode{fluxstorage/\allowbreak{}src/\allowbreak{}routes.js}{17--67} (\S23), and
+\texttt{fluxos-\allowbreak{}release-\allowbreak{}api} serves the FluxOS/ArcaneOS upgrade bundles that nodes poll for
+\shipped\ \srccode{fluxos-release-api/\allowbreak{}src/\allowbreak{}flux\_release\_api/\allowbreak{}api.py}{176--229} (\S23).
+\FluxOS's own placement and lifecycle behaviour that these services
+support is described in \S9; the centrally-operated members of this list reappear in \S12's
+inventory of components the decentralization roadmap must still address.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    ybar,
+    width=0.9\linewidth,
+    height=5.5cm,
+    ylabel={applications},
+    xlabel={\appspec version},
+    symbolic x coords={2,3,4,5,6,7,8},
+    xtick=data,
+    nodes near coords,
+    nodes near coords align={vertical},
+    ymin=0,
+]
+\addplot table [x index=0, y index=1] {../data/appspec_versions.dat};
+\end{axis}
+\end{tikzpicture}
+\caption{Number of deployed applications by \appspec version, out of 1,195 total
+\shipped\ \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}. The
+distribution is heavily concentrated at \specv{8} (873 of 1,195) while six older versions remain
+live.}
+\label{fig:appspec-versions}
+%% verified 2026-09-04: appspec_versions.dat header is "# version count share", and this plot reads
+%% x index=0, y index=1 --- version against count, as captioned. (Build note; not paper text.)
+\end{figure}
+
+\subsection{The measured baseline}
+\label{sec:deployed-today-baseline}
+
+Three numbers from this section recur throughout the rest of this paper as the measured baseline
+against which every later architectural claim is checked: \textbf{6,489} nodes, \textbf{1,195}
+deployed applications, and \textbf{88,514,500}\flux of locked collateral
+\shipped\ \srcmeasured{api.runonflux.io}{2026-09-03}. Neither the consensus mechanism of \S4, nor
+the compensation design of \S7, nor the target architecture of Part~IV should be read as
+describing a network smaller or more homogeneous than this.
+
+%% Drain this section's float queue before the next begins.
+\FloatBarrier

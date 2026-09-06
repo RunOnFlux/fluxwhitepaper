@@ -1,0 +1,328 @@
+\section{Monetary policy as deployed}
+\label{sec:monetary-policy}
+
+\Flux issues its native asset on a schedule fixed once, in \fluxd's consensus code, and not
+adjusted by discretion afterward. Two different mechanisms have produced that schedule over the
+chain's life: a Bitcoin-style halving curve during the proof-of-work era, and, since block height
+$2{,}020{,}000$, a fixed initial block reward that decays by a constant fraction once a year under
+Proof of Node. Neither curve reaches zero on any realistic horizon, and at least one of them was
+adjusted by hand along the way rather than left to run the formula a reader might expect. This
+section states the exact, currently-enforced arithmetic for both eras in the notation of
+notation.tex, cross-checks the resulting figures against the network's own public reconciliation
+of issued supply, and states plainly what the schedule implies for the long run: issuance never
+stops, and only its rate settles to a small constant. Every subsequent economic claim in this
+paper is denominated against the numbers derived here.
+
+All amounts below are computed as integers over satoshi, $\mathrm{COIN} = 100{,}000{,}000\sat$ per
+$\flux$ \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}amount.h}{17}, matching \fluxd's \texttt{CAmount}
+(\texttt{int64}) representation. ``$\lfloor\cdot\rfloor$'' denotes truncating (floor) integer
+division throughout, exactly as C++ integer division behaves for non-negative operands
+\srcdoc{flux-roadmap/supply/emission\_model.py:196-200, citing fluxd}. This distinction is
+not cosmetic: the PoN reduction below is an $r$-fold sequence of \emph{independent} truncations,
+not a single closed-form power, and the two are not interchangeable.
+
+\subsection{The subsidy function}
+
+\begin{definition}[Legacy proof-of-work subsidy]
+\label{def:pow-subsidy}
+For $0 \le \hgt < \hpon$,
+$$
+\subsidypow(\hgt) \;\defeq\;
+\begin{cases}
+0 & \hgt = 0 \\[4pt]
+\premine = 13{,}020{,}000\flux & \hgt = 1 \\[4pt]
+\floorfrac{150\,\mathrm{COIN}}{5000}\cdot \hgt & 2 \le \hgt < 2500 \\[6pt]
+\floorfrac{150\,\mathrm{COIN}}{5000}\cdot (\hgt+1) & 2500 \le \hgt < 5000 \\[6pt]
+\left\lfloor \dfrac{150\,\mathrm{COIN}}{2^{\,\min\left(\floorfrac{\hgt-2500}{655{,}350},\,2\right)}} \right\rfloor & 5000 \le \hgt < \hpon
+\end{cases}
+$$
+\end{definition}
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2818-2852}, constants \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{90-91}.
+This is the literal transcription of \texttt{Get\allowbreak{}Block\allowbreak{}Subsidy}'s legacy branch as currently compiled
+\shipped \srccode{flux-roadmap/\allowbreak{}supply/\allowbreak{}emission\_model.py}{207-218}. The chain's actual historical
+payout for heights $1$--$4{,}999$ differs from this formula by one block index (an older binary
+paid the premine at height $2$, not $1$, and shifted the slow-start ramp accordingly)
+\shipped \srccode{flux-roadmap/\allowbreak{}supply/\allowbreak{}emission\_model.py}{220-229}; that discrepancy is the source
+of the persistent offset discussed in \S\ref{sec:mp-discrepancy} below. The code's separate
+$\text{halvings}\ge 64 \Rightarrow 0$ branch is never reached before $\hpon$ and so never fires on
+the deployed chain \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2839-2840}.
+
+\begin{definition}[Proof-of-Node subsidy]
+\label{def:pon-subsidy}
+For $\hgt \ge \hpon$, let
+\begin{gather*}
+r(\hgt) \;\defeq\; \min\!\left(\floorfrac{\hgt-\hpon}{\redint},\ \redmax\right),
+\qquad
+s_0 \defeq 14\cdot\mathrm{COIN} = 1{,}400{,}000{,}000\sat, \\
+s_{k+1} \defeq \left\lfloor s_k \cdot \redfac \right\rfloor,\ \ \redfac = \frac{9}{10},
+\end{gather*}
+for $k = 0,\dots,\redmax-1$. Then
+$$
+\subsidypon(\hgt) \;\defeq\; s_{r(\hgt)}.
+$$
+\end{definition}
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2799-2816}; $\hpon = 2{,}020{,}000$
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{153}; $\redint = 1{,}051{,}200$ blocks
+($365\times24\times60\times2$, one year at the 30-second PoN spacing)
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{157}; $\redmax = 20$
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{158}. The combined block subsidy is
+$\subsidy(\hgt) = \subsidypow(\hgt)$ for $\hgt < \hpon$ and $\subsidypon(\hgt)$ otherwise
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2796-2798}.
+
+\textbf{Integer semantics.} $s_{r}$ is $r$ \emph{independently truncated} multiplications, not a
+closed form: $s_r \neq \left\lfloor s_0 \cdot (9/10)^{r} \right\rfloor$ in general, because each
+step's rounding error compounds on top of the previous step's rather than being computed once
+against the original $s_0$ \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2811-2813}. At $r=20$ the two
+expressions already differ at the eight printed decimal places used below: the iterated value is
+$1.70207313\flux$ against $1.70207316\flux$ for the closed form, and the two first diverge at $r=10$
+\shipped \srccode{flux-roadmap/\allowbreak{}supply/\allowbreak{}emission\_model.py}{195-204}; the paper
+states the iterated definition as the one \fluxd actually computes.
+
+\subsection{The frozen halving}
+\label{sec:mp-frozen-halving}
+
+The $\min(\cdot,2)$ term in Definition~\ref{def:pow-subsidy} is not an idealization; it is a
+hand-frozen consensus rule. \texttt{Get\allowbreak{}Block\allowbreak{}Subsidy}'s legacy branch reads
+\texttt{if (halvings >= 2) \{ nSubsidy >>= 2; return nSubsidy; \}}, with an in-source comment
+describing it as a ``temp solution while we work on the next blockchain improvement protocols''
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2842-2848}. Emission was therefore held at the second-halving
+level, $37.5\flux$/block, rather than continuing to halve every $655{,}350$ blocks
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{91}. This was not merely a theoretical stopping point:
+had halving continued, a third halving (to $18.75\flux$/block) would have taken effect at height
+$1{,}968{,}550 = 2500 + 3\times655{,}350$, which is before $\hpon = 2{,}020{,}000$; instead, the
+frozen floor held the reward at $37.5\flux$/block for the roughly $51{,}450$ blocks between that
+point and PoN activation, at which point the entire legacy path was replaced by
+Definition~\ref{def:pon-subsidy} \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2845-2848}.
+
+\subsection{Tier partition and the dev-fund remainder}
+\label{sec:mp-tier-devfund}
+
+\begin{definition}[PoN tier reward]
+For tier $X \in \tiers = \{\tC,\tN,\tS\}$ and $\hgt \ge \hpon$,
+$$
+\mathrm{reward}_X(\hgt) \;\defeq\; \left\lfloor \subsidypon(\hgt) \cdot \frac{\tbase{X}}{14\flux} \right\rfloor,
+$$
+with $\tbase{\tC} = 1.0\flux$, $\tbase{\tN} = 3.5\flux$, $\tbase{\tS} = 9.0\flux$ --- ratios chosen
+so that two Nimbus earn less than one Stratus while three earn more, and three Cumulus less than one
+Nimbus while four earn more \citep{fluxrewardmodel} ---
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2892-2895}, applied against the current, possibly-reduced
+$\subsidypon(\hgt)$, not against a value fixed at PoN activation
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2886-2939}.
+\end{definition}
+
+The $14\flux$ denominator is coded as \texttt{PON\_INITIAL\_TOTAL}, a separate local constant in
+\texttt{Get\allowbreak{}Fluxnode\allowbreak{}Subsidy}, rather than read from the consensus parameter
+\texttt{n\allowbreak{}PONInitial\allowbreak{}Subsidy} that fixes $s_0$ in Definition~\ref{def:pon-subsidy}
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2892}. A future upgrade that changed
+\texttt{n\allowbreak{}PONInitial\allowbreak{}Subsidy} without also editing this literal would silently desynchronize the
+tier ratios from the actual base subsidy; this is a maintenance hazard in the deployed code, stated
+here because it bears on what a future constant change could do without touching the tier logic at
+all \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2892}.
+
+\begin{definition}[Dev-fund remainder]
+$$
+\devfund(\hgt) \;\defeq\; \subsidypon(\hgt) - \mathrm{reward}_{\tC}(\hgt) - \mathrm{reward}_{\tN}(\hgt) - \mathrm{reward}_{\tS}(\hgt), \qquad \hgt \ge \hpon.
+$$
+\end{definition}
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2877-2884} (\texttt{Get\allowbreak{}Min\allowbreak{}Dev\allowbreak{}Fund\allowbreak{}Amount}). At $r=0$, the
+unreduced $14\flux$ subsidy, $\devfund = 0.5\flux = 50{,}000{,}000\sat$, i.e.\ $1/28 \approx 3.57\%$
+of PoN emission. Because $\devfund$ is defined as a remainder of the \emph{current} subsidy rather
+than a fixed floor, this share decays proportionally as $\subsidypon$ reduces
+\shipped \srccode{flux-roadmap/\allowbreak{}supply/\allowbreak{}emission\_model.py}{358-368}.
+
+Payment is consensus-enforced twice, independently. Loosely: any post-PoN coinbase lacking an
+output of at least $\devfund(\hgt)$ to the hardcoded address is rejected with
+\texttt{"tx-\allowbreak{}coinbase-\allowbreak{}missing-\allowbreak{}dev-\allowbreak{}funding"} \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{1231-1249}.
+Strictly: \texttt{Fluxnode\allowbreak{}Cache::\allowbreak{}Check\allowbreak{}Fluxnode\allowbreak{}Payout} independently requires the coinbase value not
+already claimed by a tier payout to be at least $\devfund(\hgt)$
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.cpp}{837-875}. The mainnet address is
+\texttt{t3h\allowbreak{}Pu1YDe\allowbreak{}GUCp8m7BQCnn\allowbreak{}NUm\allowbreak{}RMJBa5Rady\allowbreak{}A} \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{306}.
+
+No source comment names this remainder a ``dev fund'' at the point where the tier ratios
+themselves are defined; the routing is discoverable only by following
+\texttt{Get\allowbreak{}Min\allowbreak{}Dev\allowbreak{}Fund\allowbreak{}Amount}'s call graph out to the two enforcement sites above, not from any
+single comment at the site of the constants \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2877-2884}. That
+is a documentation gap worth stating plainly rather than leaving for a reader to reconstruct.
+
+\subsection{One-off and recurring fund payouts}
+\label{sec:mp-fund-payouts}
+
+Three further payments are enforced directly in coinbase validation, by exact scriptPubKey and
+amount match, independent of the tier/dev-fund split above
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{1252-1304}: two one-off payments and one recurring schedule.
+
+\begin{table}[H]
+\centering
+\caption{One-off and recurring consensus-enforced fund payouts, mainnet. All entries \shipped,
+cited directly to \fluxd.}
+\label{tab:fund-payouts}
+\begin{tabular}{@{}lllll@{}}
+\toprule
+Payment & Address & Height / schedule & Amount & Provenance \\
+\midrule
+Exchange fund & \texttt{t3PMbb\allowbreak{}A5YBMrj\allowbreak{}SD3d\allowbreak{}D16SSd\allowbreak{}XKu\allowbreak{}Kovwmj6t\allowbreak{}S} & $\hgt = 836{,}274$, one-off &
+$7{,}500{,}000\flux$ & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{293-294} \\
+Foundation fund & \texttt{t3Xj\allowbreak{}YMBvwxn\allowbreak{}XVv9jqg4Cgok\allowbreak{}Z3f7k\allowbreak{}Ao\allowbreak{}XPQL8} & $\hgt = 836{,}994$, one-off &
+$2{,}500{,}000\flux$ & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{297-298} \\
+Swap pool & \texttt{t3Thb\allowbreak{}Wog\allowbreak{}Do\allowbreak{}Aj\allowbreak{}Gu\allowbreak{}S6DEnm\allowbreak{}N1GWJBRb\allowbreak{}Vj\allowbreak{}SUK4T} & from $\hgt = 837{,}714$, every
+$21{,}600$ blocks, $\times 10$ & $22{,}000{,}000\flux$ per tranche ($220{,}000{,}000\flux$ total) &
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{301-304} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{The supply function}
+\label{sec:mp-supply}
+
+\begin{definition}[Cumulative supply]
+\label{def:supply}
+\begin{multline*}
+\supply(\hgt) \;=\; \mathrm{premine}(\hgt) + \mathrm{pow\_slow\_start}(\hgt)
+  + \mathrm{pow}_{150}(\hgt) + \mathrm{pow}_{75}(\hgt) + \mathrm{pow}_{37.5}(\hgt) \\
+  {}+ \mathrm{exch}(\hgt) + \mathrm{found}(\hgt) + \mathrm{swap}(\hgt) + \mathrm{pon}(\hgt),
+\end{multline*}
+with
+\begin{align*}
+\mathrm{premine}(\hgt) &= \premine \cdot \indic{\hgt \ge 2} \\
+\mathrm{pow\_slow\_start}(\hgt) &= \textstyle\sum_{k=2}^{\min(\hgt,\,4999)} \subsidypow(k) \\
+\mathrm{pow}_{150}(\hgt) &= 150\flux \cdot \big|\{k : 5000 \le k \le \min(\hgt,657{,}849)\}\big| \\
+\mathrm{pow}_{75}(\hgt) &= 75\flux \cdot \big|\{k : 657{,}850 \le k \le \min(\hgt,1{,}313{,}199)\}\big| \\
+\mathrm{pow}_{37.5}(\hgt) &= 37.5\flux \cdot \big|\{k : 1{,}313{,}200 \le k \le \min(\hgt,2{,}019{,}999)\}\big| \\
+\mathrm{exch}(\hgt) &= 7{,}500{,}000\flux \cdot \indic{\hgt \ge 836{,}274} \\
+\mathrm{found}(\hgt) &= 2{,}500{,}000\flux \cdot \indic{\hgt \ge 836{,}994} \\
+\mathrm{swap}(\hgt) &= 22{,}000{,}000\flux \cdot \textstyle\sum_{i=0}^{9} \indic{\hgt \ge 837{,}714 + 21{,}600\,i} \\
+\mathrm{pon}(\hgt) &= \textstyle\sum_{k=\hpon}^{\hgt} \subsidypon(k) \cdot \indic{\hgt \ge \hpon}
+\end{align*}
+\end{definition}
+\shipped \srccode{flux-roadmap/\allowbreak{}supply/\allowbreak{}emission\_model.py}{321-367}. The premine trigger height
+above uses $2$ (the observed mode used for every current- and historical-supply figure in this
+section); the literal code branch triggers at height $1$ instead
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2820-2822} — the one-block difference re-enters as part of
+the discrepancy in \S\ref{sec:mp-discrepancy}. All nine terms are additive; the PoW and PoN
+subsidy terms are mutually exclusive by height, and the premine, exchange, foundation and
+swap-pool terms are new issuance layered on top of whichever subsidy term is active
+\shipped \srccode{flux-roadmap/\allowbreak{}supply/\allowbreak{}emission\_model.py}{469-477}. The tier rewards and dev-fund
+remainder of \S\ref{sec:mp-tier-devfund} are a display-only split of $\mathrm{pon}(\hgt)$; they are
+never added on top of it \shipped \srccode{flux-roadmap/\allowbreak{}supply/\allowbreak{}emission\_model.py}{358-368}.
+
+\begin{proposition}[No terminal supply]
+\label{prop:no-terminal-supply}
+$\supply$ does not converge at any height. For every $\hgt \ge \hgt_{20} \defeq \hpon + \redmax\cdot\redint = 23{,}044{,}000$,
+$$
+\subsidypon(\hgt) = s_{20} = 170{,}207{,}313\sat = 1.70207313\flux
+$$
+is constant, because the reduction loop in Definition~\ref{def:pon-subsidy} terminates after
+$\redmax = 20$ iterations rather than continuing indefinitely
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2811-2816}. Consequently $\supply$ grows without bound at the
+fixed asymptotic rate
+$$
+s_{20} \cdot \redint = 1.70207313\flux \times 1{,}051{,}200 = 1{,}789{,}219.274256\ \flux/\mathrm{year}, \quad \text{forever}.
+$$
+\end{proposition}
+\shipped \srccode{flux-roadmap/\allowbreak{}supply/\allowbreak{}emission\_model.py}{514-546}, executed 2026-09-03.
+Height $\hgt_{20} = 23{,}044{,}000$ is a direct consequence of the consensus constants above and is
+exact; the corresponding calendar date, $\sim$2045-10-20, is a 30-second-spacing extrapolation from
+the PoN-activation timestamp anchor, and the model itself validates that extrapolation only against
+block $2{,}816{,}820$, about $800{,}000$ blocks after activation, not over horizons this long
+\srcdoc{flux-roadmap/supply/emission\_model.py:389-391}.
+One PoN year later, at height $24{,}095{,}199$ ($\sim$2046-10-20, same caveat), cumulative supply is
+$548{,}043{,}625.860464\flux$ \shipped \srccode{flux-roadmap/\allowbreak{}supply/\allowbreak{}emission\_model.py}{321-367}.
+This is not a cap; it is only the point at which the annual emission \emph{rate} has become
+constant, per Proposition~\ref{prop:no-terminal-supply}. The team's own public statement is
+consistent with this derivation: ``block rewards reduce 10\% a year for twenty years and then
+continue at a small fixed amount indefinitely — about 1.79 million FLUX a year, forever''
+\srcroadmap{flux-roadmap-public.md:189}.
+
+\textbf{Current supply.} $\supply(2{,}912{,}015) = 429{,}466{,}823.9700\flux$, observed mode,
+computed 2026-09-03 \shipped \srccode{flux-roadmap/\allowbreak{}supply/\allowbreak{}emission\_model.py}{321-367}. This is
+consistent with the team's own public reconciliation — ``about 428.1 million FLUX, at block
+$\sim$2,816,845 \dots reconciles with our emission model to within 0.0005\%'' —
+\srcroadmap{flux-roadmap-public.md:185}, an earlier height on the same monotone curve.
+
+\textbf{\maxmoney is not a supply cap.} $\maxmoney = 440{,}000{,}000\flux$ is defined in
+\texttt{MoneyRange()} as a per-transaction/output sanity bound, not a chain-wide accumulator
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}amount.h}{22-31}. Cumulative issuance crosses this value at height
+$3{,}730{,}295$ ($\sim$2027-06-11) \shipped \srccode{flux-roadmap/\allowbreak{}supply/\allowbreak{}emission\_model.py}{550-561},
+and nothing in consensus checks or breaks when it does. The team states this publicly in the same
+terms: ``Neither 440 million nor 560 million is a cap enforced by the protocol \dots issuance
+passes it in 2027 without anything breaking \dots there is no hard cap today. We would rather say
+that than repeat a number'' \srcroadmap{flux-roadmap-public.md:189,191}.
+
+\subsection{Plots}
+\label{sec:mp-plots}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=\linewidth, height=6cm,
+    xlabel={Year},
+    ylabel={Cumulative supply $\supply(\hgt)$ [\flux]},
+    xmin=2026, xmax=2060,
+    grid=major,
+]
+\addplot[thick, blue, mark=none] table[x index=0, y index=2] {../data/emission.dat};
+\draw[densely dashed] ({axis cs:2045.8,0}|-{rel axis cs:0,1}) -- ({axis cs:2045.8,0}|-{rel axis cs:0,0})
+    node[pos=0.08, right, font=\scriptsize] {$\hgt=23{,}044{,}000$: 20th reduction};
+\end{axis}
+\end{tikzpicture}
+\caption{Cumulative issued \Flux supply, 2026--2060, mode=observed
+\shipped \srccode{flux-roadmap/\allowbreak{}supply/\allowbreak{}emission\_model.py}{321-367}. Data: \texttt{paper/\allowbreak{}data/\allowbreak{}emission.\allowbreak{}dat}
+(columns \texttt{year}, \texttt{height}, \texttt{cumulative\_supply}, \texttt{annual\_emission},
+\texttt{pow\_emission}, \texttt{pon\_emission}). The dashed line marks the onset of the flat
+tail rate, per Proposition~\ref{prop:no-terminal-supply}, read from
+\texttt{paper/\allowbreak{}data/\allowbreak{}pon\_reductions.\allowbreak{}dat} row $n=20$.}
+\label{fig:cumulative-supply}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=\linewidth, height=6cm,
+    xlabel={Year},
+    ylabel={Annual emission [\flux/\text{yr}]},
+    xmin=2026, xmax=2060,
+    grid=major,
+]
+\addplot[thick, red!70!black, mark=none] table[x index=0, y index=3] {../data/emission.dat};
+\end{axis}
+\end{tikzpicture}
+\caption{Annual \Flux emission by calendar year. \texttt{pow\_emission} is exactly zero for every
+plotted year (all postdate \PoN activation) \shipped \srccode{flux-roadmap/\allowbreak{}supply/\allowbreak{}emission\_model.py}{299-318}.
+Data: \texttt{paper/\allowbreak{}data/\allowbreak{}emission.\allowbreak{}dat}, column \texttt{annual\_emission}. From calendar year 2046
+onward the series is $1{,}789{,}219.274256\flux$ per 365-day year, per
+Proposition~\ref{prop:no-terminal-supply}; leap years (2048, 2052, \ldots) carry one more day of
+blocks and read $1{,}794{,}121.2449\flux$.}
+\label{fig:annual-emission}
+\end{figure}
+%% verified 2026-09-04: emission.dat header is "# year height cumulative_supply annual_emission
+%% pow_emission pon_emission"; the cumulative-supply plots read y index=2 and the annual-emission
+%% plot y index=3, both matching their axis labels. pon_reductions.dat is not consumed by any
+%% plot. (Build note; not paper text.)
+
+\subsection{A discrepancy in the published model}
+\label{sec:mp-discrepancy}
+
+The emission model's own docstring claims that its two computation modes — \texttt{observed}
+(what mainnet actually paid) and \texttt{code} (a literal transcription of the current
+\texttt{Get\allowbreak{}Block\allowbreak{}Subsidy}) — differ by $0.06\flux$ in total, and calls the choice between them
+``irrelevant at publication precision'' \srcdoc{flux-roadmap/supply/emission\_model.py:105-106}.
+Executing the model shows an exact, height-independent difference of $150.00000000\flux$ at every
+tested height $\ge 5{,}000$, arising from the one-block index shift itself, which lowers the payout of
+every one of the $4{,}996$ ramp blocks by $0.03\flux$ and of blocks $2$ and $2{,}500$ by $0.06\flux$
+each, where the docstring's figure counts block $2$ alone
+\shipped \srccode{flux-roadmap/\allowbreak{}supply/\allowbreak{}emission\_model.py}{207-229}. This is a
+finding about the published emission model's own arithmetic, not about \fluxd's consensus code,
+which is unaffected. This paper uses \texttt{observed} mode throughout, as the model's own default
+for historical and current-supply claims; full derivation and reproduction steps are in
+Appendix~C.
+
+\subsection{Baseline for what follows}
+
+The subsidy, tier, dev-fund and fund-payout functions given here are the quantities Section~7
+measures Progressive Node Reward parity against, and every issuance, supply or operator-income
+figure elsewhere in this paper is denominated against the schedule fixed in this section.
+
+%% Drain this section's float queue before the next begins.
+\FloatBarrier

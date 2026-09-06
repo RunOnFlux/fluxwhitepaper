@@ -1,0 +1,16 @@
+# Review units for the Flux v9 whitepaper. Read by .claude/commands/review-paper.md
+# and by scripts/30-review.sh — this file is the single source of truth for scope.
+# Format: <unit-id><TAB><space-separated section basenames under paper/sections/>
+u01-foundations		00-abstract 01-introduction 02-system-model 03-deployed-today
+u02-chain-money		04-consensus 05-monetary-policy 06-parallel-assets
+u03-pnr			07-pnr 08-chain-evolution
+u04-cloud-core		09-fluxos 10-appspec-v9 11-one-platform
+u05-cloud-infra		12-networking 13-managed-services 14-attested-execution
+u06-agents		15-accelerated-compute 16-paying-for-capacity 17-agent-identity
+u07-agent-cloud		18-agent-native-cloud 19-natural-language-deployment 20-shielded-value
+u08-private-payment	21-private-payment
+u09-bridging		22-bridging
+u10-governance		23-governance
+u11-end-to-end		23b-end-to-end
+u12-assessment		24-feasibility 25-evaluation 26-migration 27-related-work 28-limitations 29-conclusion
+u13-appendices		A-constants B-interfaces C-emission-model D-notation-index E-roadmap-timeline

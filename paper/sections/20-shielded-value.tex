@@ -1,0 +1,716 @@
+\section{Shielded value on Flux}
+\label{sec:shielded-value}\label{sec:privacy}
+
+\fluxd is a Zcash fork, and its privacy layer is not something Flux built: it is Zcash's Sprout and
+Sapling shielded-transaction machinery, carried forward through an intermediate ``Zel'' rebrand,
+compiled into the node today, and only partially wired up for Flux's own chain. Every subsection
+below states, component by component, whether what is described is inherited from Zcash unmodified,
+inherited and then modified by Flux, or original to Flux. Almost nothing in this section is the last
+category: the cryptography is Zcash's, and Flux's own work here is mostly a set of consensus-level
+switches layered on top of it — some left on, several left off.
+
+\fluxd's consensus rules and wallet support two address and transaction types side by side today:
+transparent (\taddr) and shielded (\zaddr) (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}primitives/\allowbreak{}transaction.h}{684-686,967-969}).
+\textbf{That coexistence is ending.} Earlier drafts of this paper recorded it as permanent, on the
+strength of three consistent statements: ``Optional at the protocol level, never mandatory. A
+transparent layer stays permanently'' \srcroadmap{flux-roadmap-public.md:171}; the non-goals list
+ruling out ``Making privacy mandatory'' for the same reason
+\srcroadmap{flux-roadmap-public.md:206}; and the design intake's ``Both payment types stay,
+permanently'' \srcintent{05-privacy-pq.md}. Those statements are accurately reported and were
+accurate when made. They have been superseded: the team has decided to \textbf{retire both shielded
+pools} \srcintent{08-answers-round-2.md, round 10} (\planned). The transparent layer stays; the
+shielded layer does not.
+
+This section is therefore written in two registers, and the reader should know which is which. Every
+subsection up to and including \S\ref{sec:rpc-surface} describes the machinery \emph{as deployed
+today} --- \shipped, present tense, accurate at the time of writing, and live on mainnet holding real
+value. \S\ref{sec:shielded-retirement} states the decision to remove it, the measurement that
+motivated it, and the schedule. The descriptive half is retained in full rather than cut: a reference
+description of Flux that omitted a mechanism currently running would be incomplete, and a retirement
+plan is only auditable against a precise account of what is being retired.
+
+\subsection{Lineage: Bitcoin, Zcash, Zel, Flux}
+\label{sec:shielded-lineage}
+
+The in-repository license chain states the lineage plainly: \texttt{COPYING} carries copyright
+headers running Bitcoin Core developers (2009--2019) $\to$ Zcash developers (2016--2019) $\to$ Zel
+developers (2017--2019) $\to$ Flux Developers (2018--2022) (\shipped,
+\srccode{fluxd/\allowbreak{}COPYING}{1-5}). That is the authoritative lineage as the code itself records it, and
+it is stated here as a fact about provenance, not as an apology: a large fraction of \fluxd is
+inherited Zcash code, and the paper treats every claim below accordingly.
+
+The renaming from Zcash's \texttt{libzcash} to Flux's \texttt{libflux} was not applied uniformly.
+Most files under \texttt{src/flux/} carry only a Flux copyright line (e.g.\
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}Note.hpp}{1}, \srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}NoteEncryption.hpp}{1},
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}Proof.hpp}{1}, \srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}Address.hpp}{1},
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}JoinSplit.hpp}{1}), while \srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}zip32.h}{1-2} retains both
+the original Zcash and the added Flux copyright line — the header rewrite was partial. Under
+\texttt{src/}, 395 files carry \texttt{"The Flux Developers"} and 24 still contain the literal string
+\texttt{"Zelcash"}; repository-wide, 58 files still carry \texttt{"The Zcash developers"} with no Flux
+line added (\shipped, \srccode{fluxd}{repo-wide grep}). The historical header \texttt{src/\allowbreak{}flux/\allowbreak{}Zelcash.\allowbreak{}h}, which
+defines the shielded protocol's size constants (Table~\ref{tab:shielded-components}), still bears that
+name and is directly \texttt{\#include}d by \texttt{Note.hpp}, \texttt{Note\allowbreak{}Encryption.\allowbreak{}hpp} and
+\texttt{Address.hpp} (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}Note.hpp}{9}). Other rebrand artifacts persist
+unmodified: the standalone consensus library's pkg-config template still emits
+\texttt{-\allowbreak{}lzelcashconsensus} and \texttt{"Zelcash consensus library"} against an actual build target
+named \texttt{libfluxconsensus.\allowbreak{}la} (\shipped, \srccode{fluxd/\allowbreak{}libfluxconsensus.pc.in}{7,9} vs.\
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}Makefile.am}{52}); the client name compiled in is the unmodified upstream
+\texttt{"MagicBean"} (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}clientversion.cpp}{17}); and the startup log still
+prints \texttt{"Zelcash version \%s (\%s)"} (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}init.cpp}{918}). These are
+stated as discrepancies in an incomplete rebrand, not as deliberate design.
+
+The fork point itself cannot be read off a version string, because \fluxd carries no explicit
+record of the upstream \texttt{zcashd} release it branched from. It can nonetheless be bracketed
+from consensus evidence rather than guessed. The vendored \texttt{doc/\allowbreak{}zcash-release-notes/}
+tops out at the v2.1.0 series (\texttt{release-notes-2.\allowbreak{}1.\allowbreak{}0.\allowbreak{}md} and
+\texttt{release-\allowbreak{}notes-\allowbreak{}2.1.0-\allowbreak{}1.\allowbreak{}md}), the former announcing Blossom's mainnet activation
+\srcdoc{fluxd/doc/zcash-release-notes/release-notes-2.1.0.md:1-15}; and the network-upgrade
+table contains no Heartwood, Canopy, NU5 or Orchard entry
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}consensus/\allowbreak{}params.h}{25-38}, \srccode{fluxd/\allowbreak{}src/\allowbreak{}consensus/\allowbreak{}upgrades.cpp}{11-65},
+while only the old-style \texttt{librustzcash\_sapling\_*} FFI is called and never
+\texttt{orchard} or \texttt{halo2} \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{1447}. \Flux therefore derives
+from \textbf{\texttt{zcashd} v2.1.0 (Blossom), at or after that release and before v2.1.2
+(Heartwood)}. One caution for anyone re-deriving this: the pinned revision in
+\texttt{depends/\allowbreak{}packages/\allowbreak{}librustzcash.\allowbreak{}mk} is a 2018 commit, but it is the same commit
+\texttt{zcashd} v2.1.0 itself pins, so it corroborates the bracket above rather than dating the fork
+earlier \srcbranch{zcash}{v2.1.0}{depends/packages/librustzcash.mk:7}.
+
+Flux's own consensus-upgrade naming diverges completely from Zcash's. \fluxd's \texttt{UpgradeIndex}
+enumerates \texttt{BASE\_SPROUT}, \texttt{UPGRADE\_TESTDUMMY}, \texttt{UPGRADE\_LWMA},
+\texttt{UPGRADE\_EQUI144\_5}, \texttt{UPGRADE\_ACADIA}, \texttt{UPGRADE\_KAMIOOKA},
+\texttt{UPGRADE\_KAMATA}, \texttt{UPGRADE\_FLUX}, \texttt{UPGRADE\_HALVING},
+\texttt{UPGRADE\_P2SHNODES}, \texttt{UPGRADE\_PON} (\shipped,
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}consensus/\allowbreak{}params.h}{24-39}). There is no dedicated Overwinter- or Sapling-named
+entry; Sapling-era rules are instead gated on \texttt{UPGRADE\_ACADIA} (\S\ref{sec:shielded-machinery}
+below). \texttt{BASE\_SPROUT} is \texttt{ALWAYS\_ACTIVE} from genesis on mainnet (\shipped,
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{108-110}).
+
+The cryptographic backend is pinned, not vendored fresh. \texttt{librustzcash} is pulled at build time
+from \url{https://github.com/zcash/librustzcash/archive/} at git commit
+\texttt{06da3b9ac8f278e5\allowbreak{}d4ae13088cf0a4c0\allowbreak{}3d2c13f5}, version \texttt{0.1} (\shipped,
+\srccode{fluxd/\allowbreak{}depends/\allowbreak{}packages/\allowbreak{}librustzcash.mk}{2-8}). The Rust crates it depends on are pinned at
+their original 2018-era Zcash-project versions: \texttt{bellman} (the Groth16 R1CS prover) at
+\texttt{0.1.0} (\shipped, \srccode{fluxd/\allowbreak{}depends/\allowbreak{}packages/\allowbreak{}crate\_bellman.mk}{2-3}) and \texttt{pairing}
+(BLS12-381 curve arithmetic) at \texttt{0.14.2} (\shipped,
+\srccode{fluxd/\allowbreak{}depends/\allowbreak{}packages/\allowbreak{}crate\_pairing.mk}{2-3}). Nothing in the tree indicates a later
+\texttt{librustzcash}, \texttt{bellman}, or \texttt{pairing} upgrade was ever pulled forward.
+
+\subsection{The shielded machinery}
+\label{sec:shielded-machinery}
+
+The primitives that make a shielded transaction work — a \note, its commitment $\cm$, its nullifier
+$\nf$, the note commitment tree $\tree$ that anchors membership proofs, and the zero-knowledge proof
+$\zkproof$ that a spend is valid without revealing which note it spends — are Zerocash-family
+constructions~\citep{bensasson2014zerocash} as specified for Zcash's Sprout and Sapling shielded
+pools~\citep{zcashprotocol}. \fluxd's implementation lives under \texttt{src/flux/} (namespace
+\texttt{libflux}, historically \texttt{libzcash}) plus \texttt{src/\allowbreak{}primitives/\allowbreak{}transaction.\allowbreak{}h}, and it
+is compiled into \texttt{libfluxconsensus}/\fluxd for both protocol versions
+(\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}Makefile.am}{92-101,542-550}). Table~\ref{tab:shielded-components}
+states, per component, whether the code is Zcash's cryptography carried forward unmodified (beyond the
+\texttt{libzcash}$\to$\texttt{libflux} rename) or a Flux-added policy layered on top of it; every
+Flux-original item in this section is a consensus switch, never a change to the underlying scheme.
+
+\begin{itemize}
+\item \textbf{Notes.} \texttt{Note.hpp}\slash\texttt{.cpp} implements \texttt{SproutNote} (fields
+  $a_{pk},\rho,r$; $\cm$ computed as $\mathrm{SHA256}(0\mathrm{xb0} \| a_{pk} \| \mathrm{value}_{LE}
+  \| \rho \| r)$, \shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}Note.cpp}{24-41}; $\nf$ via \texttt{PRF\_nf},
+  \shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}Note.cpp}{43-45}) and \texttt{SaplingNote} (fields $d, pk_d, r$;
+  $\cm$/$\nf$ delegated to \texttt{librustzcash\_sapling\_compute\_cm}\slash\texttt{\_compute\_nf}, \shipped,
+  \srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}Note.cpp}{55-93}), with explicit plaintext lead-byte tags \texttt{0x00}
+  (Sprout) / \texttt{0x01} (Sapling) (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}Note.hpp}{97-101,156-161}) and
+  an outgoing-viewing-key plaintext for sender-side recovery (\shipped,
+  \srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}Note.hpp}{172-204}). Inherited unmodified.
+\item \textbf{Note encryption.} \texttt{Note\allowbreak{}Encryption.\allowbreak{}hpp}\slash\texttt{.cpp} implements
+  \texttt{Sapling\allowbreak{}Note\allowbreak{}Encryption} (one-shot, ephemeral $epk$/$esk$; the class comment itself notes it
+  is not thread-safe, \srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}NoteEncryption.hpp}{30}), trial-decryption routines
+  \texttt{Attempt\allowbreak{}Sapling\allowbreak{}Enc\allowbreak{}Decryption}\slash\texttt{Attempt\allowbreak{}Sapling\allowbreak{}Out\allowbreak{}Decryption}, a templated Sprout
+  AEAD scheme sized to \texttt{NOTEENCRYPTION\_AUTH\_BYTES}$=16$ bytes, and a
+  \texttt{Payment\allowbreak{}Disclosure\allowbreak{}Note\allowbreak{}Decryption} variant used by the payment-disclosure RPCs
+  (\S\ref{sec:rpc-surface}) (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}NoteEncryption.hpp}{176-195}).
+  Inherited unmodified.
+\item \textbf{Note commitment tree ($\tree$).} A generic incremental Merkle tree,
+  \texttt{Incremental\allowbreak{}Merkle\allowbreak{}Tree<Depth,Hash>}, instantiated twice: \texttt{Sprout\allowbreak{}Merkle\allowbreak{}Tree} at depth
+  29 over SHA-256 compression, and \texttt{Sapling\allowbreak{}Merkle\allowbreak{}Tree} at depth 32 over a Pedersen hash
+  (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}IncrementalMerkleTree.hpp}{253-263}). Inherited unmodified.
+\item \textbf{Addresses and viewing keys ($\viewkey$).} \texttt{Address.hpp} defines
+  \texttt{Sprout\allowbreak{}Payment\allowbreak{}Address}\slash\texttt{ViewingKey}\slash\texttt{SpendingKey} and
+  \texttt{Sapling\allowbreak{}Payment\allowbreak{}Address} (diversifier $d$ + $pk_d$), \texttt{Sapling\allowbreak{}Incoming\allowbreak{}Viewing\allowbreak{}Key},
+  \texttt{Sapling\allowbreak{}Full\allowbreak{}Viewing\allowbreak{}Key} ($ak,nk,ovk$), and \texttt{Sapling\allowbreak{}Expanded\allowbreak{}Spending\allowbreak{}Key}
+  ($ask,nsk,ovk$) (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}Address.hpp}{32-222}).
+  \texttt{zip32.h}\slash\texttt{.cpp} implements ZIP-32 hierarchical-deterministic derivation for Sapling
+  extended keys (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}zip32.h}{16-18,53-136}). Inherited unmodified.
+\item \textbf{Proving system ($\zkproof$).} \texttt{Proof.hpp}\slash\texttt{.cpp} carries the legacy Sprout
+  \texttt{PHGRProof} pairing-based proof format (\shipped,
+  \srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}Proof.hpp}{159-185}) alongside a strict/disabled verifier toggle used at
+  reindex time (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}Proof.hpp}{222-229}). \texttt{JoinSplit.hpp} fixes
+  \texttt{GROTH\_PROOF\_SIZE}$=48+96+48=192$ bytes — a BLS12-381 compressed $G_1\|G_2\|G_1$ layout —
+  and defines \texttt{SproutProof} as a tagged variant of \texttt{PHGRProof} and \texttt{GrothProof}
+  (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}JoinSplit.hpp}{22-29}); \texttt{transaction.h} carries the
+  Sapling \texttt{Spend\allowbreak{}Description} and \texttt{Output\allowbreak{}Description} wire structures, each holding a
+  \texttt{Groth\allowbreak{}Proof zkproof} field (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}primitives/\allowbreak{}transaction.h}{155-242}).
+  Inherited unmodified; see \S\ref{sec:trusted-setup} for the parameters this proving system consumes.
+\end{itemize}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lll}
+\toprule
+Component & Provenance & Maturity \\
+\midrule
+Note ($\note$), commitment ($\cm$), nullifier ($\nf$) & inherited, unmodified (renamed) & \shipped \\
+Note encryption & inherited, unmodified (renamed) & \shipped \\
+Note commitment tree ($\tree$) & inherited, unmodified (renamed) & \shipped \\
+Addresses, viewing keys ($\viewkey$), ZIP-32 & inherited, unmodified (renamed) & \shipped \\
+Groth16 proving system ($\zkproof$) & inherited, unmodified (renamed) & \shipped \\
+Turnstile enforcement (ZIP-209) & inherited, Flux-disabled & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.h}{200} \\
+Coinbase-must-be-shielded & inherited, Flux-disabled post-height & \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{3228-3237} \\
+New-inflow restriction at \texttt{UPGRADE\_FLUX} & Flux-original policy & \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{1398-1408} \\
+Sprout$\to$Sapling migration RPC & inherited, Flux-disabled & \srccode{fluxd/\allowbreak{}src/\allowbreak{}wallet/\allowbreak{}rpcwallet.cpp}{4110-4114} \\
+\bottomrule
+\end{tabular}
+\caption{Provenance of the shielded-value components discussed in this section. ``Flux-disabled''
+means the code path is compiled in and reachable but a Flux-added switch keeps it inactive; see
+\S\ref{sec:switched-off}.}
+\label{tab:shielded-components}
+\end{table}
+
+Two shielded protocol versions are active on \fluxd today, and a third is not present at all.
+\textbf{Sprout} is active from genesis (\texttt{BASE\_SPROUT} is \texttt{ALWAYS\_ACTIVE}) and accepts
+both the legacy \texttt{PHGRProof} and \texttt{GrothProof} encodings, tag-selected per transaction
+version (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}primitives/\allowbreak{}transaction.h}{244-289}). \textbf{Sapling} is gated on
+\texttt{Consensus::\allowbreak{}UPGRADE\_ACADIA}, active on mainnet from height 250{,}000 (\shipped,
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{122-125}), with enforcement of the Overwinter flag,
+\texttt{SAPLING\_VERSION\_GROUP\_ID}, and the version-4 transaction bounds inside
+\texttt{Contextual\allowbreak{}Check\allowbreak{}Transaction} (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{1223,1344-1380}). As already
+noted, there is no separate Overwinter- or Sapling-named upgrade entry; Flux folded both into
+\texttt{ACADIA}. \textbf{Orchard is absent}: no occurrence of the string \texttt{Orchard} appears
+anywhere under \texttt{src/} (\shipped, \srccode{fluxd/\allowbreak{}src}{grep -rn Orchard, zero matches}), which is
+consistent with the fork point established above — the NU5/Halo2/Orchard-era \texttt{zcashd} code was
+never merged. \S\ref{sec:orchard-migration} returns to what adopting it later would and would not
+change.
+
+\subsection{The trusted setup, stated exactly}
+\label{sec:trusted-setup}
+
+Groth16, as deployed here, requires a one-time per-circuit parameter-generation ceremony whose
+output — the proving and verifying keys — must not leak the ceremony's intermediate randomness (the
+``toxic waste'')~\citep{groth2016size,bensasson2014zerocash}. \fluxd does not run its own ceremony.
+
+\begin{assumption}[Sapling trusted setup]
+\fluxd's Groth16 proving parameters — \texttt{sapling-spend.\allowbreak{}params}, \texttt{sapling-output.\allowbreak{}params},
+and \texttt{sprout-groth16.\allowbreak{}params} — are fetched, not generated, by the inherited
+\texttt{zcutil/\allowbreak{}fetch-params.\allowbreak{}sh} tool, packaged in the Flux build with a man page still named
+\texttt{zcash-\allowbreak{}fetch-\allowbreak{}params} (\shipped, \srccode{fluxd/\allowbreak{}zcutil/\allowbreak{}fetch-params.sh}{5-15}; \srccode{fluxd/\allowbreak{}doc/\allowbreak{}man/\allowbreak{}zcash-fetch-params.1}{4}).
+They are re-hosted on a Flux-operated mirror (\texttt{download.\allowbreak{}runonflux.\allowbreak{}io}) and on IPFS, downloaded
+in two parts and checked against fixed sha256 pins before use (\shipped,
+\srccode{fluxd/\allowbreak{}zcutil/\allowbreak{}fetch-params.sh}{104-141,220-222}). At startup, \texttt{ZC\_Load\allowbreak{}Params()}
+requires all three files to exist or calls \texttt{Start\allowbreak{}Shutdown()} (\shipped,
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}init.cpp}{754-806,762-775}), then passes independent SHA-512 hash strings for each
+file into \texttt{librustzcash\_init\_zksnark\_params()} (\shipped,
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}init.cpp}{791-801}). Flux therefore inherits the original \textbf{Zcash Sapling
+parameter-generation MPC} — the 2018 ``Powers of Tau''/Sapling ceremony run by the Zcash project
+together with outside participants~\citep{bowe2017mpc} — verbatim: it re-hosts the identical
+parameter files under their original filenames and role, and performs no additional or independent
+ceremony of its own.
+\end{assumption}
+
+The claim that the re-hosted files are byte-identical to the ones \texttt{zcashd} itself ships rests
+on the filenames, roles, and hash pins matching the well-known public Zcash Sapling parameter set,
+together with the crate pins in \S\ref{sec:shielded-lineage} being the original 2018 \texttt{librustzcash}\slash\texttt{bellman}
+versions; it was not independently re-derived against a \texttt{zcashd} source tree in the evidence
+this section draws on \srcinferred. The paper states it as a strongly supported inference rather than
+an independently re-verified fact, and flags the direct hash diff as the bounded check that would
+close it.
+
+Table~\ref{tab:trusted-setup} gives the fetch-time integrity pins exactly, since a reviewer checking a
+trusted-setup claim will want the exact values rather than a description of them.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lll}
+\toprule
+Parameter file & sha256 (fetch-time pin) & Location \\
+\midrule
+\texttt{sapling-spend.\allowbreak{}params} & \texttt{8e48ffd2\ldots7efc13} & \srccode{fluxd/\allowbreak{}zcutil/\allowbreak{}fetch-params.sh}{220} \\
+\texttt{sapling-output.\allowbreak{}params} & \texttt{2f0ebbcb\ldots f3fb0e4} & \srccode{fluxd/\allowbreak{}zcutil/\allowbreak{}fetch-params.sh}{221} \\
+\texttt{sprout-groth16.\allowbreak{}params} & \texttt{b685d700\ldots0ee55b50} & \srccode{fluxd/\allowbreak{}zcutil/\allowbreak{}fetch-params.sh}{222} \\
+\bottomrule
+\end{tabular}
+\caption{Fetch-time sha256 pins for the three Groth16 parameter files \fluxd requires at startup
+(hashes elided to their leading/trailing bytes here; full values in
+\srccode{fluxd/\allowbreak{}zcutil/\allowbreak{}fetch-params.sh}{220-222}). Runtime loading additionally checks independent
+SHA-512 hashes of each file (\srccode{fluxd/\allowbreak{}src/\allowbreak{}init.cpp}{791-801}).}
+\label{tab:trusted-setup}
+\end{table}
+
+What this assumption buys, and what it costs if it is false, should be stated as plainly as the
+assumption itself. If the toxic waste from the original Sapling ceremony was retained by any
+participant rather than destroyed, that party could construct false Groth16 proofs that pass
+verification while creating shielded value that no spent note ever committed to — that is, forge
+notes and mint counterfeit shielded value without breaking any wallet's transparent balance or the
+transparent supply at all~\citep{groth2016size,bensasson2014zerocash}. The forgery would be
+\emph{undetectable} from inside the shielded pool by construction, because the proof system gives no
+signal distinguishing a validly spent note from a forged one; the only external check available is
+exactly the pool-balance invariant discussed next, and \S\ref{sec:switched-off} states that this check
+is currently disabled on Flux's own chain. The multi-party design of the original ceremony was
+specifically intended to make this failure require collusion across many independent
+participants~\citep{bowe2017mpc}; Flux's inheritance of the parameters carries that same assumption
+forward unchanged, since it is not a party to the ceremony and cannot strengthen or re-verify it after
+the fact.
+
+\subsection{What is switched off}
+\label{sec:switched-off}
+
+The honest core of this section is that several of the safeguards this machinery was built to
+provide are compiled into \fluxd but not active on Flux's live networks.
+
+\begin{description}
+\item[The shielded pool has been closed to new entrants since \texttt{UPGRADE\_FLUX}.] This is the
+  strongest item in this subsection: the other three restrict or disable a safeguard, this one means
+  the pool cannot be funded from the transparent side at all. \texttt{Contextual\allowbreak{}Check\allowbreak{}Transaction}
+  rejects any transaction that has transparent inputs (\texttt{tx.vin.size()} nonempty) together with
+  a nonempty \texttt{vJoinSplit} or \texttt{v\allowbreak{}Shielded\allowbreak{}Output}, with reject reason
+  \texttt{bad-\allowbreak{}txns-\allowbreak{}fluxrebrand-\allowbreak{}vprivacy-\allowbreak{}not-\allowbreak{}empty} (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{1398-1408}),
+  once \texttt{UPGRADE\_FLUX} is active — mainnet height 835{,}554 (\shipped,
+  \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{137-139}). The in-source comment states the intent directly:
+  ``If flux rebrand is active, we no longer want to allow coins to go into the privacy pool''
+  (\srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{1398-1400}). This is a \textbf{Flux-original consensus policy, not a
+  Zcash ZIP} — nothing in the Sprout or Sapling specification restricts shielding transparent value
+  this way. The check never inspects \texttt{vShieldedSpend}, so shielded-to-shielded (z$\to$z) and
+  shielded-to-transparent (z$\to$t) transactions remain unrestricted; only the transparent-to-shielded
+  (t$\to$z) and mixed t/z$\to$z paths that would add new value to the pool are blocked. The pool is
+  therefore closed and monotonically non-increasing in value: value can leave for
+  the transparent side or move among existing shielded holders, but no new unit can enter.
+
+  At chain tip 2{,}917{,}115 the pool holds 77{,}188.759\,213\,24\flux in Sapling and 19{,}291.177\,350\,41\flux in
+  Sprout — 96{,}479.936\,563\,65\flux total (0.0225\% of issued supply) —
+  \srcmeasured{\texttt{api.\allowbreak{}runonflux.\allowbreak{}io/\allowbreak{}daemon/\allowbreak{}getblockchaininfo}, field \texttt{valuePools}, at \texttt{blocks}~$=$~2{,}917{,}115}{2026-09-03}.
+  \texttt{UPGRADE\_FLUX} activated at height 835{,}554, approximately 10~April~2021 — the calendar
+  date is carried only as a source comment, ``Around 10th April 2021''
+  (\srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{138}) — so as of this
+  writing (2026-09-03) the pool has been closed to new entrants for approximately 5.4 years. This
+  also bounds what the paper can say about shielded privacy in practice: the anonymity set a shielded
+  transaction hides within — the notes and holders it is indistinguishable from — cannot grow from new
+  participants while the pool stays closed, and neither its note count nor its holder count is exposed
+  by any RPC surface this section documents (\S\ref{sec:rpc-surface}), so neither is measured here.
+\item[Turnstile enforcement (ZIP-209) is compiled in but dormant.] \texttt{ConnectBlock()} contains
+  the inherited check that rejects a block if the running chain-wide Sprout or Sapling balance would
+  go negative — the mechanism that would catch exactly the counterfeiting scenario in
+  \S\ref{sec:trusted-setup} (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{3838-3862}). It is gated by
+  \texttt{fZIP209Enabled}, whose class default is \texttt{false} (\shipped,
+  \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.h}{200}); the mainnet checkpoint block and Sprout balance-checkpoint
+  values that would turn it on are present in the source but left commented out, and the values they
+  carry are the unmodified upstream Zcash-mainnet numbers, never adapted to Flux's own chain (\shipped,
+  \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{322-327}; same pattern on testnet at
+  \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{527-530}). Only regtest turns it on explicitly (\shipped,
+  \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{732}). Turnstile enforcement is precisely the mechanism that
+  makes the roadmap's own commitment true — ``Supply stays publicly verifiable, with pool totals
+  visible so the arithmetic always checks out'' \srcroadmap{flux-roadmap-public.md:174} — and on
+  mainnet and testnet it is off. Per G9, the paper states this as the gap between the commitment and
+  the deployed system rather than resolving it: turning \texttt{fZIP209Enabled} on, with checkpoint
+  values recomputed for Flux's own chain history rather than copied from Zcash's, is what would make
+  the sentence true.
+\item[Coinbase-must-be-shielded is disabled from \texttt{UPGRADE\_FLUX} onward.] Mainnet and testnet
+  set \texttt{f\allowbreak{}Coinbase\allowbreak{}Must\allowbreak{}Be\allowbreak{}Protected = true}; regtest sets it \texttt{false} (\shipped,
+  \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{89,341,545}). Enforcement inside
+  \texttt{Consensus::\allowbreak{}Check\allowbreak{}Tx\allowbreak{}Inputs} is itself gated by whether the ``Flux rebrand'' upgrade is active:
+  before height 835{,}554, a coinbase output could only be spent to a shielded address; from that
+  height on, the restriction is lifted and coinbase output may be spent transparently (\shipped,
+  \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{3200,3228-3237}), mirrored on the wallet side (\shipped,
+  \srccode{fluxd/\allowbreak{}src/\allowbreak{}wallet/\allowbreak{}wallet.cpp}{3506}). This is a narrower, separate switch from the pool-closure
+  restriction discussed first in this subsection: the two share an activation height but not a
+  mechanism, and coinbase transparency does not by itself reopen the shielded pool to new value.
+\item[\texttt{z\_setmigration} unconditionally throws post-\texttt{UPGRADE\_FLUX}.] The inherited
+  ZIP-308 Sprout$\to$Sapling migration RPCs, \texttt{z\_setmigration} and
+  \texttt{z\_getmigrationstatus}, are backed by a still-compiled
+  \texttt{Async\allowbreak{}RPCOperation\_saplingmigration} (\shipped,
+  \srccode{fluxd/\allowbreak{}src/\allowbreak{}wallet/\allowbreak{}asyncrpcoperation\_saplingmigration.h}{11}). But once the Flux-rebrand
+  upgrade is active, \texttt{z\_setmigration} immediately throws
+  \texttt{"Flux fork active:\allowbreak{} z\_setmigration has been deprecated"} (\shipped,
+  \srccode{fluxd/\allowbreak{}src/\allowbreak{}wallet/\allowbreak{}rpcwallet.cpp}{4110-4114}), and \texttt{UPGRADE\_FLUX} activates at mainnet
+  height 835{,}554 (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{137-139}). The migration operation
+  code is reachable only through an internal wallet flag that is itself settable only via this
+  now-error-throwing RPC — the migration path has been dead code on mainnet since that height, and
+  Sprout value has no in-wallet path to Sapling.
+\item[Sapling is gated on \texttt{UPGRADE\_ACADIA}, not a named Overwinter/Sapling upgrade.] As stated
+  in \S\ref{sec:shielded-machinery}, this is a naming divergence rather than a functional gap, but it
+  means a reader looking for ``Sapling activation'' in \fluxd's upgrade table by Zcash's own naming
+  convention will not find it (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}consensus/\allowbreak{}params.h}{24-39}).
+\end{description}
+
+The roadmap's privacy commitments should be read against this closure rather than independently of
+it. ``Flux descends from the Zcash lineage. The shielded machinery is part of what we inherited, and
+we are bringing private transactions back'' \srcroadmap{flux-roadmap-public.md:167} and ``Shielded by
+default in the wallets we make'' \srcroadmap{flux-roadmap-public.md:172} read, taken on their own, like
+wallet-integration tasks — pick a construction, ship it in Zelcore and SSP, default new addresses to
+\zaddr. Given the closure above, they are not only that. The t$\to$z restriction is a consensus rule
+enforced in \texttt{Contextual\allowbreak{}Check\allowbreak{}Transaction}, not a wallet setting, so no wallet change can place
+new value in the pool while that rule stands. \textbf{Reopening the pool to new entrants would itself be a
+consensus change, and it is not going to happen}: the pools are to be retired instead
+(\S\ref{sec:shielded-retirement}, \srcintent{08-answers-round-2.md, round 10}). An earlier round of
+the intake had confirmed reopening as part of a privacy update, and this paper carried it as a
+sequenced dependency ahead of wallet integration; that is superseded. The consensus change now in
+prospect is the opposite one --- invalidating shielded spends after a sunset height --- and
+\S\ref{sec:private-payment} and \S\ref{sec:migration} are updated accordingly. This is a narrower
+decision than the choice of successor shielded construction discussed in
+\S\ref{sec:orchard-migration}: the roadmap's position that it will not date a cryptographic change
+before its audit is scoped concerns which construction to adopt next (Orchard/Halo2 or otherwise), not
+the reopening of the already-deployed Sapling and Sprout pools to new transparent value, which needs no
+new circuit. It also bears directly on \S21: a private-payment construction can be specified against
+the shielded primitives in \S\ref{sec:shielded-machinery}, but with reopening cancelled and both pools
+retiring, \S21's constructions are inapplicable to the target architecture, and that section is
+retained for its requirement set and its measurements (\Cref{rem:pp-status}).
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  font=\footnotesize,
+  pool/.style={draw, rounded corners=3pt, minimum height=15mm, text width=32mm, align=center,
+               inner sep=3pt},
+  arr/.style={-{Latex[length=2.2mm]}, very thick},
+  lbl/.style={font=\tiny, align=center, inner sep=1.5pt},
+]
+  \node[pool] (t) {\textbf{Transparent pool}\\[1pt]{\scriptsize \taddr}};
+  \node[pool, right=44mm of t, fill=black!5] (z)
+     {\textbf{Shielded pool}\\[1pt]{\scriptsize Sprout + Sapling, \zaddr}\\[2pt]
+      {\tiny \num{96479.93656365}\,\flux}};
+
+  % t -> z : blocked
+  %% yshift clears the 8mm blocking bar drawn at the same midpoint, which used to
+  %% print straight through this label.
+  \draw[arr] ([yshift=4mm]t.east) -- node[lbl, above, pos=0.5, yshift=3.5mm]
+      {new inflow \textbf{blocked}\\from height 835{,}554} ([yshift=4mm]z.west);
+  \node[draw, very thick, minimum width=3mm, minimum height=8mm, fill=black!25]
+      at ($([yshift=4mm]t.east)!0.5!([yshift=4mm]z.west)$) {};
+
+  % z -> t : open
+  \draw[arr] ([yshift=-4mm]z.west) -- node[lbl, below, pos=0.5]
+      {open} ([yshift=-4mm]t.east);
+
+  % z -> z loop
+  \draw[arr] (z.north) to[out=50, in=130, looseness=5]
+      node[lbl, above] {\zaddr $\to$ \zaddr: open} (z.north east);
+
+  % turnstile gate, present but inactive
+  \node[draw, dashed, rounded corners=2pt, below=13mm of $(t)!0.5!(z)$, text width=48mm,
+        align=center, inner sep=3pt] (ts)
+      {\scriptsize turnstile check (ZIP-209)\\[1pt]{\tiny compiled in, \texttt{f\allowbreak{}ZIP209Enabled = false}}};
+  \draw[dashed, thick] (ts) -- ($(t.east)!0.5!(z.west)$);
+
+  \node[lbl, below=2mm of ts, text width=62mm]
+      {The pool can be left and moved within, but not entered. Its value is therefore
+       monotonically non-increasing until the rule is lifted.};
+\end{tikzpicture}
+\caption{Value flow between \fluxd's transparent and shielded pools, showing the turnstile check as
+present in code but inactive, and the height-835{,}554 restriction on new transparent-to-shielded
+inflow. \shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{1398-1408,3838-3862}; \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.h}{200}.}
+\label{fig:shielded-value-flow}
+\end{figure}
+
+\subsection{Supply accounting}
+\label{sec:supply-accounting}
+
+\fluxd exposes shielded-pool accounting through a \texttt{valuePools} array on the
+\texttt{getblockchaininfo} and \texttt{getblockheader} RPCs, with one entry per pool (\texttt{id}
+\texttt{"sprout"} or \texttt{"sapling"}), each carrying \texttt{monitored}, \texttt{chainValue},
+\texttt{chainValueZat}, \texttt{valueDelta}, and \texttt{valueDeltaZat} (\shipped,
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}rpc/\allowbreak{}blockchain.cpp}{84-101}), reported both per block
+(\srccode{fluxd/\allowbreak{}src/\allowbreak{}rpc/\allowbreak{}blockchain.cpp}{279-282}) and at the chain tip
+(\srccode{fluxd/\allowbreak{}src/\allowbreak{}rpc/\allowbreak{}blockchain.cpp}{1068-1071}). These fields are what a supply audit would read
+from: the total issued supply $\supply$ that \S5 defines is, by the roadmap's own description, ``the
+transparent set plus the shielded pools'' \srcroadmap{flux-roadmap-public.md:185}, and the roadmap
+states that this reconciles with the emission model to within 0.0005\%
+\srcroadmap{flux-roadmap-public.md:185}.
+
+The accounting fields are computed and exposed regardless of the turnstile switch discussed in
+\S\ref{sec:switched-off}. What the disabled switch removes is not the numbers themselves but the
+consensus-enforced invariant that would make a negative pool balance — the signature of exactly the
+kind of undetected forgery discussed in \S\ref{sec:trusted-setup} — impossible to sustain on-chain
+without triggering block rejection. \texttt{valuePools} is a reporting surface; turnstile enforcement
+is the check that would make the report trustworthy on its own. With \texttt{f\allowbreak{}ZIP209Enabled = false}
+on both live networks, \fluxd today performs no automated on-chain detection of a negative Sprout or
+Sapling pool balance outside of whatever manual monitoring an operator does against the
+\texttt{valuePools} field (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.h}{200}). This is the same gap
+named in \S\ref{sec:switched-off} and G9, restated here in its supply-accounting form because it is
+what connects this section to \S5's supply function: $\supply$ as defined there is only as trustworthy
+as the pool-balance fields that compose it, and those fields currently carry no consensus-level
+non-negativity guarantee.
+
+\subsection{The RPC surface}
+\label{sec:rpc-surface}
+
+The wallet RPC command table exposes the full set of z-address operations
+(\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}wallet/\allowbreak{}rpcwallet.cpp}{4994-5021}). This is the toolkit \S21's
+private-payment construction is built on, and it is enumerated here precisely rather than by example:
+
+\begin{description}
+\item[Key and address management] \texttt{z\_getnewaddress}, \texttt{z\_listaddresses},
+  \texttt{z\_exportkey}, \texttt{z\_importkey}, \texttt{z\_exportviewingkey},
+  \texttt{z\_importviewingkey} ($\viewkey$), \texttt{z\_exportwallet}, \texttt{z\_importwallet}
+  (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}wallet/\allowbreak{}rpcwallet.cpp}{4994-5018}). Full and incoming Sapling viewing
+  keys ($ak,nk,ovk$ and the incoming-viewing-key form) are the objects these last two RPCs move
+  (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}Address.hpp}{32-222}), and \texttt{zip32.h} carries the
+  ZIP-32 seed fingerprint and parent-FVK tag fields that identify derived keys (\shipped,
+  \srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}zip32.h}{32,55,101}).
+\item[Balance inspection] \texttt{z\_listreceivedbyaddress}, \texttt{z\_listunspent},
+  \texttt{z\_getbalance}, \texttt{z\_gettotalbalance} (\shipped,
+  \srccode{fluxd/\allowbreak{}src/\allowbreak{}wallet/\allowbreak{}rpcwallet.cpp}{4994-5018}).
+\item[Value movement] \texttt{z\_sendmany}, \texttt{z\_shieldcoinbase},
+  \texttt{z\_setmigration}\slash\texttt{z\_getmigrationstatus} (dead post-height-835{,}554, \S\ref{sec:switched-off}),
+  and \texttt{z\_mergetoaddress} — the last gated behind an explicit \texttt{-\allowbreak{}zmergetoaddress} flag
+  (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}wallet/\allowbreak{}rpcwallet.cpp}{4463-4466}; \srccode{fluxd/\allowbreak{}src/\allowbreak{}init.cpp}{905-906}).
+\item[Asynchronous operation tracking] \texttt{z\_getoperationstatus}, \texttt{z\_getoperationresult},
+  \texttt{z\_listoperationids} (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}wallet/\allowbreak{}rpcwallet.cpp}{4994-5018}).
+\item[Raw Sprout operations] \texttt{zcbenchmark}, \texttt{zcrawkeygen}, \texttt{zcrawjoinsplit},
+  \texttt{zcrawreceive}, \texttt{zcsamplejoinsplit} (\shipped,
+  \srccode{fluxd/\allowbreak{}src/\allowbreak{}wallet/\allowbreak{}rpcwallet.cpp}{4994-5021}).
+\item[Payment disclosure] \texttt{z\_getpaymentdisclosure} and \texttt{z\_validatepaymentdisclosure}
+  are registered under the RPC category \texttt{"disclosure"} (\shipped,
+  \srccode{fluxd/\allowbreak{}src/\allowbreak{}wallet/\allowbreak{}rpcwallet.cpp}{5020-5021}), backed by the note-decryption path described
+  in \S\ref{sec:shielded-machinery}. They are compiled in but off by default: both require
+  \texttt{f\allowbreak{}Experimental\allowbreak{}Mode}, whose global default is \texttt{false} (\inprogress,
+  \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{77}), set only via \texttt{-\allowbreak{}experimentalfeatures}, plus their own
+  per-feature flag; enabling one without the other aborts startup with an explicit error
+  (\inprogress, \srccode{fluxd/\allowbreak{}src/\allowbreak{}init.cpp}{895,903-904}). Payment disclosure is present code, not
+  an active default.
+\end{description}
+
+Payment disclosure and viewing-key export together give a selective-disclosure capability — reveal a
+transaction, or a stream of incoming payments, to a chosen third party without revealing anything
+else — that is exactly the primitive \S21's payer/network problem needs; \S21 states the construction
+it builds from this surface, or states precisely where the surface stops short of it.
+
+\subsection{Post-quantum scope: what is bounded, and why}
+\label{sec:pq-scope}
+
+Groth16 as deployed here is a pairing-based SNARK over BLS12-381 — the 192-byte proof format fixed by
+\texttt{GROTH\_PROOF\_SIZE} is exactly the compressed $G_1\|G_2\|G_1$ encoding this construction
+uses~\citep{groth2016size} (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}JoinSplit.hpp}{22-26}). Its soundness
+rests on pairing- and discrete-log-type hardness assumptions over that curve, which a
+sufficiently large quantum computer running Shor's algorithm breaks. This is a property of the
+scheme itself, not of Flux's use of it, and it holds regardless of who ran the trusted setup in
+\S\ref{sec:trusted-setup}: \textbf{the Sapling shielded layer, as deployed, is not post-quantum
+secure.} No post-quantum-related code, comment, or TODO exists anywhere under \texttt{src/} —
+a repository-wide search for \texttt{quantum} returns zero hits (\shipped, \srccode{fluxd/\allowbreak{}src}{grep -rn quantum, zero matches}).
+
+Given that, the team's stated position is to bound the post-quantum migration deliberately rather
+than claim more than the deployed cryptography supports. What is to become post-quantum is
+consensus, transparent transactions, and the keys securing them; the shielded layer is explicitly
+placed out of scope for now, with post-quantum privacy construction to follow later as the field
+matures \srcintent{05-privacy-pq.md} (\vision; after the retirement decision of
+\S\ref{sec:shielded-retirement}, any such construction is a future option, not a scheduled item).
+This scope decision is presented in the design intake
+as coherent and defensible rather than as an admitted gap, on the reasoning that privacy is already
+optional at the protocol level (the roadmap's own position, quoted at the head of this section), so a
+transparent-layer-first migration does not leave the
+part of the system that everyone must use exposed while the part that is opt-in waits. The paper
+adopts that framing because the alternative is worse: an unqualified ``quantum-ready'' claim made
+while a live Groth16-based shielded pool sits underneath it would be a claim a reviewer familiar with
+the scheme would immediately falsify. A scope statement this specific — consensus and transparent
+keys first, shielded privacy deferred and named as deferred — is the position that survives that
+scrutiny; a blanket claim is not.
+
+One distinction has to be kept strict, because it is the likeliest error in this area. Removing a
+trusted setup and achieving post-quantum security are two different properties, and a future
+construction can have either without the other. Halo2, the proof system behind Zcash's Orchard
+pool, eliminates the per-circuit trusted setup entirely by replacing it with a transparent, universal
+setup~\citep{bowe2019halo} — but it does so by resting on discrete-log hardness over a different
+curve, which is exactly as vulnerable to a quantum adversary as the pairing assumption Groth16 uses.
+Adopting Halo2/Orchard, discussed next, would answer the trusted-setup question and would do nothing
+for the post-quantum question. The two must not be conflated in either direction.
+
+\subsection{What a migration to Orchard/Halo2 would, and would not, buy}
+\label{sec:orchard-migration}
+
+Orchard is absent from \fluxd today (\S\ref{sec:shielded-machinery}), and no committed timeline or
+specific target construction exists yet: the roadmap places ``Chain privacy implementation'' in H2
+2027, explicitly ``on the schedule set by the Q4 2026 plan''
+\srcroadmap{flux-roadmap-public.md:158} (\planned), and states that the Q4 2026 privacy groundwork
+work is where ``which shielded construction to adopt'' is still to be settled
+\srcroadmap{flux-roadmap-public.md:177} (\planned). Whether that construction turns out to be
+Orchard/Halo2 specifically, some other Zcash-lineage successor, or something else is not yet decided
+by the team's own account, so this subsection is stated as \vision rather than as a scheduled item.
+
+The argument for making that move is specific, not generic, and worth stating precisely: adopting a
+Halo2-class proving system removes the inherited trusted setup described in
+\S\ref{sec:trusted-setup} entirely, and that directly serves the stated decentralization requirement
+— a chain whose privacy layer's soundness depends on a multi-party ceremony run once, by a fixed set
+of participants, in 2018, is not decentralized in the same sense the rest of the design intake asks
+for \srcintent{05-privacy-pq.md} (\vision). That argument stands on its own regardless of the
+post-quantum question, and the paper states it as such rather than bundling it with a PQ claim it
+does not support (\S\ref{sec:pq-scope}).
+
+What it would not buy is equally specific: no candidate successor construction under discussion is
+post-quantum secure, so a migration to Orchard/Halo2 closes the trusted-setup gap while leaving the
+shielded layer's long-term cryptographic exposure to a quantum adversary exactly where it is today.
+The team's stated position on timing is to not pin one: ``We will not pin a date on a cryptographic
+change before its audit is scoped. The direction is not in question''
+\srcroadmap{flux-roadmap-public.md:177} (\planned). The paper records that position rather than
+supplying a date the source does not give.
+
+\subsection{Retiring the pools: the decision, and the measurements behind it}
+\label{sec:shielded-retirement}
+
+\textbf{Both shielded pools are to be retired} \srcintent{08-answers-round-2.md, round 10}
+(\planned). The team raised the possibility alongside reopening and migrating --- destroying the
+existing pool outright to simplify the chain, reduce maintained code and obtain a more thorough audit
+of what remains, with a stated preference for C++ over Rust
+\srcintent{08-answers-round-2.md, round 9} --- and, presented with the analysis below, took it.
+
+This subsection records the measurement that motivated the decision, the constraint that made it
+sharper than it first appears, and the schedule. The argument is retained in full rather than
+compressed to its outcome, because a decision to destroy a live mechanism holding user value should
+remain auditable against the reasoning that produced it.
+
+\paragraph{What is actually in the pools.} Both legacy pools are live and both are small.
+
+\begin{table}[H]
+\centering\footnotesize
+\caption{Shielded pool balances at height \num{2917115}, from \fluxd's own \texttt{valuePools}
+reporting surface. Circulating supply is the emission model's value at that height
+(\Cref{sec:monetary-policy}). \shipped
+\srcmeasured{api.runonflux.io/daemon/getblockchaininfo, field \texttt{valuePools}}{2026-09-03}.}
+\label{tab:pool-balances}
+\begin{tabular}{@{}lrr@{}}
+\toprule
+Pool & Balance (\flux) & Share of circulating supply \\
+\midrule
+Sprout (JoinSplit lineage) & \num{19291.17735041} & \SI{0.0045}{\percent} \\
+Sapling & \num{77188.75921324} & \SI{0.0180}{\percent} \\
+\midrule
+Total shielded & \textbf{\num{96479.93656365}} & \textbf{\SI{0.0225}{\percent}} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent Three facts follow, and together they carry the argument. First, the combined shielded
+balance is about one part in \num{4500} of circulating supply. Second, the balance is
+\emph{monotonically non-increasing}: the transparent-input gate of
+\S\ref{sec:switched-off} rejects any transaction carrying both a transparent input and a
+shielded output, so value has been unable to enter either pool since height \num{835554}
+\srccode{fluxd/src/main.cpp}{1398--1408}. Third --- and this is the fact most often missed --- the
+gate keys on \texttt{tx.vin.size()} alone, so \zaddr${}\to{}$\zaddr and
+\zaddr${}\to{}$\taddr transactions remain fully valid. The pools are sealed from outside and
+unimpaired within: existing holders retain full use and can exit at will.
+
+\paragraph{The constraint that decides it.} The stated preferences --- newest Zcash work, less code,
+a more thorough audit, and C++ over Rust --- cannot all be satisfied, because they point in opposite
+directions. Sapling proving and verification in \fluxd run through \texttt{librustzcash}
+(\S\ref{sec:shielded-machinery}), which is Rust. Orchard's Halo2 proving system exists as a Rust
+implementation and has no production C++ equivalent. Zcash's own trajectory has been to move
+consensus-critical cryptography \emph{into} Rust, not out of it. So ``port the newest Zcash work''
+and ``prefer C++'' are not jointly achievable: adopting newer Zcash cryptography means more Rust in
+the consensus path, not less \srcinferred.
+
+That leaves exactly three self-consistent positions, and the preference set selects among them
+cleanly:
+
+\begin{table}[H]
+\centering\footnotesize
+\caption{The three coherent options, against the team's own stated preferences.}
+\label{tab:shielded-options}
+\begin{tabular}{@{}lllll@{}}
+\toprule
+Option & Chain privacy & Rust in consensus & Trusted setup & Audit surface \\
+\midrule
+(A) Reopen Sapling & yes & retained & inherited, two ceremonies & unchanged, large \\
+(B) Retire both pools & \textbf{none} & \textbf{removable} & \textbf{none} & \textbf{smallest} \\
+(C) Retire, later adopt Orchard & deferred & increased & none (Halo2) & large, later \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Option (B) is the decision; (C) remains available later.} Four arguments, in order of
+weight.
+
+\begin{enumerate}
+  \item \textbf{A shielded pool does not buy what the thesis needs.} The workload is public by
+  construction. A Flux application specification is a permanent on-chain message, and the
+  control plane serves the global specification set over a public endpoint
+  \srccode{flux-domain-manager/src/services/flux/dataFetcher.js}{47-71}. What a tenant deploys, the
+  resources it claims and the owner it binds to are therefore public whatever the payment rail does.
+  Shielding the payment hides the \emph{funding source}, not the workload graph. That is a real but
+  narrow benefit, and \S\ref{sec:private-payment} shows it is also the harder half to construct
+  correctly.
+  \item \textbf{Every stated preference points the same way.} (A) and (C) both keep or expand Rust in
+  the consensus path; only (B) permits removing \texttt{librustzcash}, the JoinSplit and Sapling
+  circuits, the note-commitment trees and the nullifier sets from the daemon. If a smaller,
+  C++-centred, thoroughly audited consensus layer is the goal, (B) is the only option that delivers
+  it.
+  \item \textbf{It closes a supply-accounting gap the paper already documents.}
+  \Cref{sec:supply-accounting} records that \texttt{valuePools} is a reporting surface with no
+  consensus enforcement behind it: a negative pool balance --- the signature of an inflation bug in
+  the shielded code --- would not by itself cause block rejection, because ZIP-209 turnstile
+  enforcement is compiled in but dormant against unmodified upstream-Zcash checkpoint constants
+  \srccode{fluxd/src/chainparams.cpp}{322-327}. Removing the pools removes that entire class of
+  unauditable supply risk, and makes total supply exactly reconstructible from transparent UTXOs.
+  For a design whose monetary section rests on supply transparency, that is a direct gain.
+  \item \textbf{The value at risk is bounded and measured.} \num{96479.94}\flux, in a pool that
+  cannot grow. This is the number the decision should be made against, and it is small enough that
+  a generous migration window costs little and dishonours no one.
+\end{enumerate}
+
+\paragraph{The retirement schedule.} The decision is settled; the heights below were the paper's
+recommendation and are confirmed by the author (Remark~\ref{rem:shield-schedule-confirmed}).
+
+\begin{itemize}
+  \item \textbf{Announcement at $\hpa = \num{3466630}$}, the height at which the parallel-asset
+  consolidation is already scheduled to take effect (\S\ref{sec:pa-sequencing}). One consolidation message covering
+  both is better than two, and the holder sets barely overlap.
+  \item \textbf{Sunset at $\hshield = \num{4517830}$}, i.e. $\hpa + \num{1051200}$ blocks
+  $\approx$ 12 months at the \SI{30}{\second} target. After this height, transactions carrying
+  \texttt{vShieldedSpend} or \texttt{vJoinSplit} are invalid; notes not swept are permanently
+  unspendable. Twelve months is deliberately longer than the six-month parallel-asset window
+  (\S\ref{sec:bridging-migration}): that window ends in forfeiture to a named recipient, whereas this
+  one ends in destruction, which warrants more notice for less value.
+  \item \textbf{No change to exit paths during the window.} \zaddr${}\to{}$\taddr already works and
+  needs no consensus change to keep working; the window requires an announcement, not a code change.
+  \item \textbf{Activate ZIP-209 turnstile enforcement with Flux-correct constants for the duration
+  of the window.} Whatever is decided about the pools' future, the current state --- enforcement
+  code compiled in but dormant, parameterised by another chain's checkpoints --- is the worst of the
+  available positions, because it carries the maintenance cost of the mechanism without its
+  guarantee. During a drain-only window the turnstile is a cheap and exactly-correct safety net: the
+  pool balance must only decrease, which is precisely what the turnstile checks.
+  \item \textbf{Direct outreach, not announcement alone.} The holder set is small enough to make
+  this tractable and small enough that a purely passive notice would be a poor effort.
+\end{itemize}
+
+\begin{remark}[Schedule confirmed]
+\label{rem:shield-schedule-confirmed}
+The heights above were proposed by this paper and are \textbf{confirmed by the author}
+\srcintent{08-answers-round-2.md, round 11}: announcement at $\hpa = \num{3466630}$ and sunset at
+$\hshield = \num{4517830}$. Activating ZIP-209 turnstile enforcement with Flux-correct constants for
+the window remains this paper's recommendation, not a confirmed decision: round 11 confirmed the
+numbers, and a switch is not a number \srcintent{08-answers-round-2.md, round 18}. The retirement
+decision and its heights are settled, and \S\ref{sec:private-payment}'s construction questions are
+consequently not live (\Cref{rem:pp-conditional}).
+\end{remark}
+
+\begin{remark}[What retirement costs, stated without softening]
+\label{rem:retirement-cost}
+Three things are given up, and the paper names them rather than letting the argument above stand
+unopposed.
+
+\textbf{Flux will have no chain-level privacy.} Not reduced privacy --- none. Every transfer, every
+balance and every payment for a deployment will be publicly linkable for anyone willing to do the
+analysis, exactly as on Bitcoin. The design intake asked for privacy-preserving settlement rails
+\srcintent{05-privacy-pq.md}; after retirement the honest description is that Flux settles
+transparently and treats payment privacy as an unsolved problem rather than a delivered feature.
+\Cref{sec:pq-scope} and \S\ref{sec:private-payment} are the two places this paper previously
+claimed otherwise, and both are now corrected.
+
+\textbf{Value will be destroyed at $\hshield$.} Notes not swept before the sunset become
+permanently unspendable. The bound is \num{96479.94}\flux{} and shrinking, and the window is long,
+but this is confiscation by inaction and calling it anything softer would be dishonest. It is the
+reason the schedule recommends direct outreach rather than announcement alone.
+
+\textbf{The option is one-directional in practice.} Rebuilding a shielded pool later means adopting
+Orchard/Halo2 or an equivalent --- a multi-year cryptographic project, in Rust, against the stated
+language preference. Option~(C) remains formally available and should not be described as though it
+were cheap.
+\end{remark}
+
+%% Drain this section's float queue before the next begins.
+\FloatBarrier

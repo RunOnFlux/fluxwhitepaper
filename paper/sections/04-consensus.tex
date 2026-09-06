@@ -1,0 +1,552 @@
+\section{Consensus: from \PoW to \PoN, node tiering, benchmarking, and eligibility}
+\label{sec:consensus}
+
+For roughly the first two million blocks of its history, \Flux's base-layer daemon, \fluxd, produced
+blocks the way most Zcash-lineage chains do: miners raced to solve an Equihash puzzle, and the chain
+followed whichever fork carried the most accumulated hashing work. Since height 2{,}020{,}000 it does
+not. Block production is instead awarded, once every 30 seconds, to whichever registered \FluxNode
+wins a per-slot lottery keyed by its collateral outpoint. \Flux calls this mechanism Proof-of-Node
+(\PoN). The name suggests that operating a node is what earns the right to produce a block. The
+mechanics below show something narrower: the right is earned by a node that has posted the correct
+collateral amount on-chain and that has, at some point, produced one signed message from its own
+locally-run benchmarking process. Whether that local, same-host message is a hard-to-fake attestation
+of real hardware or a token any operator's own machine can produce for itself is the question this
+section spends most of its length answering precisely, because the answer is not the one the name
+implies. The remainder of this section is formal.
+
+\subsection{The network-upgrade mechanism}
+\label{sec:consensus-upgrades}
+
+Network upgrades are indexed by \texttt{Consensus::\allowbreak{}Upgrade\allowbreak{}Index}
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}consensus/\allowbreak{}params.h}{24--40}. Upgrade state is not a persisted flag; it is
+a pure function of block height, recomputed on every call by \texttt{Network\allowbreak{}Upgrade\allowbreak{}State}: an upgrade
+is \texttt{UPGRADE\_DISABLED} if its activation height equals the sentinel
+\texttt{NO\_ACTIVATION\_HEIGHT} (\,$-1$\,), \texttt{UPGRADE\_PENDING} below its activation height, and
+\texttt{UPGRADE\_ACTIVE} at or above it \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}consensus/\allowbreak{}upgrades.cpp}{72--97}.
+For \PoN specifically this reduces to a single inequality:
+\texttt{Is\allowbreak{}PONActive(n\allowbreak{}Height)} $\Leftrightarrow$ \texttt{nHeight} $\ge$ \texttt{Get\allowbreak{}PONActivation\allowbreak{}Height()}
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon-fork.cpp}{13--20,45--47}. There is no signalling, no
+miner- or node-voting window, and no grace period at any upgrade boundary, \PoN included: activation
+is a hard height cutoff.
+
+\begin{table}[H]
+\centering
+\caption{Mainnet network-upgrade heights, \texttt{CMain\allowbreak{}Params::\allowbreak{}CMain\allowbreak{}Params()}. Hashes are truncated
+to 16 hex characters for display; full values are at the cited lines.}
+\label{tab:pon-upgrades}
+\begin{tabular}{lrll}
+\toprule
+Upgrade & Height & Activation block hash (truncated) & Provenance \\
+\midrule
+\texttt{UPGRADE\_LWMA}      & 125{,}000     & --- & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{116--117} \\
+\texttt{UPGRADE\_EQUI144\_5}& 125{,}100     & --- & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{119--120} \\
+\texttt{UPGRADE\_ACADIA}    & 250{,}000     & \texttt{0000001d65fa78f2\ldots} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{122--125} \\
+\texttt{UPGRADE\_KAMIOOKA}  & 372{,}500     & \texttt{00000052e2ac144c\ldots} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{127--130} \\
+\texttt{UPGRADE\_KAMATA}    & 558{,}000     & \texttt{000000a33d38f37f\ldots} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{132--135} \\
+\texttt{UPGRADE\_FLUX}      & 835{,}554     & \texttt{000000ce99aa6765\ldots} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{137--140} \\
+\texttt{UPGRADE\_HALVING}   & 1{,}076{,}532 & \texttt{000000111f8643ce\ldots} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{142--145} \\
+\texttt{UPGRADE\_P2SHNODES} & 1{,}549{,}500 & \texttt{00000009f9178347\ldots} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{147--150} \\
+\texttt{UPGRADE\_PON}       & \textbf{2{,}020{,}000} & \emph{unset} & \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{152--153} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\texttt{BASE\_SPROUT} (always active from genesis) and \texttt{UPGRADE\_TESTDUMMY} (never activated on
+mainnet) are omitted from Table~\ref{tab:pon-upgrades} because neither carries a meaningful mainnet
+height \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{108--114}.
+
+Height 2{,}020{,}000 for \texttt{UPGRADE\_PON} is a code fact \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{152--153}.
+The calendar date sometimes attached to this activation is not: \texttt{UPGRADE\_PON} is the only
+upgrade in Table~\ref{tab:pon-upgrades} with no \texttt{hash\allowbreak{}Activation\allowbreak{}Block} set, and no timestamp
+literal tying height 2{,}020{,}000 to a wall-clock date appears anywhere in the source
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{152--153}. The nearest bracketing evidence is a
+checkpoint at height 2{,}022{,}000 carrying UNIX timestamp \texttt{1761701944}, which is 2025-10-29
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{281,284}; two thousand blocks at 30 s spacing is
+approximately 16.7 hours, so this brackets but does not establish an activation date.
+\srcmeasured{block \num{2020000} carries timestamp \num{1761415235}, i.e.\ 2025-10-25T18:00:35Z, retrieved from \texttt{api.\allowbreak{}runonflux.\allowbreak{}io/\allowbreak{}daemon/\allowbreak{}getblock}; the date is therefore a chain fact rather than an inference from a nearby height}{2026-09-04}
+
+\subsection{What changes at \PoN activation}
+\label{sec:consensus-changes}
+
+\begin{itemize}
+\item \textbf{Subsidy.} \texttt{Get\allowbreak{}Block\allowbreak{}Subsidy} branches first on \texttt{Is\allowbreak{}PONActive(n\allowbreak{}Height)},
+bypassing the legacy slow-start/halving formula entirely for \PoN heights
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2796--2853}. For $\hgt \ge \hpon$,
+\[
+\subsidypon(\hgt) \;=\; 14\flux \cdot \redfac^{\,n(\hgt)}, \qquad
+n(\hgt) \;=\; \min\!\Big(\floorfrac{\hgt - \hpon}{\redint},\ \redmax\Big),
+\]
+with $\redfac = 9/10$ applied once per elapsed reduction interval, $\redint = 1{,}051{,}200$ blocks
+mainnet, and a cap of $\redmax = 20$ reductions
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2812}, \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{156--158}. The full
+emission derivation, including the tail after $\redmax$ is reached, is given in \S5.
+
+\item \textbf{Difficulty retarget.} \texttt{Get\allowbreak{}Next\allowbreak{}Work\allowbreak{}Required\allowbreak{}By\allowbreak{}Fork} dispatches to
+\texttt{Get\allowbreak{}Next\allowbreak{}PONWork\allowbreak{}Required} for \PoN heights and to the legacy staged
+Digishield/LWMA/LWMA3 retarget otherwise
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon-fork.cpp}{22--42}, \srccode{fluxd/\allowbreak{}src/\allowbreak{}pow.cpp}{21--97}.
+
+\item \textbf{Block header format.} Block version $\ge$ \texttt{PON\_VERSION} $= 100$
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}primitives/\allowbreak{}block.h}{31} adds two consensus fields:
+\texttt{nodes\allowbreak{}Collateral} (the \texttt{COutPoint} of the winning \FluxNode's collateral) and
+\texttt{vchBlockSig} (an ECDSA signature over the block hash)
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}primitives/\allowbreak{}block.h}{44--45,64--96}. \texttt{IsPON()}\slash\texttt{IsPOW()} are
+simply \texttt{nVersion} $\ge$/$<$ 100 \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}primitives/\allowbreak{}block.h}{95--96}.
+
+\item \textbf{Block spacing.} Legacy target spacing $\spacingpow = 120\,\mathrm{s}$
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{101} drops to $\spacingpon = 30\,\mathrm{s}$
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{105}.
+
+\item \textbf{Header validation.} \texttt{Check\allowbreak{}Block\allowbreak{}Header} replaces the Equihash-solution check and
+\texttt{Check\allowbreak{}Proof\allowbreak{}Of\allowbreak{}Work} with \texttt{Check\allowbreak{}Proof\allowbreak{}Of\allowbreak{}Node} plus a signature-size cap
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{5330--5378}. \texttt{Contextual\allowbreak{}Check\allowbreak{}Block\allowbreak{}Header} additionally
+requires \texttt{block.IsPON()} to equal \texttt{Is\allowbreak{}PONActive(n\allowbreak{}Height)} exactly, rejecting a mismatch
+as \texttt{"not-\allowbreak{}pon-\allowbreak{}block"} or \texttt{"premature-\allowbreak{}pon-\allowbreak{}block"}, and requires a \PoN block's timestamp to
+be strictly greater than its parent's timestamp rather than median-time-past-based as the legacy path
+is \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{5516--5545,5564--5572}.
+
+\item \textbf{Future-time tolerance.} Accepted clock skew for a new block's timestamp drops from
+2 hours (pre-LWMA) / 360 s (post-LWMA \PoW) to 300 s for \PoN blocks
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{5330--5378}.
+
+\item \textbf{Coinbase dev-fund rule.} Once \PoN is active, the coinbase must pay a minimum amount to a
+hardcoded address or the transaction is rejected. That minimum is a remainder:
+\[
+\devfund(\hgt) \;=\; \subsidypon(\hgt) \;-\; \sum_{x \in \tiers} \tbase{x} \cdot \frac{\subsidypon(\hgt)}{14\flux},
+\]
+with $\tbase{\tC} = 1\flux$, $\tbase{\tN} = 3.5\flux$, $\tbase{\tS} = 9\flux$
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2892--2895}, which sum to $13.5\flux$ of the $14\flux$ initial
+subsidy, leaving $\devfund(\hpon) = 0.5\flux$ at the first post-activation block, decaying at the same
+rate as $\subsidypon$ thereafter \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2877--2884}. This is enforced
+twice: loosely (a $\ge$ check) in \texttt{Contextual\allowbreak{}Check\allowbreak{}Transaction}, which rejects a coinbase missing
+it as \texttt{"tx-\allowbreak{}coinbase-\allowbreak{}missing-\allowbreak{}dev-\allowbreak{}funding"} \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{1231--1249},
+and again --- also as a $\ge$ check, but against the remainder left after the exact tier payouts --- in \texttt{Fluxnode\allowbreak{}Cache::\allowbreak{}Check\allowbreak{}Fluxnode\allowbreak{}Payout}
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.cpp}{822--889}. The recipient is the hardcoded mainnet
+address \texttt{t3h\allowbreak{}Pu1YDe\allowbreak{}GUCp8m7BQCnn\allowbreak{}NUm\allowbreak{}RMJBa5Rady\allowbreak{}A} \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{306}.
+\end{itemize}
+
+\subsection{\PoN sortition, formally}
+\label{sec:consensus-sortition}
+
+\begin{definition}[\PoN slot and eligibility]
+\label{def:pon-eligibility}
+Let $t_0$ be network genesis time. The \PoN slot at wall-clock time $t$ is
+\[
+\tslot(t) \;\defeq\; \floorfrac{t - t_0}{\spacingpon}, \qquad \spacingpon = 30\,\mathrm{s}
+\]
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon.cpp}{88--93}. For a confirmed \FluxNode with collateral outpoint
+$c$, define
+\[
+H(c,\tslot) \;\defeq\; \mathrm{Hash}\big(c \,\|\, h_{\mathrm{prev}} \,\|\, \tslot\big),
+\]
+where $h_{\mathrm{prev}}$ is the hash of the current chain tip
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon.cpp}{70--86}. Node $c$ is \emph{eligible} for slot $\tslot$ iff
+$\indic{H(c,\tslot) \le T_\tslot} = 1$, where $T_\tslot$ is the current \PoN difficulty target (below).
+Every confirmed \FluxNode, of any tier, computes exactly one such hash per slot; eligibility does not
+depend on tier or on collateral size beyond confirmation
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon.cpp}{400--433}. This is sortition over the confirmed-node set, not
+a lottery weighted by stake amount.
+\end{definition}
+
+The target $T_\tslot$ comes from \texttt{Get\allowbreak{}Next\allowbreak{}PONWork\allowbreak{}Required}. Before \PoN activation it is unused;
+for the first \texttt{n\allowbreak{}Pon\allowbreak{}Difficulty\allowbreak{}Window} $= 30$ blocks (mainnet) after activation it is held fixed at \texttt{ponStartLimit},
+which the source's own comment describes as giving each node roughly a 1-in-10{,}000 chance of
+eligibility per slot \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{104}. Thereafter every block
+retargets: the actual timespan over the trailing 30-block window is clamped to
+$\big[\tfrac{4}{5},\,\tfrac{5}{4}\big] \times (30-1)\spacingpon$ (i.e.\ $-20\%/{+}25\%$) and used,
+Digishield-style, to scale the previous target
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon.cpp}{149--157}. The protocol floor is \texttt{ponLimit}, described
+in the same source comments as giving roughly a 1-in-16 minimum per-slot eligibility chance, mainnet
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{103}.
+
+\begin{algorithm}[H]
+\DontPrintSemicolon
+\caption{\PoN minting loop, per node (one thread, wall-clock polled)}
+\label{alg:pon-minter}
+\KwIn{collateral outpoint $c$, \FluxNode private key $sk$, chain tip pointer $\mathrm{tip}$}
+\KwOut{a signed candidate block submitted to the network, or no action this slot}
+wait for network peers and end of initial block download\tcp*{\srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon-minter.cpp}{121--136}}
+\While{node is running}{
+  \If{\PoN is active \emph{and} this node's own confirmation status is \emph{confirmed}}{
+    $t \gets$ current wall-clock time\;
+    $\tslot \gets \tslot(t)$ (Definition~\ref{def:pon-eligibility})\tcp*{\srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon-minter.cpp}{167--177}}
+    \If{$\tslot \neq$ \textup{lastAttemptedSlot} \emph{and} $t - \mathrm{tip.nTime} \ge 5\,\mathrm{s}$}{
+      compute eligibility and rank of $c$ over all confirmed nodes for slot $\tslot$\tcp*{\srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon-minter.cpp}{222--236}}
+      \If{$c$ eligible for $\tslot$}{
+        sleep $\mathrm{rank}(c) \times 4000\,\mathrm{ms}$\tcp*{orphan-avoidance heuristic only --- no consensus enforcement, \srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon-minter.cpp}{78--104,217--221,250}}
+        \If{$\tslot$ has not expired \emph{and} $\mathrm{tip}$ has not moved}{
+          build candidate block, coinbase paying the dev-fund address\tcp*{\srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon-minter.cpp}{288--314}}
+          sign block hash with $sk$ via \textsc{SignPONBlock}\;
+          submit via \textsc{ProcessNewBlock}\tcp*{\srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon-minter.cpp}{29--76}}
+        }
+      }
+      mark $\tslot$ as \textup{lastAttemptedSlot}\;
+    }
+  }
+  sleep 1 s (poll interval)\tcp*{\srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon-minter.cpp}{175}}
+}
+\end{algorithm}
+
+\emph{Invariant.} A node attempts at most one block per slot: \texttt{last\allowbreak{}Attempted\allowbreak{}Slot} is checked
+before eligibility is computed and set on every exit from the slot, so a repeated poll of the same slot is a no-op
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon-minter.cpp}{167--177}.
+
+\emph{Failure mode.} Only \texttt{std::\allowbreak{}runtime\_error} is caught at the top of the loop, and on
+catching it the thread logs once and returns, with no restart logic
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon-minter.cpp}{343--346}; any other exception
+type escapes the bare \texttt{std::thread} body \srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon-minter.cpp}{356}
+and, under C++ semantics, calls \texttt{std::terminate}, aborting the whole daemon rather than only
+the minting thread.
+
+The rank-based delay in the algorithm's inner branch is worth stating plainly, because "Proof of Node"
+invites a reading in which rank determines who is allowed to produce a block. It does not. The
+$\mathrm{rank}(c) \times 4000\,\mathrm{ms}$ wait is documented in the source itself as an
+orphan-reduction heuristic: a lower-ranked (slower) eligible node waits longer before broadcasting, so
+that a higher-ranked node's block has time to propagate and preempt it. No peer enforces this delay;
+any validly-signed block for an eligible node's slot is accepted on ordinary first-seen/most-work
+rules regardless of the sender's rank
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon-minter.cpp}{78--104,217--221}.
+
+Consensus does not pin the slot a block claims to wall-clock time either: the slot is derived from
+the block's own \texttt{nTime} \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon.cpp}{63--67}, and
+the only rules on \texttt{nTime} are that it exceed the parent's
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{5564--5567} and lie at most 300\,s ahead of the validator's
+adjusted time \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{5368--5371}. A producer may therefore evaluate
+$H(c,\tslot)$ over every slot in that window --- about eleven at 30\,s spacing --- and publish at once
+for any slot in which one of its nodes qualifies, whereas the minting loop of
+Algorithm~\ref{alg:pon-minter} tries only the current slot.
+
+\subsection{Fork choice}
+\label{sec:consensus-forkchoice}
+
+\begin{property}[\PoN chain-work is a block count]
+\label{prop:pon-forkchoice}
+For every block with $\mathrm{nVersion} \ge 100$ (every \PoN block), \texttt{GetBlockProof} returns the
+fixed value $2^{40}$, independent of the block's actual difficulty target
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}pow.cpp}{284--290}. Consequently, for two competing \PoN chains of length
+$n_1$ and $n_2$ blocks since their most recent common ancestor, cumulative chain work is exactly
+$n_1 \cdot 2^{40}$ versus $n_2 \cdot 2^{40}$: "most cumulative work" fork choice is equivalent to "most
+blocks," and among chains of equal length, the deciding factor is which block a node saw and connected
+first, not any comparison of cryptographic hardness
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}pow.cpp}{284--290}.
+\end{property}
+
+\begin{proof}[Proof sketch]
+Chain work under the inherited Bitcoin/Zcash chain-selection code is the sum of \texttt{GetBlockProof}
+over every block on a candidate chain since the fork point. \texttt{GetBlockProof} is defined
+piecewise on \texttt{nVersion}; for $\mathrm{nVersion} \ge 100$ it returns the constant
+\texttt{arith\_uint256(1)} $\ll 40$ regardless of \texttt{nBits}
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}pow.cpp}{284--290}. Summing a constant $n$ times over a chain of $n$
+\PoN blocks gives $n \cdot 2^{40}$ exactly, with no dependence on the per-block difficulty target
+computed in \S\ref{sec:consensus-sortition}. Comparing $n_1 \cdot 2^{40}$ against $n_2 \cdot 2^{40}$ is
+therefore equivalent to comparing $n_1$ against $n_2$; the constant factor cancels. When $n_1 = n_2$,
+the comparison is a tie under this metric, and the surviving chain is whichever block the node's own
+chain-selection logic connected first, an ordering determined by network propagation and arrival time
+rather than by proof of work.
+\end{proof}
+
+The consequence is not a defect to be patched quietly; it is a different security argument than the
+one "proof of work" trains a reader to expect. \PoN's resistance to a chain reorganization does not
+come from the cost of recomputing accumulated hashing work. It comes from the cost of controlling
+enough collateral to win sortition (Definition~\ref{def:pon-eligibility}) across enough consecutive
+slots to outpace and outlast the honest chain, and from how quickly an alternate chain of blocks can be
+produced and propagated — a length race, not a work race. A reader who assumes Nakamoto-style
+work-accumulation will draw the wrong conclusion about what a reorg of a given depth costs an attacker
+on \PoN.
+
+\begin{remark}
+\texttt{n\allowbreak{}Minimum\allowbreak{}Chain\allowbreak{}Work}, the anti-eclipse floor consulted during initial block download, was last
+updated to match the chain work associated with \texttt{UPGRADE\_KAMIOOKA}
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{168--170}; it has not been revised for the fixed-$2^{40}$
+-per-block regime that \PoN introduced. Whether a floor computed under the old work-accumulation model
+still functions as intended against a fake alternate chain once every block after height
+2{,}020{,}000 contributes the same fixed increment is not established by the source \srcinferred.
+\end{remark}
+
+\subsection{The \FluxNode lifecycle}
+\label{sec:consensus-lifecycle}
+
+A deterministic \FluxNode moves through the states
+\texttt{FLUXNODE\_TX\_ERROR}(0) $\to$ \texttt{FLUXNODE\_TX\_STARTED}(1) $\to$
+\texttt{FLUXNODE\_TX\_DOS\_PROTECTION}(2) / \texttt{FLUXNODE\_TX\_CONFIRMED}(3) $\to$
+\texttt{FLUXNODE\_TX\_MISS\_CONFIRMED}(4) / \texttt{FLUXNODE\_TX\_EXPIRED}(5)
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{109--116}.
+
+\begin{itemize}
+\item \textbf{Entry (START).} The operator broadcasts a \texttt{FLUXNODE\_START\_TX\_TYPE} transaction
+spending a collateral UTXO of a valid tier amount, signed by the collateral key
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}activefluxnode.cpp}{253--288}. Consensus requires the collateral
+to have $\ge 100$ confirmations (\texttt{FLUXNODE\_MIN\_CONFIRMATION\_DETERMINISTIC})
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{20} and to match a tier's valid amount
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}coins.cpp}{630--686}. The node enters \texttt{map\allowbreak{}Start\allowbreak{}Tx\allowbreak{}Tracker}
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.cpp}{304--352}.
+
+\item \textbf{STARTED $\to$ DOS\_PROTECTION.} If no confirm transaction arrives within
+\texttt{FLUXNODE\_START\_TX\_EXPIRATION\_HEIGHT} $= 60$ blocks (240 post-\PoN,
+\texttt{\_V2}) of the start height, the node moves to \texttt{map\allowbreak{}Start\allowbreak{}Tx\allowbreak{}DOSTracker}
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.cpp}{479--508}; it is fully purged once
+\texttt{FLUXNODE\_DOS\_REMOVE\_AMOUNT} $= 180$ blocks (720 post-\PoN, \texttt{\_V2}) have elapsed since
+the \emph{start} height, i.e.\ 120 (480 post-\PoN) blocks after entering the DoS list
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.cpp}{205--229},
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{26--28}.
+
+\item \textbf{STARTED $\to$ CONFIRMED.} The operator builds a \texttt{FLUXNODE\_CONFIRM\_TX\_TYPE}
+(\texttt{INITIAL\_CONFIRM}), which is benchmark-signed by \fluxbench before wallet broadcast (see
+\S\ref{sec:consensus-benchmark}) \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}activefluxnode.cpp}{380--407,18--74}.
+On chain acceptance the node enters \texttt{map\allowbreak{}Confirmed\allowbreak{}Fluxnode\allowbreak{}Data} and is inserted at the
+\emph{front} of its tier's payment list, which is then re-sorted
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.cpp}{1502--1511,1466--1474}.
+
+\item \textbf{Re-confirmation (CONFIRMED, periodic).} \texttt{Check\allowbreak{}If\allowbreak{}Needs\allowbreak{}Next\allowbreak{}Confirm} triggers a
+\texttt{UPDATE\_CONFIRM} once $\hgt - \texttt{n\allowbreak{}Last\allowbreak{}Confirmed\allowbreak{}Block\allowbreak{}Height}$ exceeds
+\texttt{FLUXNODE\_CONFIRM\_UPDATE\_MIN\_HEIGHT\_V1} $= 40$ / \texttt{\_V2} $= 120$ /
+\texttt{\_V3} $= 500$ (\PoN), by active upgrade
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.cpp}{669--688}.
+
+\item \textbf{CONFIRMED $\to$ EXPIRED.} If no re-confirmation lands within
+\texttt{FLUXNODE\_CONFIRM\_UPDATE\_EXPIRATION\_HEIGHT\_V1} $= 60$ / \texttt{\_V2} $= 80$ /
+\texttt{\_V3} $= 160$ / \texttt{\_V4} $= 640$ (\PoN) blocks of \texttt{n\allowbreak{}Last\allowbreak{}Confirmed\allowbreak{}Block\allowbreak{}Height}, the
+node is removed from the paid set \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.cpp}{1716--1732},
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{31--34}.
+
+\item \textbf{CONFIRMED $\to$ removed (collateral spent).} If the confirmation collateral UTXO is
+spent, the node is removed \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.cpp}{285--290}.
+
+\item \textbf{CONFIRMED $\to$ removed (collateral migration mismatch).} During the V1$\to$V2
+collateral-amount transition window (\S\ref{sec:consensus-tiers}), a confirmed node whose collateral no
+longer matches the \emph{new} valid amount for its tier is removed once that tier's transition-end
+height is reached \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.cpp}{231--283}.
+\end{itemize}
+
+\textbf{Payment queue ordering.} \texttt{Fluxnode\allowbreak{}List\allowbreak{}Data::\allowbreak{}operator<} orders each tier's list by
+\texttt{n\allowbreak{}Last\allowbreak{}Paid\allowbreak{}Height} (or \texttt{n\allowbreak{}Confirmed\allowbreak{}Block\allowbreak{}Height} if never paid) ascending, tie-broken by
+whether \texttt{n\allowbreak{}Last\allowbreak{}Paid\allowbreak{}Height} is set and then by outpoint
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{313--328} — a strict longest-time-since-last-paid
+FIFO per tier. \texttt{GetNextPayment} reads the front of the tier's list, skipping and popping any
+stale (unconfirmed) entries it finds there
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.cpp}{713--778}.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  font=\scriptsize,
+  st/.style={draw, rounded corners=2pt, align=center, minimum height=8mm, text width=26mm,
+             inner xsep=2pt},
+  term/.style={st, fill=black!8},
+  live/.style={st, very thick, fill=black!4},
+  arr/.style={-{Latex[length=1.8mm]}, thick},
+  lbl/.style={font=\tiny, align=center, inner sep=1.5pt},
+]
+  \node[st]                                (start) {\texttt{TX\_STARTED}};
+  \node[st,   below=24mm of start]         (dos)   {\texttt{TX\_DOS\_}\\\texttt{PROTECTION}};
+  \node[live, right=40mm of start]         (conf)  {\texttt{TX\_CONFIRMED}};
+  \node[term, right=40mm of dos]           (exp)   {\texttt{TX\_EXPIRED}};
+  \node[st,   above=18mm of conf]          (miss)  {\texttt{TX\_MISS\_}\\\texttt{CONFIRMED}};
+  \node[term, left=28mm of start]          (err)   {\texttt{TX\_ERROR}};
+
+  \draw[arr] (err) -- node[lbl, above] {start tx,\\collateral aged\\$\ge 100$ blocks} (start);
+  \draw[arr] (start) -- node[lbl, left, pos=0.5] {no confirm within\\60 / 240 (\PoN)\\blocks} (dos);
+  \draw[arr] (start) -- node[lbl, above] {confirm tx\\(\textsc{initial})} (conf);
+  \draw[arr] (dos) -- node[lbl, below] {purged 180 / 720 (\PoN) blocks\\after the start height} (exp);
+
+  %% Self-loop kept on the right of TX_CONFIRMED so it clears TX_MISS_CONFIRMED above.
+  \draw[arr] (conf) to[out=-25, in=25, looseness=7]
+      node[lbl, right, pos=0.5, text width=27mm] {re-confirm every\\40 / 120 / 500 (\PoN) blocks} (conf);
+  %% Both vertical edge labels sit on the left so nothing collides with the loop.
+  \draw[arr] (conf) -- node[lbl, left, pos=0.5, text width=30mm]
+      {no re-confirm within\\60 / 80 / 160 / 640 (\PoN) blocks;\\or collateral spent;\\or V1$\to$V2 amount mismatch} (exp);
+  \draw[arr] (conf) -- node[lbl, left, pos=0.5] {missed} (miss);
+  \draw[arr, dashed] (miss) to[out=180, in=90] node[lbl, above, pos=0.35] {re-confirm} (start);
+
+  %% Spans the full width below both bottom states rather than sitting under TX_CONFIRMED,
+  %% where it used to print on top of the conf-to-exp edge label.
+  \node[lbl, below=13mm of $(dos)!0.5!(exp)$, text width=112mm]
+    {on entry to \texttt{TX\_CONFIRMED}: inserted at the \emph{front} of its tier's payment list, then the
+     list is re-sorted; \texttt{GetNextPayment} pops the front of the tier-scoped FIFO ordered by
+     longest-time-since-paid};
+  \end{tikzpicture}
+\caption{The \FluxNode lifecycle state machine: states, transitions, and their governing height
+constants \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{109--116}. Where two or more values are
+shown, they are the successive versions of the constant selected by the active network upgrade, the
+last being the \PoN-era value \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{23--44}. Only
+\texttt{TX\_CONFIRMED} is in the paid set.}
+\label{fig:fluxnode-lifecycle}
+\end{figure}
+
+\subsection{Tiers and collateral}
+\label{sec:consensus-tiers}
+
+\begin{table}[H]
+\centering
+\caption{\FluxNode collateral by tier and version, mainnet. Confirmation requirement is uniform across
+tiers and versions.}
+\label{tab:tiers}
+\begin{tabular}{lrrll}
+\toprule
+Tier & V1 collateral & V2 collateral & Transition window $[\hgt_{\mathrm{start}},\hgt_{\mathrm{end}})$ & Confirmation \\
+\midrule
+Cumulus ($\tC$) & $\coll{\tC}=10{,}000\flux$ & $1{,}000\flux$ & $[1{,}076{,}532,\ 1{,}086{,}612)$ & 100 blocks \\
+Nimbus ($\tN$)  & $\coll{\tN}=25{,}000\flux$ & $12{,}500\flux$ & $[1{,}081{,}572,\ 1{,}092{,}372)$ & 100 blocks \\
+Stratus ($\tS$) & $\coll{\tS}=100{,}000\flux$ & $40{,}000\flux$ & $[1{,}087{,}332,\ 1{,}097{,}412)$ & 100 blocks \\
+\bottomrule
+\end{tabular}
+\end{table}
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{57--63} (V1/V2 amounts),
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{308--315} (transition windows),
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{20} (100-block confirmation requirement,
+\texttt{FLUXNODE\_MIN\_CONFIRMATION\_DETERMINISTIC}). Within a transition window, both the old and new
+collateral amounts for that tier are accepted \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}coins.cpp}{774--809}. The V2
+amounts match the collateral recorded for every one of the 6{,}489 currently registered \FluxNodes in
+the public registry \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}getzelnodecount}{2026-09-03}, i.e.\ the
+migration is complete on mainnet as measured.
+
+\subsection{Benchmarking and eligibility}
+\label{sec:consensus-benchmark}
+
+Confirming or re-confirming a \FluxNode requires a benchmark-signed transaction produced by
+\fluxbench, a companion daemon that runs on the same host as \fluxd. \fluxbench measures CPU
+throughput with \texttt{sysbench cpu -\allowbreak{}-\allowbreak{}cpu-\allowbreak{}max-\allowbreak{}prime=60000}
+\shipped \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{2066--2364}; disk write speed with three
+\texttt{dd} runs per target, dropping the worst and averaging the remaining two, floored at
+40 MB/s for reporting \shipped \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{602--615,1020--1104},
+\srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{1936}; bandwidth with the Ookla \texttt{speedtest} CLI,
+combined with an \texttt{iftop} sample of bandwidth already in use
+\shipped \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{1358--1465,1980--2032}; and RAM headroom with
+a \texttt{stress-ng} allocation test sized 8G/4G/2G for Stratus/Nimbus/Cumulus
+\shipped \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{3649--3667}.
+
+\begin{table}[H]
+\centering
+\caption{Per-tier hardware thresholds enforced by \texttt{Validate\allowbreak{}Benchmark\allowbreak{}Requirements}, mainnet.}
+\label{tab:benchmark-thresholds}
+\begin{tabular}{lrrrrrrr}
+\toprule
+Tier & Cores & Threads & RAM & Storage & EPS & Disk write & Up/Down \\
+\midrule
+Cumulus & 2 & 4 & 7 GB & 220 GB & 240 & 180 MB/s & 25/25 Mbit/s \\
+Nimbus  & 4 & 8 & 30 GB & 440 GB & 640 & 180 MB/s & 50/50 Mbit/s \\
+Stratus & 8 & 16 & 61 GB & 880 GB & 1{,}520 & 400 MB/s & 100/100 Mbit/s \\
+\bottomrule
+\end{tabular}
+\end{table}
+\shipped \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{58--84}. Cumulus's RAM requirement is 7 GB on
+standard hardware and 3 GB on Jetson boards specifically
+\shipped \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{58--66}; measured bandwidth additionally
+receives an additive tolerance bonus before the threshold check of $+2$/$+4$/$+9$ Mbit/s for
+Cumulus/Nimbus/Stratus \shipped \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{86--88}.
+
+The result is signed by \texttt{BenchmarkSign}, which hashes the transaction's \texttt{sig},
+\texttt{benchmarkTier}, \texttt{benchmark\allowbreak{}Sig\allowbreak{}Time}, and \texttt{ip} fields and signs with the fluxnode
+key selected for the current time window
+\shipped \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{3439--3480}. The same verification routine,
+\texttt{Check\allowbreak{}Benchmark\allowbreak{}Signature}, is linked into \fluxd and run as part of consensus validation of the
+registration transaction \shipped \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{3511--3522}. Three
+further mechanisms can substitute a stored or historical value for a fresh measurement under specified
+conditions — an enterprise-app short-circuit, a FluxOS-reported fallback, and a
+single-thread-extrapolation fallback for the CPU test — and all three converge on the same
+\texttt{Validate\allowbreak{}Benchmark\allowbreak{}Requirements()} acceptance gate
+\shipped \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{2178--2234,771--783,2883--3222}.
+
+\paragraph{The property that does not hold.} On the \fluxd side, this same signature is verified
+against \texttt{vec\allowbreak{}Benchmarking\allowbreak{}Public\allowbreak{}Keys} — five keys, each with a UNIX-timestamp validity window,
+i.e.\ a rotating allowlist \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{233--240}. These keys are
+shared across the entire fleet: they identify "signed by something holding one of the five
+network-wide benchmarking keys," not "signed by this specific operator's own key." \fluxd obtains the
+benchmark result itself by shelling out — \texttt{popen()}-ing the local \texttt{fluxbench-cli}
+process — and treats a returned \texttt{status:\allowbreak{}"complete"} field as sufficient to sign and broadcast
+the registration transaction \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{74--102,227--291}.
+The registration transaction must still match a valid on-chain collateral amount for the claimed tier
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}coins.cpp}{630--686}.
+
+Put precisely: collateral binds the tier; the benchmark signature does not bind the hardware to the
+tier it claims. An operator cannot register a tier they have not collateralized, but nothing beyond a
+local, same-host process attests that the collateralized hardware in fact clears that tier's CPU/RAM
+/disk/bandwidth thresholds in Table~\ref{tab:benchmark-thresholds}. \textbf{The correct claim is
+benchmark-gating bypass, not tier forgery.} \S14 takes up the structurally identical problem one layer
+up, for \ArcaneOS/\SAS attestation, and presents the planned bonded attestation network — where a bond
+is put at stake rather than a shared secret being checked — as the mechanism intended to fix exactly
+this property \planned \srcroadmap{timeline: new benchmark tool, signed node attestation}.
+
+\subsection{The emergency-block path}
+\label{sec:consensus-emergency}
+
+A second, parallel block-authorization path exists outside \PoN sortition entirely, intended for
+chain-halt recovery. A block whose \texttt{nodes\allowbreak{}Collateral} outpoint hash equals a fixed marker value
+and whose index is 0 is treated as an \emph{emergency block}
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}emergencyblock.cpp}{24--30}. Such a block requires at least
+\texttt{n\allowbreak{}Emergency\allowbreak{}Min\allowbreak{}Signatures} $= 2$ valid ECDSA signatures over \texttt{block.\allowbreak{}Get\allowbreak{}Hash()}, drawn from
+a fixed set of 4 hardcoded public keys — a 2-of-4 multisignature, on mainnet and testnet alike
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{242--253}. Accepting an emergency block bypasses
+\texttt{Check\allowbreak{}Proof\allowbreak{}Of\allowbreak{}Node} entirely \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon.cpp}{205--207} and bypasses the
+per-node signature verification that an ordinary \PoN block requires
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon.cpp}{236--252}.
+
+The only gate on \emph{when} an emergency block may be produced is
+\texttt{Is\allowbreak{}Emergency\allowbreak{}Block\allowbreak{}Allowed(n\allowbreak{}Height, n\allowbreak{}Time)}, which checks nothing beyond
+\texttt{Is\allowbreak{}PONActive(n\allowbreak{}Height)} — there is no time-since-last-block check and no stall-detection logic
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}emergencyblock.cpp}{183--191} — despite a doc-comment on the type stating
+"Can add additional restrictions like time delays"
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}emergencyblock.h}{41--44}. Concretely: any two holders of the four
+emergency keys can mint a fully valid block at any height once \PoN is active, at any time, with no
+on-chain evidence that the network was in fact stalled. This is a consensus-level centralization
+surface, and it is stated here as one, not as a caveat.
+
+The team intends to raise this threshold to \textbf{3-of-4 with a newly generated key set},
+aligning consensus emergency-key governance with the bridge's 3-of-4 quorum (\S22), with no
+activation height scheduled \planned \srcintent{evidence/design/08-answers-round-2.md, round 5
+answers}. This is a stated direction of travel, not a deployed change: \texttt{n\allowbreak{}Emergency\allowbreak{}Min\allowbreak{}Signatures}
+remains \textbf{2} against the current four-key set on mainnet and testnet today, which is why this
+section states 2-of-4 \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{242--253} above. Raising the
+threshold does not change the shape of the disclosure just made: a 3-of-4 key set, like the 2-of-4
+set it would replace, produces blocks outside \PoN{} eligibility and outside the per-node signature
+check, with no time or stall-detection gating either before or after the change; what moves is only
+the number of colluding or compromised keys required, from two of four to three of four. The absence
+of any temporal or liveness constraint on \emph{when} an emergency block may be produced --- the more
+consequential fact of the two --- is untouched by this parameter.
+
+\subsection{What activation actually cost}
+\label{sec:consensus-cost}
+
+Activating \PoN required two emergency interventions visible directly in the code.
+\texttt{MAX\_REORG\_LENGTH}, normally capped at 40 blocks
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.h}{74}, was overridden to 5{,}000 for heights
+$[2{,}020{,}000,\ 2{,}025{,}000]$, commented "Temporary deep reorg limit during PON stabilization
+period" \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{8983--8988}. A checkpoint cluster at heights
+2{,}020{,}500; 2{,}021{,}000; 2{,}021{,}500; 2{,}022{,}000; and 2{,}029{,}000 was added, labelled "PON
+activation and stabilization checkpoints - EMERGENCY FORK RECOVERY"
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{277--283}. \S\ref{sec:migration} returns to this as evidence for what a
+consensus-level change actually requires of this network.
+
+\subsection{Measured rotation}
+\label{sec:consensus-rotation}
+
+Under the front-of-list, longest-time-since-paid ordering described in
+\S\ref{sec:consensus-lifecycle}, and given that each block pays one node from every tier, the expected
+number of blocks between successive payments to a node in tier $x$ is $\rot{x} \defeq \ncount{x}$, the
+tier's live node count. Table~\ref{tab:pon-rotation} compares this expectation against the maximum
+observed gap in the public registry, chain tip height 2{,}917{,}115
+\srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}.
+
+\begin{table}[H]
+\centering
+\caption{Measured \PoN payment rotation vs. the deterministic per-tier model.}
+\label{tab:pon-rotation}
+\begin{tabular}{lrrrr}
+\toprule
+Tier & Nodes ($\ncount{\cdot}$) & Expected rotation ($\rot{\cdot}$, blocks) & Max blocks since paid & Duration at $\spacingpon$ \\
+\midrule
+Cumulus & 3{,}247 & 3{,}247 & 3{,}202 & 27.06 h \\
+Nimbus  & 1{,}615 & 1{,}615 & 1{,}597 & 13.46 h \\
+Stratus & 1{,}627 & 1{,}627 & 1{,}631 & 13.56 h \\
+\bottomrule
+\end{tabular}
+\end{table}
+\srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}. Stratus's observed maximum exceeds its
+own node count by 4 blocks; this is consistent with the stale-entry skip loop in
+\texttt{GetNextPayment} (\S\ref{sec:consensus-lifecycle}) rather than a violation of the FIFO ordering
+rule. This measured rotation is the empirical confirmation on which \S7's fairness proposition for
+\PNR depends: that proposition rests on the determinism of the \PoN \emph{payment} rotation, not on
+placement determinism, and the two must not be conflated.
+
+%% Drain this section's float queue before the next begins.
+\FloatBarrier

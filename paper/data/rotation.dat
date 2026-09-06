@@ -1,0 +1,4 @@
+# tier nodes expected_rotation max_since_paid median_since_paid p95_since_paid rotation_hours  retrieved 2026-09-03T01:32:00Z
+CUMULUS 3247 3202 1592 3041 27.058
+NIMBUS 1615 1597 800 1517 13.458
+STRATUS 1627 1631 807 1545 13.558

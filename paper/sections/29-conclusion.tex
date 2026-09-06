@@ -1,0 +1,54 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+This paper set out two documents in one. The first is a description, at reimplementation depth, of
+\Flux as it runs today: a consensus layer that gates block production on collateral rather than
+hashpower, an orchestration layer that places 1,195 deployed applications across 6,489 collateralised
+nodes by opportunistic self-selection (§3, \S\ref{sec:evaluation}), and the addressing, attestation and settlement
+machinery that keeps that placement reachable and paid. The second is a specification, at the same
+depth, of the architecture that follows if autonomous callers become the network's principal tenant:
+demand-funded compensation, delegated agent authority, transparent settlement after the shielded
+pools are retired, bounded and publicly verifiable bridging, and a hardened attestation substrate (Part IV). The two halves are written to the same standard: every
+element of the second that is undecided is named as an open parameter or an open problem (\S\ref{sec:limitations}) rather
+than filled with a plausible default.
+
+The thesis under test, stated in §1, is a bet, not a finding: that autonomous software becomes the
+dominant consumer of cloud capacity, and that \Flux's redesign follows from taking that bet seriously.
+This paper does not argue the bet itself. What it argues is conditional and checkable --- given the
+bet, whether the remaining work is extension of what already exists or invention of what does not ---
+and \S\ref{sec:feasibility} answers it by classifying every mechanism in Part IV against that distinction: of twenty-two
+assessed, six are Extension, eleven are Engineering, one moves from Research toward Engineering, and
+four remain Research (\S\ref{sec:feasibility}, tally). Most of what the bet requires, this paper finds, \Flux can build by
+extending components already in production. Four things it cannot.
+
+The four are these, without re-arguing them here: post-quantum migration of outputs the protocol
+cannot move; bounded agent spending on a chain whose script cannot observe history; unlinkable payment
+for a specific deployment; and censorship resistance under measured collateral concentration
+(\S\ref{sec:feasibility}, \S\ref{sec:limitations}).
+
+One finding among these is the most consequential for how the remaining work should be ordered.
+\PNR, as specified, would pay every node through the \PoN rotation independent of what that node
+hosts, so the eligibility gate --- not the payment --- is what compels hosting (§7). That gate is
+presently bound to neither the operator who ran the benchmark nor the machine that produced the
+attestation (§4, §14). Activating \PNR before that binding exists would raise the payoff to passing
+the gate without doing the work, by exactly what \PNR pays; hardening attestation is therefore a
+precondition for \PNR, not a parallel workstream or a follow-on (\S\ref{sec:feasibility}, \S\ref{sec:migration}).
+
+The argument is falsifiable in two independent places. The bet itself fails if, once the delegated
+authority and machine-facing interfaces this paper specifies are wired and enforced (§17, §18), the
+share of deployments attributable to autonomous callers rather than interactive operators stays
+negligible --- the redesign would then be solving a problem the network does not have, and no property
+argued in Parts II--IV would rescue that. The sequencing claim above fails on a narrower and
+nearer-term observation: if \PNR activates while the benchmark and attestation signatures remain
+unbound (§4, §14), and the network subsequently observes eligible nodes growing faster than any measure
+of what they host, that is exactly the gaming this paper's ordering was written to prevent, and it
+would show the priority argument of \S\ref{sec:migration}, not merely one component, to be wrong.
+
+The open markers scattered through this document --- open parameters, open problems, and the notes
+marked \emph{not established by this survey} --- are not a defect awaiting a final edit; they record decisions that a human must make and
+that this paper deliberately left to a human rather than making silently. The next version of this
+document should be judged by how many of them closed and whether closing them changed the mechanisms
+it specifies, not by whether their count reached zero.
+
+%% Drain this section's float queue before the next begins.
+\FloatBarrier

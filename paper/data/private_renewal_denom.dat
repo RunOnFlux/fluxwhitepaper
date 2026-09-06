@@ -1,0 +1,7 @@
+# grid_flux median_class_size overpayment_pct   (recomputed 2026-09-03 from private_renewal_classes.dat)
+# grid 0 means no bucketing: classes are exact period prices
+0 7 0.0000
+0.5 118 8.9942
+1 227 17.3498
+2 786 38.9946
+5 1037 119.7279

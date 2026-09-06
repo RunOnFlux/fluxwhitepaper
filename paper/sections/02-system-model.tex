@@ -1,0 +1,786 @@
+\section{System model, adversary model, and notation}
+\label{sec:model}\label{sec:02-system-model}
+
+Every property this paper states later --- about block production (\S\ref{sec:consensus}), about
+revenue-funded compensation (\S\ref{sec:pnr}), about delegated authority (\S\ref{sec:agent-identity}),
+about private payment (\S\ref{sec:private-renewal}), about bridging (\S\ref{sec:bridge}) and about
+governance (\S\ref{sec:governance}) --- is a statement about the model fixed here. This section names
+the participants and what each can do; states the two different consistency models the system runs
+(one for the chain, one for the orchestration layer) and says why the difference is the most
+important structural fact about \Flux; enumerates the trust boundaries as they exist in the deployed
+code, including the ones a reader would not expect; gives the adversary an explicit capital budget
+denominated in \flux and prices what each level of capital buys against the measured network; and
+records eleven numbered assumptions, \textbf{A1}--\textbf{A11}, that every later section cites by
+number. The assumptions are stated neutrally. Several of them foreclose properties a reader might
+otherwise assume hold; that is the point of writing them down.
+
+Unless a claim is tagged otherwise, this section is \shipped and each claim carries either a source
+citation of the form \srccode{repo/\allowbreak{}file}{line} or a measurement citation of the form
+\srcmeasured{endpoint}{date}.
+
+\subsection{Participants}
+\label{sec:model:participants}
+
+\begin{definition}[Node operator]
+\label{def:operator}
+\shipped A \emph{node operator} is a participant that controls, for some tier
+$t \in \tiers = \{\tC,\tN,\tS\}$: (i) an unspent transparent output of exactly $\coll{t}$, with
+$\coll{\tC} = 1{,}000\flux$, $\coll{\tN} = 12{,}500\flux$, $\coll{\tS} = 40{,}000\flux$
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{57--63}; (ii) a node signing key, used to sign the
+registration and confirmation transactions and to sign \PoN{} (Proof of Node) blocks; and (iii) a payment address,
+which need not equal either of the above.
+
+\emph{Capabilities.} Broadcast a \texttt{FLUXNODE\_START\_TX} spending a collateral output matured
+by at least $100$ blocks \srccode{fluxd/\allowbreak{}src/\allowbreak{}coins.cpp}{630--686}; broadcast a benchmark-signed
+confirmation transaction to enter the paid set \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}activefluxnode.cpp}{18--74};
+re-confirm at least every $640$ blocks or be removed \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{31--34};
+run one \FluxOS{} instance that participates in the orchestration overlay and self-selects
+applications; and, in any slot $\tslot$ for which its collateral outpoint is eligible, produce and
+sign one block.
+
+\emph{Economic position.} Every block pays exactly one node of each tier a reward of
+$\subsidypon(\hgt)\cdot\tbase{t}/14$, with tier bases $\tbase{\tC} = 1.0$, $\tbase{\tN} = 3.5$,
+$\tbase{\tS} = 9.0$ against $\subsidypon(\hpon) = 14\flux$
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2886--2939}. Because the per-tier payment queue is ordered by
+longest-time-since-last-paid \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{313--328}, the rotation length
+$\rot{t}$ equals the tier's node count $\ncount{t}$. Collateral is locked but is not destroyed by any
+lifecycle transition: the three removal conditions are collateral spent, failure to re-confirm, and
+collateral-amount mismatch during the migration windows
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.cpp}{231--290}. There is therefore no slashing, and the cost of
+misbehaviour to an operator is the opportunity cost of locked capital, not a forfeited bond.
+
+\emph{Measured population.} $\ncount{\mathrm{tot}} = 6{,}489$ confirmed nodes, of which
+$\ncount{\tC} = 3{,}247$, $\ncount{\tN} = 1{,}615$, $\ncount{\tS} = 1{,}627$; total collateral
+$88{,}514{,}500\flux$ \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}.
+\end{definition}
+
+\begin{definition}[Tenant]
+\label{def:tenant}
+\shipped A \emph{tenant} is a participant that controls a FluxID (a base58 P2PKH-style address) and a
+spending key over transparent \flux. It holds no collateral, has no consensus role, and is
+identified to the orchestration layer only by an ECDSA signature over a login phrase or over an
+application specification \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}verificationHelper.js}{17--48}.
+
+\emph{Capabilities.} Register, update and remove a globally-registered application; pay the
+computed price to a fixed transparent sink address; start, stop and exec into its own containers via
+the \texttt{appownerabove} privilege \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}routes.js}{1196--1265}.
+
+\emph{Sub-types.} A \emph{human} tenant reviews and signs on a device it controls. An
+\emph{autonomous} tenant --- an agent $\agent$ acting for a principal $\principal$ --- differs in
+exactly one respect that matters to this paper: it must be able to act without a human in the loop,
+and the deployed stack already permits that through a bearer token whose authority is bounded by
+action and unbounded by value (\S\ref{sec:agent-identity}). No delegated-spending primitive with a
+budget $\budget$ or a scope $\scopeset$ exists in the deployed system.
+\end{definition}
+
+\begin{definition}[The Foundation as a distinguished participant]
+\label{def:foundation}
+\shipped Write $\mathcal{F}$ for the participant defined \emph{extensionally}, as the holder of the
+following key sets and the operator of the following infrastructure. $\mathcal{F}$ is distinguished
+because several of its capabilities cannot be acquired with any amount of \flux.
+
+\begin{itemize}
+  \item[\textbf{K1.}] The $4$ hardcoded emergency public keys; any $2$ of them suffice to author a block that
+        bypasses \PoN{} eligibility and per-node signature verification
+        \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{242--253}, \srccode{fluxd/\allowbreak{}src/\allowbreak{}emergencyblock.cpp}{56--150}.
+  \item[\textbf{K2.}] The $5$-entry benchmark-signing allowlist \texttt{vec\allowbreak{}Benchmarking\allowbreak{}Public\allowbreak{}Keys}, each entry
+        carrying a UNIX-timestamp validity start, against which every node's benchmark signature is
+        verified by consensus \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{233--240}.
+  \item[\textbf{K3.}] The dev-fund recipient address, to which a consensus-enforced minimum coinbase output of
+        $\subsidypon(\hgt) - \sum_{t\in\tiers}\subsidypon(\hgt)\tbase{t}/14$ --- i.e.\ $0.5/14 =
+        3.57\%$ of \PoN{} emission at activation --- must be paid
+        \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2877--2884}, enforced at \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{1231--1249}.
+  \item[\textbf{K4.}] Two FluxIDs holding the \texttt{fluxteam} privilege on \emph{every} node's \FluxOS{} API,
+        conferring \texttt{adminandfluxteam} rights including broadcast injection, daemon
+        start/restart, and application updates on behalf of an owner
+        \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}verificationHelperUtils.js}{96--156},
+        \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}routes.js}{1386--1441}.
+  \item[\textbf{K5.}] Merge access to the policy repositories whose documents every node fetches and enforces
+        (\texttt{fluxos-\allowbreak{}network-\allowbreak{}policy}, and the \texttt{helpers/} mirror in \texttt{RunOnFlux/flux})
+        \srccode{fluxos-network-policy/\allowbreak{}.github/\allowbreak{}CODEOWNERS}{1--15},
+        \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appSecurity/\allowbreak{}imageManager.js}{179--195}.
+  \item[\textbf{K6.}] The UEFI Secure Boot Platform Key whose SHA-256 is pinned in the \ArcaneOS{} enrolment
+        binary; the node checks the firmware's enrolled PK against that pin
+        \srccode{fluxsas/\allowbreak{}src/\allowbreak{}fes/\allowbreak{}fes.cpp}{70--81}.
+  \item[\textbf{K7.}] The \fluxsas{} attestation signing material and the internal mTLS CA
+        \srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{411--481}, \srccode{fluxsas/\allowbreak{}tools/\allowbreak{}gen-certs.sh}{38}.
+  \item[\textbf{K8.}] The multisig that posts on-chain chain-parameter messages, which change the deployment price
+        table with effect from their occurrence height
+        \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}chainUtilities.js}{9--52}.
+  \item[\textbf{K9.}] The registrar, authoritative DNS and ACME accounts for the \texttt{runonflux.io}
+        name space, the $16$-host \FDM{} fleet, the $5$ PowerDNS servers, the single-host DNS gateway
+        and the Arcane VIP, all inside one privately-operated \texttt{10.100.0.0/24}
+        \srccode{flux-fdm-infrastructure/\allowbreak{}ansible/\allowbreak{}inventory/\allowbreak{}hosts.yaml}{1--206}.
+\end{itemize}
+
+\decided{custody is \emph{personal}, not corporate. No legal entity holds these key sets: four
+named individuals --- Tadeas Kmenta, Valter Silva, Daniel Keller and Jeremy Anderson --- each hold
+one, personally governed \srcintent{08-answers-round-2.md, round 23}, matching the 3-of-4 emergency
+and bridge configuration of \Cref{sec:governance}. The distinction bears on every concentration
+argument in this paper: personal custody by four named people is a different accountability model
+from custody by a company, and both differ from the anonymous-operator model a reader of a
+decentralized-network paper might otherwise assume. No repository or endpoint read for this paper
+establishes it; it rests on the author's statement.}
+\end{definition}
+
+\begin{definition}[Holder of a parallel asset]
+\label{def:parallel-holder}
+\shipped A \emph{parallel-asset holder} controls a token on one of ten non-\Flux{} chains that
+represents \flux{}. Such a holder has no consensus role, no collateral, and no orchestration
+capability. Its economic position is a claim against the operator of the incumbent \Fusion{} bridge,
+not against \Flux{} consensus; \S\ref{sec:bridge} treats the resulting custody structure. The
+inventory of ten chains is given in \S\ref{sec:parallel-assets}.
+\end{definition}
+
+\subsection{Network model}
+\label{sec:model:network}
+
+\begin{definition}[Chain network]
+\label{def:chainnet}
+\shipped The chain network is the set of \fluxd{} instances exchanging blocks and transactions over a
+Bitcoin-style gossip protocol \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{175--180}. We assume
+\emph{partial synchrony}: there is an unknown global stabilisation time after which any message
+between two correct nodes is delivered within an unknown finite bound. Before it, messages may be
+delayed arbitrarily.
+
+\PoN{} additionally requires bounded \emph{clock} skew, not merely bounded delay: the slot index is
+$\tslot(t) = \lfloor (t - t_{\mathrm{genesis}})/\spacingpon \rfloor$ with
+$\spacingpon = \qty{30}{\second}$ \srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon.cpp}{88--93},
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{105}, and the only enforcement is a
+$\qty{300}{\second}$ future-time tolerance on \PoN{} headers plus a strict
+$\text{blocktime} > \text{prev blocktime}$ ordering
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{5330--5378,5564--5572}.
+\end{definition}
+
+\begin{definition}[Orchestration overlay]
+\label{def:overlay}
+\shipped The orchestration overlay is the set of \FluxOS{} instances exchanging JSON-over-WebSocket
+messages, each wrapped in an envelope
+$\{\textsf{version}, \textsf{timestamp}, \textsf{pubKey}, \textsf{signature}, \textsf{data}\}$ signed
+by the node key \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}fluxBroadcastHelper.js}{11--26}. There is no
+consensus: application state lives in per-node MongoDB collections --- the \texttt{globalzelapps}
+database of messages, specifications and locations that every node replicates by gossip
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{68--76}.
+
+Delivery is best-effort and threshold-gated. Duplicate suppression is a per-node message cache after
+a random \qty{1}{\milli\second}--\qty{75}{\milli\second} jitter; a peer sending five malformed or
+badly-signed messages in ten minutes is disconnected
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}fluxCommunication.js}{549--618}. Above chain height $1{,}751{,}250$
+only the $40$-hex message hash is gossiped and the body is pulled on demand
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}fluxCommunication.js}{494--498}. Convergence state is soft: a
+location record expires after \qty{7500}{\second}, a temporary message after \qty{3600}{\second}, an
+installing record after \qty{900}{\second}, and a graceful-exit notification extends an affected
+location by \qty{420}{\second} \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{311--314},
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}appConstants.js}{86}.
+\end{definition}
+
+\begin{property}[Two consistency models --- the structural fact]
+\label{prop:two-models}
+\shipped Chain state is totally ordered and agreed by consensus. Application state --- which
+applications exist, which nodes run them --- is a set of per-node databases converged by signed but
+unordered gossip, with no total order and no termination guarantee. Consequently no
+predicate of the form ``application $\app$ is running on node $i$ at height $\hgt$'' is decidable
+from the chain.
+\end{property}
+
+\begin{proof}[Proof sketch]
+Placement is opportunistic self-selection: each node independently polls for applications missing
+instances and picks \emph{uniformly at random} among the candidates, subject to soft deferrals and a
+broadcast collision-avoidance wait \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{254--336},
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{321}. The resulting placement is published as a TTL'd
+location broadcast on the overlay, and nothing in the deployed code writes placement to the chain
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{56--60}. The chain carries the \emph{payment} and the
+registry of collateralised nodes; it does not carry the assignment of workloads to nodes. Hence any
+chain-verifiable statement about placement would have to be reconstructed from off-chain gossip,
+which by Definition~\ref{def:overlay} offers no agreement property.
+\end{proof}
+
+\begin{remark}[Why this is the load-bearing fact]
+\label{rem:why-structural}
+Four later sections turn on Property~\ref{prop:two-models}. \S\ref{sec:pnr} must place the fee pool
+$\pool$ in \emph{consensus} state rather than in overlay state, because a value that determines
+payment cannot be converged best-effort. \S\ref{sec:private-renewal} inherits the consequence that
+the payment is the only chain-visible artefact of a deployment, which is what makes payer/workload
+unlinkability hard. \S\ref{sec:bridge} cannot export any placement or capacity fact to another chain.
+\S\ref{sec:governance} must site the moderation quorum on the chain, because a vote counted on the
+overlay has no agreed tally. A reader who carries a single mental model of ``the \Flux{} state''
+will draw wrong conclusions in all four.
+\end{remark}
+
+\paragraph{What breaks when delivery assumptions fail.}
+\shipped (i) \emph{Chain partition}: competing tips are resolved by block count and first-seen rather
+than by accumulated work (\textbf{A3}); reorganisations are capped at $40$ blocks
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}main.h}{74}, a bound that was raised to $5{,}000$ for the closed height window
+$[2{,}020{,}000,\,2{,}025{,}000]$ during \PoN{} stabilisation
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{8983--8988}. (ii) \emph{Overlay degradation}: below $12$ live peers the
+application spawner is paused and below $4$ it is treated as degraded; a registration is refused
+outright below $8$ outbound or $4$ inbound peers
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{262--269}. (iii) \emph{Discovery outage}: with
+\texttt{api.\allowbreak{}runonflux.\allowbreak{}io} unreachable, \FDM{} keeps serving its last configuration and propagates no
+new information --- fail-static, with no independent source
+\srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}flux/\allowbreak{}dataFetcher.js}{47--91}. (iv) \emph{Policy outage}: a
+node that cannot fetch the policy documents keeps enforcing its last-read copy indefinitely and
+across restarts, and a node that never had one declines to answer --- this is the publisher-side
+contract \srcdoc{fluxos-network-policy/README.md:33--44}; the node-side fetch-and-cache path is
+verified in \FluxOS{} \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appSecurity/\allowbreak{}imageManager.js}{179--195}.
+(v) \emph{Hash-list outage}: if both dm-verity
+allow-list endpoints are unreachable, the \ArcaneOS{} watchdog treats the node as secure and takes no
+action --- fail-open \srccode{fluxsas/\allowbreak{}src/\allowbreak{}watchdog.h}{566--596}.
+
+\subsection{Trust boundaries}
+\label{sec:model:trust}
+
+Each row of Table~\ref{tab:trust} names something that is trusted, the participants who must trust
+it, and what a failure of that trust yields. The list is not a critique; it is the set of
+assumptions any later property must either use or discharge.
+
+%% longtable, not table[H]: eleven trust boundaries do not fit one page and the
+%% fixed float ran off the bottom.
+{\small
+\begin{longtable}{@{}p{0.045\linewidth}p{0.235\linewidth}p{0.185\linewidth}p{0.44\linewidth}@{}}
+\caption{Trust boundaries in the deployed system. All rows are \shipped.}
+\label{tab:trust}\\
+\toprule
+ & \textbf{What is trusted} & \textbf{Trusted by} & \textbf{A failure yields} \\
+\midrule
+\endfirsthead
+\multicolumn{4}{@{}l}{\emph{(Table \ref{tab:trust} continued)}}\\
+\toprule
+ & \textbf{What is trusted} & \textbf{Trusted by} & \textbf{A failure yields} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+TB1 & Consensus rules in \fluxd{} \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{5330--5572} & all participants &
+Divergent ledgers; reorganisation bounded at $40$ blocks. \\
+TB2 & Collateral registry (\texttt{determ\_zelnodes} cache, rebuilt at start)
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnodecachedb.cpp}{49--79} & consensus and placement (and, under
+\S\ref{sec:governance}, vote weight) &
+Crash inconsistency between the UTXO set and the node cache; a dedicated sync marker
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnodecachedb.cpp}{17,166--171} and an
+operator-invoked \texttt{rebuildfluxnodedb} repair path \srccode{fluxd/\allowbreak{}src/\allowbreak{}rpc/\allowbreak{}fluxnode.cpp}{78} exist. \\
+TB3 & The \emph{local} \fluxbench{} process, invoked by \texttt{popen()}
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{227--291} & the co-located \fluxd{} &
+Benchmark-gating bypass: an operator's own host can produce the signature attesting that its hardware
+meets the tier thresholds. Not tier forgery --- the registration must still match an on-chain
+collateral amount. \\
+TB4 & Benchmark maintainer allowlist \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{233--240} & consensus &
+Any holder of a currently-valid allowlist key can authorise benchmark signatures fleet-wide. \\
+TB5 & \fluxsas{} attestation service \srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{411--481} & \fluxbench{} and
+\texttt{fdm-nginx} only; \emph{no tenant path} & An attestation demonstrates possession of a value
+present in every copy of the software, not that a machine booted a given image. \\
+TB6 & dm-verity hash allow-list service (two Flux-operated hosts)
+\srccode{fluxsas/\allowbreak{}src/\allowbreak{}watchdog.h}{566--596} & every \ArcaneOS{} node & Whoever controls those names
+defines ``known-good''; if both are unreachable the watchdog does nothing (fail-open). \\
+TB7 & UEFI Platform Key pinned by SHA-256 \srccode{fluxsas/\allowbreak{}src/\allowbreak{}fes/\allowbreak{}fes.cpp}{70--81}; TPM seal against
+PCR~7 only \srccode{fluxsas/\allowbreak{}src/\allowbreak{}fes/\allowbreak{}fes.cpp}{173--186} & the node's own boot path & Whoever controls
+that PK defines what may boot. PCR~7 measures Secure Boot policy, so the seal opens for any
+PK-signed kernel, not a specific measured image. \\
+TB8 & OS update channel: release metadata and checksum files on the Flux CDN
+\srccode{arcaneos-releases/\allowbreak{}publish\_release.sh}{37,65--73,98--101} & operators updating \ArcaneOS{} &
+Whoever controls the CDN and metadata defines the candidate image set. \\
+TB9 & \texttt{fluxos-\allowbreak{}network-\allowbreak{}policy} documents, unsigned, fetched over plain HTTPS and enforced
+hourly by every node \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appSecurity/\allowbreak{}imageManager.js}{179--195},
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{530--531}; publication contract
+\srcdoc{fluxos-network-policy/README.md:30--44,320--326} & every \FluxOS{} node & Any org owner
+merging to \texttt{main} can block a container image, an owner address or an application hash
+network-wide, or revoke an enterprise-node grant, with effect on the next scheduled fetch:
+\qty{6}{\hour} for blocked repositories and enterprise nodes, \qty{12}{\hour} for the tampering list.
+No signature, no second reviewer, no staged rollout. \\
+TB10 & \texttt{api.\allowbreak{}runonflux.\allowbreak{}io} as sole application-discovery source
+\srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}flux/\allowbreak{}dataFetcher.js}{47--91} & \FDM{},
+\texttt{flux-\allowbreak{}apps-\allowbreak{}dns-\allowbreak{}manager} & No independent answer to ``which applications exist and where''; the
+routing plane fails static on the last-known answer. \\
+TB11 & \FDM{}/DNS/certificate path: $16$ \FDM{} hosts, $5$ PowerDNS servers, one DNS gateway host,
+VRRP VIP, one private \texttt{/24}
+\srccode{flux-fdm-infrastructure/\allowbreak{}ansible/\allowbreak{}inventory/\allowbreak{}hosts.yaml}{1--206} & every tenant reachable by
+name, every TLS client & Name resolution, HAProxy election and certificate issuance for the
+application name space are controlled by one operator; a wildcard blacklist in the \FDM{} config
+removes an application from that path unilaterally
+\srccode{flux-domain-manager/\allowbreak{}config/\allowbreak{}appsConfig.js}{2--6}. \\
+TB12 & Application payment sink addresses \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{241--244} &
+every paying tenant & Payment is a transfer to a fixed transparent address; entitlement follows from
+each node independently re-deriving the price. Underpayment is logged and the message is never
+promoted, which is indistinguishable to the payer from non-propagation
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMessaging/\allowbreak{}messageVerifier.js}{733--746,777}. \\
+TB13 & \FluxOS{} \texttt{fluxteam} privilege
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}verificationHelperUtils.js}{96--156} & every node & Two FluxIDs
+can broadcast on the overlay, restart the daemon and update applications on behalf of their owners,
+on every node. \\
+TB14 & Chain-parameter multisig posting price messages
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}chainUtilities.js}{9--52} & every tenant and node &
+The deployment price schedule changes from the occurrence height of a posted message. \\
+TB15 & The $2$-of-$4$ emergency key set \srccode{fluxd/\allowbreak{}src/\allowbreak{}emergencyblock.cpp}{183--191} &
+all participants & Two key holders can insert a valid block at any height after \PoN{} activation,
+bypassing sortition and per-node signature checks, with no cooldown, no stall detection and no
+on-chain justification. \\
+\end{longtable}
+}
+
+\decided{the emergency-block path is observed \emph{on-chain}: an emergency block is a block, so
+its production is visible to anyone following the chain and detection does not depend on an off-chain
+alerting system \srcintent{08-answers-round-2.md, round 24}. That is the whole of the monitoring
+story --- this paper does not claim a rate limiter, an alarm or a watch rota outside the chain,
+because none is established and none is asserted. Observability is not the same as response, and
+\Cref{sec:governance}'s move to 3-of-4 with fresh keys is the control that bounds the path.}
+\notestablished{whether \ArcaneOS{} release artefacts are signature-verified beyond the published
+SHA-256 sums is not established in the repositories read (TB8).}
+\notestablished{the fetch interval for \texttt{vettedrepositories.\allowbreak{}json} is not stated in the policy
+repository, so the \qty{6}{\hour}--\qty{12}{\hour} bound in TB9 covers four of the five documents.}
+\decided{the application payment sink is held by the same four individuals as the emergency and
+bridge keys above --- Tadeas Kmenta, Valter Silva, Jeremy Anderson and Daniel Keller
+\srcintent{08-answers-round-2.md, round 25}. The address itself is expected to change on migration to
+SSP Enterprise; the custody does not. This is a policy fact rather than a code fact: no artefact read
+for this paper establishes it, and it rests on the author's statement. It is stated because
+\Cref{sec:pnr}'s settlement sends every application payment to that one address, so who holds its key
+is load-bearing for the whole revenue path and not a detail a reader should have to infer.}
+
+\subsection{The adversary}
+\label{sec:model:adversary}
+
+\begin{definition}[Adversary $\adv$]
+\label{def:adversary}
+$\adv$ is parameterised by the triple $(\advbudget,\ \mathcal{K},\ \mathcal{N})$:
+\begin{itemize}
+  \item $\advbudget \in \mathbb{R}_{\ge 0}$, a \emph{capital budget} denominated in \flux{} and
+        spendable on collateral or on deployment payments. By \textbf{A11} it is never converted to
+        or from fiat.
+  \item $\mathcal{K} \subseteq \{\mathrm{TB1},\dots,\mathrm{TB15}\}$, the set of trust boundaries
+        $\adv$ controls. Membership in $\mathcal{K}$ is \emph{not} priced in \flux{}: no budget buys
+        TB9 or TB15.
+  \item $\mathcal{N} \in \{\textsf{observe},\ \textsf{delay},\ \textsf{partition}\}$, network power
+        over the two networks of \S\ref{sec:model:network}.
+\end{itemize}
+$\adv$ is computationally bounded: it cannot forge ECDSA or Ed25519 signatures under keys it does not
+hold, and cannot invert SHA-256. It may deviate arbitrarily from any behaviour that is not
+consensus-enforced --- in particular from the advisory rank delay of Property~\ref{prop:share}.
+\end{definition}
+
+\paragraph{What $\advbudget = 0$ buys.} \shipped Several properties in this paper fail to an
+adversary with no capital at all.
+\begin{itemize}
+  \item[\textbf{Z1.}] \emph{Produce attestations that any consumer of \fluxsas{} accepts.} The signing seed for the
+        default, \texttt{cdn}, \texttt{mesh} and \texttt{app} attestation purposes is derived from
+        values compiled identically into every copy of the software; no input depends on the TPM, on
+        Secure Boot state, or on any per-machine value
+        \srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{411--481,466--469,503--506}. No node, no hardware and no
+        collateral are required. This is why \textbf{A5} is stated as it is.
+  \item[\textbf{Z2.}] \emph{Link payments to deployments.} All application payments land at fixed transparent
+        addresses \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03}, and a
+        payment names the application it funds; \S\ref{sec:private-renewal} measures the resulting
+        anonymity set as a singleton within its block.
+  \item[\textbf{Z3.}] \emph{Inject unsigned frames into the overlay.} The raw hash-gossip frames
+        \texttt{message\allowbreak{}Hash\allowbreak{}Present} and \texttt{request\allowbreak{}Message\allowbreak{}Hash} bypass the signed envelope
+        entirely \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}fluxCommunication.js}{511--536}. The capability is
+        bounded --- these frames carry a $40$-hex hash and no application data --- but it is free.
+  \item[\textbf{Z4.}] \emph{Degrade.} Reducing a node's live peer count below the spawner thresholds, or causing
+        confirmation loss, removes that node's applications; the enforcement is redundant across the
+        fleet and therefore also amplifies a stale view
+        \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMonitoring/\allowbreak{}nodeStatusMonitor.js}{62--149}.
+  \item[\textbf{Z5.}] \emph{Act as a tenant.} The price floor for a deployment is $0.01\flux$ per default
+        term \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03}, so tenant-side
+        capabilities are effectively free.
+\end{itemize}
+A zero-capital $\adv$ cannot produce a valid \PoN{} block, cannot claim a tier it has not
+collateralised (\textbf{A4}), and cannot reach any collateral-weighted threshold.
+
+\paragraph{What capital buys.} Write $\vtotal = 88{,}514.5$ for the measured total
+collateral weight, in the units of $1{,}000\flux$ of \Cref{tab:notation} (that is,
+$88{,}514{,}500\flux$ of collateral), and $\ncount{\mathrm{tot}} = 6{,}489$ for the measured node count
+\srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}.
+
+\begin{property}[Share of block production]
+\label{prop:share}
+\shipped Under \textbf{A1} and \textbf{A3}, let $\adv$ control $m = f\,\ncount{\mathrm{tot}}$
+confirmed nodes. Then $\adv$'s expected share of produced blocks is at least $f$, and strictly
+exceeds $f$ whenever the per-slot eligibility probability $p$ is bounded away from $0$.
+\end{property}
+
+\begin{proof}
+Eligibility in slot $\tslot$ is $H(\text{collateral}\Vert\text{prevhash}\Vert\tslot) \le T$, one hash
+per confirmed node, \emph{independent of tier}
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon.cpp}{70--93,400--433}. Distinct collateral outpoints give distinct
+preimages, so per slot eligibility is Bernoulli($p$) independently across nodes. A slot yields a
+block iff at least one node is eligible, with probability $g(\ncount{\mathrm{tot}})$ where
+$g(x) = 1-(1-p)^x$. $\adv$ takes the slot whenever at least one of its $m$ nodes is eligible: the
+rank-based delay of $\qty{4000}{\milli\second}$ per rank is documented in the source as an
+orphan-reduction heuristic with no consensus enforcement
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon-minter.cpp}{78--104,217--221,250}, so an $\adv$ that ignores it publishes
+before any honest node of rank $\ge 1$; the \qty{5}{\second} minimum-since-last-block guard in the
+same minter loop is likewise unenforced by consensus \srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon-minter.cpp}{200--207},
+and the only consensus bound is that a block's time exceed its predecessor's
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{5564--5572}. Hence
+$\adv$'s share is $g(m)/g(\ncount{\mathrm{tot}})$. The map $g$ is concave on $[0,\infty)$ with
+$g(0)=0$, so $g(f\ncount{\mathrm{tot}}) \ge f\,g(\ncount{\mathrm{tot}}) + (1-f)g(0) =
+f\,g(\ncount{\mathrm{tot}})$, giving share $\ge f$; the inequality is strict for $p>0$ by strict
+concavity. The per-slot model understates $\adv$: consensus does not pin a block's slot to
+wall-clock time, so $\adv$ may evaluate eligibility over every slot in the \qty{300}{\second}
+future-time window rather than the current slot alone (\S\ref{sec:consensus-sortition}), which can
+only raise its share, so the bound stands.
+\end{proof}
+
+\begin{property}[Cost of an eligibility share]
+\label{prop:eligibility-cost}
+\shipped To reach a fraction $f$ of eligibility draws by newly collateralising nodes,
+$\adv$ must add $m = \frac{f}{1-f}\ncount{\mathrm{tot}}$ nodes, at minimum cost
+$\advbudget = m\cdot\coll{\tC}$. At $f = 1/2$ this is $m = 6{,}489$ nodes and
+$\advbudget = 6{,}489{,}000\flux$. Per eligibility draw, $\tC$ is exactly
+$\coll{\tS}/\coll{\tC} = 40$ times cheaper than $\tS$.
+\end{property}
+
+\begin{proof}
+$m/(\ncount{\mathrm{tot}}+m) = f$ rearranges to the stated $m$. Cost is minimised by the cheapest
+tier because, by the proof of Property~\ref{prop:share}, sortition assigns one hash per confirmed
+node regardless of tier. The registration is visible on-chain in advance: a start transaction
+requires $100$ blocks of collateral maturity \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{20} and the
+confirm transaction is a separate on-chain event.
+\end{proof}
+
+\begin{property}[Cost of the moderation threshold]
+\label{prop:moderation-cost}
+Let $\vthresh$ be a removal threshold expressed as a fraction of collateral weight $\vtotal$
+(\S\ref{sec:governance}, \planned). Then, in $\vtotal$'s units of $1{,}000\flux$,
+(i) acquiring existing collateral costs $\advbudget = \vthresh\,\vtotal$, because the transfer leaves
+$\vtotal$ unchanged; (ii) newly collateralising costs
+$\advbudget = \frac{\vthresh}{1-\vthresh}\,\vtotal$. At $\vthresh = 0.25$ these are
+$22{,}128{,}625\flux$ and $29{,}504{,}833\flux$ respectively.
+\end{property}
+
+\begin{proof}
+(i) is immediate. For (ii), solve $w/(\vtotal+w) = \vthresh$. The measured distribution corroborates
+(i): the three largest node keys hold $22{,}200{,}000\flux$, which is $25.08\%$ of $\vtotal$
+\srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03} --- four addresses under the
+owner-identity model (\S\ref{sec:governance}; \textbf{A10}) --- so an $\adv$ purchasing that same
+weight reaches the threshold, and does so by transacting with three or four counterparties.
+\end{proof}
+
+\begin{remark}[The two mechanisms are not independently priced]
+\label{rem:cross-price}
+Composing Properties~\ref{prop:eligibility-cost} and~\ref{prop:moderation-cost}: an $\adv$ that
+reaches $\vthresh = 0.25$ by newly collateralising $29{,}504$ $\tC$ nodes simultaneously holds
+$29{,}504/(6{,}489+29{,}504) = 82.0\%$ of eligibility draws. Conversely the $6{,}489{,}000\flux$ that
+buys half of all eligibility draws buys only $6{,}489/(88{,}514.5+6{,}489) = 6.8\%$ of moderation
+weight. The cheapest route to block production is the most expensive route to votes and vice versa,
+and the cheap route to the moderation threshold is also a route to block-production dominance. Both
+routes are visible on-chain in advance, which is the property \S\ref{sec:governance} builds on.
+\end{remark}
+
+\begin{property}[Reorganisation cost]
+\label{prop:reorg}
+\shipped Under \textbf{A1} and \textbf{A3}, the cost of an $\ell$-block reorganisation is a function
+of collateral and of elapsed slots, not of computation, and the capital committed is recoverable.
+\end{property}
+
+\begin{proof}[Proof sketch]
+Every \PoN{} block contributes a fixed $2^{40}$ to chainwork regardless of its target
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}pow.cpp}{284--290}, so a private chain outranks the public chain exactly when its
+block count is larger. By the proof of Property~\ref{prop:share}, an $\adv$ holding fraction $f$ of
+confirmed nodes extends its private chain at expected rate $g(f\ncount{\mathrm{tot}})$ blocks per
+slot, with $g(x)=1-(1-p)^x$; producing $\ell$ private blocks therefore costs $\adv$ elapsed slots,
+not hash trials, and the required capital is $\advbudget$ from
+Property~\ref{prop:eligibility-cost}. That capital is not consumed by the attempt: the only three
+transitions that remove a node from the paid set are collateral spent, failure to re-confirm, and a
+migration-window amount mismatch (Definition~\ref{def:operator}), none of which destroys value. The
+binding constraint on $\ell$ is therefore the $40$-block reorganisation cap
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}main.h}{74}, not the cost of the attempt.
+\end{proof}
+
+\begin{remark}[Fee-pool income]
+\label{rem:pool-share}
+\planned Under \PNR{} (\S\ref{sec:pnr}) a node would additionally receive a share of the fee pool
+$\pool$ once per rotation $\rot{t}$ of its tier --- at the measured population, once every $1{,}627$
+blocks for $\tS$, which is $\qty{13.56}{\hour}$ at $\spacingpon$
+\srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}. The magnitude of that share is not
+fixed here.
+\settlednote{$\adv$'s per-node fee-pool income under \PNR{} is
+$\tierratio{t}\,D_\hgt/\ncount{t}$ per block on average, with $D_\hgt = \lfloor \pool_{\hgt-1}/\drip \rfloor$
+(Proposition~\ref{prop:pnr:across}) --- the per-block drip, times the tier's split, divided by the
+confirmed nodes in that tier; the operator share $\nodeshare$ enters through the pool's inflow rather
+than at payout. Every term is now fixed:
+the drip is $\pool_{\hgt-1}/K$ with $K = \num{86400}$, the operator share follows the ramp of
+\S\ref{sec:pnr} to its cap, and the tier split is the settled partition
+(\Cref{tab:pnr-recommended}). This section still assumes no \emph{value} for it, because the pool
+balance is demand-determined and the adversary model must hold for any balance --- but the
+\emph{function} is no longer open.}
+\end{remark}
+
+\subsection{Assumptions}
+\label{sec:model:assumptions}
+
+Each assumption is cited elsewhere by its label. Each states what it enables and what it forecloses.
+
+\begin{assumption}[\textbf{A1} --- chain synchrony]
+\label{asm:a1-synchrony}
+\shipped The chain network is partially synchronous in the sense of Definition~\ref{def:chainnet},
+and \PoN{} additionally assumes clock skew bounded by the \qty{300}{\second} header tolerance
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{5330--5378}.
+\emph{Enables}: liveness arguments for block production, and settlement arguments at depth.
+\emph{Forecloses}: any argument assuming synchrony, and any use of median-time-past ordering for
+\PoN{} blocks, which use strict predecessor-time ordering instead
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{5564--5572}.
+\end{assumption}
+
+\begin{assumption}[\textbf{A2} --- overlay delivery]
+\label{asm:a2-overlay}
+\shipped The orchestration overlay delivers authenticated messages best-effort, with convergence
+conditional on the peer thresholds and TTLs of Definition~\ref{def:overlay}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{262--271,311--314}.
+\emph{Enables}: eventual-convergence statements about placement, conditional on peer counts.
+\emph{Forecloses}: any safety property over application state, any bound on time to convergence, and
+any chain-derived statement about placement (Property~\ref{prop:two-models}).
+\end{assumption}
+
+\begin{assumption}[\textbf{A3} --- fork choice is a block-count race]
+\label{asm:a3-forkchoice}
+\shipped Every \PoN{} block contributes a fixed chainwork of $2^{40}$, independent of its difficulty
+target \srccode{fluxd/\allowbreak{}src/\allowbreak{}pow.cpp}{284--290}. Fork choice therefore compares block counts, resolved
+by first-seen, and the rank-based minting delay is advisory
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon-minter.cpp}{78--104,217--221}.
+\emph{Enables}: reorganisation cost derived from collateral and eligibility
+(Property~\ref{prop:reorg}); a security argument that does not depend on hashing.
+\emph{Forecloses}: every cumulative-work argument, including light-client fork choice
+(\textbf{A9}) and any claim that reorganisation cost rises with hash rate.
+\notestablished{\texttt{n\allowbreak{}Minimum\allowbreak{}Chain\allowbreak{}Work} still carries its pre-\PoN{} value
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{168--170}; whether it remains an effective initial-block-download
+guard under fixed-work \PoN{} was not resolved.}
+\end{assumption}
+
+\begin{assumption}[\textbf{A4} --- benchmark results are collateral-bound, not hardware-attested]
+\label{asm:a4-benchmark}
+\shipped A node's tier claim is carried in a confirmation transaction signed by \fluxbench{} using
+keys shared across the fleet, validated by consensus against a maintainer allowlist
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{233--240}, and obtained by \fluxd{} from the local
+\texttt{fluxbench-cli} through \texttt{popen()}, with \texttt{status:\allowbreak{}"complete"} treated as
+sufficient \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{227--291}. The registration must match an
+on-chain collateral amount for the claimed tier \srccode{fluxd/\allowbreak{}src/\allowbreak{}coins.cpp}{630--686}.
+\emph{Enables}: the statement that tier is collateral-bound --- an operator cannot claim a tier it
+has not collateralised. \emph{Forecloses}: any property conditioned on the host actually meeting the
+tier's hardware thresholds, and any use of a benchmark result as evidence about a specific machine.
+This is a benchmark-gating bypass, not tier forgery, and \S\ref{sec:consensus} and
+\S\ref{sec:attestation} must both be written against the weaker statement.
+\end{assumption}
+
+\begin{assumption}[\textbf{A5} --- attestations are not machine-bound]
+\label{asm:a5-attestation}
+\shipped A \fluxsas{} attestation demonstrates possession of a value present in every copy of the
+software; none of the derivation inputs depends on the TPM, on Secure Boot state, or on any
+per-machine value \srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{411--481,466--469,503--506}. Every
+\texttt{/v2/*} route requires an internal client certificate and is bound to loopback, so no
+tenant-facing verification path exists \srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{1042--1053,220--252}.
+\emph{Enables}: measured boot, dm-verity and LUKS as genuine host-local defences against a remote
+attacker. \emph{Forecloses}: any protocol that consumes an attestation as a machine binding, any
+tenant-verifiable execution claim, and any argument that the eligibility gate is enforced by
+hardware. The bonded attestation network of \S\ref{sec:attestation} is the answer to exactly this.
+\end{assumption}
+
+\begin{assumption}[\textbf{A6} --- emergency blocks bypass \PoN{} unconditionally]
+\label{asm:a6-emergency}
+\shipped A block whose collateral field equals the emergency sentinel and which carries $2$ valid
+signatures from a hardcoded set of $4$ public keys is accepted, bypassing \texttt{Check\allowbreak{}Proof\allowbreak{}Of\allowbreak{}Node}
+and per-node signature verification \srccode{fluxd/\allowbreak{}src/\allowbreak{}emergencyblock.cpp}{56--150},
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon.cpp}{205--252}. The only gate is that \PoN{} is active: there is no time
+delay, no cooldown and no stall detection, despite an in-source comment stating that such
+restrictions were contemplated \srccode{fluxd/\allowbreak{}src/\allowbreak{}emergencyblock.cpp}{183--191}.
+\emph{Enables}: recovery from a chain halt without a coordinated software release.
+\emph{Forecloses}: any safety property quantified over all valid blocks under \PoN{} eligibility; any
+light-client rule derived from eligibility (\textbf{A9}); and, as a forward constraint,
+\S\ref{sec:pnr} must exclude emergency blocks from the fee-pool drip, or the emergency key set,
+facing no time gating, inherits the ability to accelerate the release of accumulated fees. It could
+not redirect them: an emergency block still fills the deterministic node payout
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}miner.cpp}{487--489}, and connection rejects any block that omits it
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{3878--3884}.
+
+\emph{Planned change.} The team intends to move this set to $3$-of-$4$ with newly generated keys,
+aligning it with the bridge quorum of \S\ref{sec:bridging} \planned
+\srcintent{evidence/design/08-answers-round-2.md}. No activation is scheduled, and the assumption is
+unchanged in kind: at $3$-of-$4$ the path still bypasses \PoN{} eligibility and per-node signature
+verification with no time or stall-detection gating, so every property that references A6 continues
+to hold.
+\end{assumption}
+
+\begin{assumption}[\textbf{A7} --- discovery, naming and runtime policy are operated]
+\label{asm:a7-operated}
+\shipped Application discovery has a single source \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}flux/\allowbreak{}dataFetcher.js}{47--91};
+DNS, HAProxy election and certificate issuance run on a $16$-host fleet inside one private
+\texttt{/24} \srccode{flux-fdm-infrastructure/\allowbreak{}ansible/\allowbreak{}inventory/\allowbreak{}hosts.yaml}{1--206}; and the runtime
+network policy is a set of unsigned documents fetched over plain HTTPS and enforced by every node
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appSecurity/\allowbreak{}imageManager.js}{179--195}, whose authenticity
+``rests on GitHub and on who can merge'' and which takes fleet-wide effect on the next scheduled
+fetch of \qty{6}{\hour}--\qty{12}{\hour}, with no staged rollout and no second-reviewer requirement
+\srcdoc{fluxos-network-policy/README.md:30--44,279--296,320--326}.
+\emph{Enables}: incident response measured in hours; the honest baseline against which
+\S\ref{sec:governance} argues that a collateral-weighted quorum is an improvement.
+\emph{Forecloses}: any end-to-end decentralization claim for reachability, naming or content policy,
+and any censorship-resistance claim about application availability as deployed.
+\end{assumption}
+
+\begin{assumption}[\textbf{A8} --- the shielded pool is closed to new entrants]
+\label{asm:a8-shielded}
+\shipped Since height $835{,}554$, consensus rejects any transaction carrying transparent inputs
+together with a joinsplit or a shielded output, with reject reason
+\texttt{bad-\allowbreak{}txns-\allowbreak{}fluxrebrand-\allowbreak{}vprivacy-\allowbreak{}not-\allowbreak{}empty} \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{1398--1408}. Shielded
+value may move from one \zaddr to another, or exit from a \zaddr to a \taddr; it cannot enter.
+\emph{Enables}: an exact statement of the deployed privacy surface, and the measurement that
+$96{,}479.94\flux$ sits in the two pools
+\srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}getblockchaininfo}{2026-09-03}.
+\emph{Forecloses}: any construction in \S\ref{sec:private-renewal} that requires funding a shielded
+note from transparent value, and any claim that the anonymity set grows. Re-opening the pool would be
+a consensus change; the team has instead decided to retire both pools
+(\S\ref{sec:shielded-retirement}, \srcintent{08-answers-round-2.md, round 10}), so this assumption
+describes a mechanism on its way out rather than a prerequisite for future work.
+\end{assumption}
+
+\begin{assumption}[\textbf{A9} --- no light client is constructible]
+\label{asm:a9-lightclient}
+\shipped With the current header format no \Flux{} light client can be constructed, for three
+compounding reasons: the \PoN{} header carries no commitment to the node set, so eligibility cannot
+be checked without the full registry \srccode{fluxd/\allowbreak{}src/\allowbreak{}primitives/\allowbreak{}block.h}{44--45,64--96}; chainwork
+is fixed per block (\textbf{A3}); and the emergency path can produce a valid block outside the
+eligibility rules (\textbf{A6}).
+\emph{Enables}: an honest enumeration of the bridge design space in \S\ref{sec:bridge}.
+\emph{Forecloses}: light-client bridging and any trust-minimized verification of \Flux{} state on
+another chain, until a header commitment to the node set exists (\S\ref{sec:chain-ops}).
+\end{assumption}
+
+\begin{assumption}[\textbf{A10} --- identity is collateral and nothing else]
+\label{asm:a10-identity}
+\shipped There is no Sybil-resistant identity in the system other than a collateralised node. The two public
+proxies for operator identity, \texttt{pubkey} and \texttt{payment\_address}, are not proof of common
+ownership in either direction, so every concentration figure in this paper is a \emph{lower bound} on
+concentration \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}.
+\emph{Enables}: Sybil resistance by construction for any collateral-weighted mechanism.
+\emph{Forecloses}: honest-majority-of-identities assumptions, one-node-one-vote designs, and any
+claim derived from counting distinct keys as if they were distinct parties.
+\end{assumption}
+
+\begin{assumption}[\textbf{A11} --- denomination and exogeneity of price]
+\label{asm:a11-denomination}
+All economic quantities in this paper are denominated in \flux{} or in resource units. The market
+price of \flux{} is exogenous and is never modelled, forecast or used in any derivation.
+\emph{Enables}: statements about issuance, supply, operator income and demand that a reader can check
+against the chain. \emph{Forecloses}: any fiat-denominated claim, and any crossover or parity result
+that would depend on price rather than on demand (\S\ref{sec:pnr}, \S\ref{sec:evaluation}).
+\end{assumption}
+
+\subsection{Out of scope}
+\label{sec:model:scope}
+
+Three things are outside the model and are never assumed, argued or defended.
+\begin{enumerate}
+  \item \emph{The security of the container runtime.} Nothing in the attestation path measures or
+        attests the Docker daemon, \FluxOS{} itself, or the hypervisor
+        \srccode{fluxsas/\allowbreak{}src/\allowbreak{}watchdog.h}{547--559}. Isolation between co-tenant containers on one
+        host is assumed to be whatever the runtime provides, and no property in this paper depends on
+        it being more than that.
+  \item \emph{The correctness of tenant workloads.} A tenant's image may do anything the runtime
+        permits. Content policy is treated only where it is a network mechanism
+        (\S\ref{sec:governance}); workload correctness is the tenant's.
+  \item \emph{The market price of \flux{}} (\textbf{A11}).
+\end{enumerate}
+
+\subsection{Notation}
+\label{sec:model:notation}
+
+Table~\ref{tab:notation} lists the symbols used in this paper, grouped by domain, with the domain or
+unit of each. The full index, including every constant and its provenance, is Appendix~D; the
+constant tables are Appendix~A. Macros are defined once in \texttt{notation.tex} and are not
+redefined anywhere in the text.
+
+\begin{table}[H]
+\centering
+\small
+\caption{Notation by domain. Full index: Appendix~D.}
+\label{tab:notation}
+\begin{tabular}{@{}p{0.14\linewidth}p{0.50\linewidth}p{0.30\linewidth}@{}}
+\toprule
+\textbf{Symbol} & \textbf{Meaning} & \textbf{Domain / unit} \\
+\midrule
+\multicolumn{3}{@{}l}{\textit{Chain and consensus}}\\
+$\hgt$ & block height & $\mathbb{N}$ \\
+$\hpon$, $\hpa$ & \PoN{} activation height; PA-depletion height & $\mathbb{N}$ \\
+$\tslot$ & \PoN{} slot index & $\mathbb{N}$ \\
+$\spacingpon$, $\spacingpow$ & \PoN{} / legacy target spacing & \unit{\second} \\
+$\blocksyear$ & blocks per year & blocks \\
+$\redint$, $\redmax$, $\redfac$ & subsidy reduction interval, count, factor & blocks; $\mathbb{N}$; $\mathbb{Q}\cap(0,1)$ \\
+\midrule
+\multicolumn{3}{@{}l}{\textit{Tiers}}\\
+$\tiers$ & $\{\tC,\tN,\tS\}$ & finite set \\
+$\coll{t}$ & collateral required by tier & $\tiers \to \mathbb{Q}_{>0}$, \flux \\
+$\ncount{t}$, $\rot{t}$ & node count; rotation length & $\mathbb{N}$; blocks \\
+$\tbase{t}$ & tier base against a total of $14$ & $\tiers \to \mathbb{Q}_{>0}$, \flux \\
+\midrule
+\multicolumn{3}{@{}l}{\textit{Emission and supply}}\\
+$\subsidy$, $\subsidypon$, $\subsidypow$ & block subsidy & $\mathbb{N}\to\mathbb{Q}_{\ge0}$, \flux \\
+$\devfund$ & consensus dev-fund remainder & \flux{} per block \\
+$\supply$, $\premine$ & cumulative issued supply; premine & \flux \\
+\maxmoney & per-transaction sanity bound, \emph{not} a cap & \flux \\
+$\sat$ & $10^{-8}\,$\flux & unit \\
+\midrule
+\multicolumn{3}{@{}l}{\textit{Applications and pricing}}\\
+$\app$, $\ninst$, $\dur$ & an application; instance count; duration & --- ; $\mathbb{N}$; blocks \\
+$\resvec$, $\pricevec$ & resource vector; price vector at a height & $\mathbb{Q}_{\ge0}^{3}$ \\
+$\price$ & price of a deployment & \flux \\
+$\blockslasting$ & default lifetime & blocks \\
+\midrule
+\multicolumn{3}{@{}l}{\textit{\PNR{} (\planned, \S\ref{sec:pnr})}}\\
+$\pool$, $\drip$ & fee-pool balance; drip constant & \flux; blocks \\
+$\nodeshare$, $\nodesharecap$, $\rampstep$ & operator share, ceiling, per-step increase & $[0,1]$ \\
+$\payees$, $\tierratio{t}$ & nodes paid in a block; tier split of the drip & finite set; $[0,1]$ \\
+\midrule
+\multicolumn{3}{@{}l}{\textit{Moderation (\planned, \S\ref{sec:governance})}}\\
+$\vweight{i}$, $\vtotal$ & voting weight of identity $i$; total weight & units of $1{,}000\flux$ \\
+$\vthresh$, $\bond$, $\reporters$ & removal threshold; report bond; reporters & $[0,1]$; \flux; finite set \\
+\midrule
+\multicolumn{3}{@{}l}{\textit{Privacy and value}}\\
+\taddr, \zaddr & transparent / shielded address & --- \\
+$\note$, $\nf$, $\cm$, $\tree$ & note, nullifier, commitment, commitment tree & --- \\
+$\zkproof$, $\viewkey$ & zero-knowledge proof; incoming viewing key & --- \\
+\midrule
+\multicolumn{3}{@{}l}{\textit{Agents and delegation (\planned, \S\ref{sec:agent-identity})}}\\
+$\principal$, $\agent$ & human principal; autonomous agent & --- \\
+$\budget$, $\scopeset$ & delegated spending budget; scope of authority & \flux; finite set \\
+\midrule
+\multicolumn{3}{@{}l}{\textit{Adversary}}\\
+$\adv$, $\advbudget$ & the adversary; its capital budget & --- ; \flux \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{How to read the tags}
+\label{sec:model:tags}
+
+Every substantive claim in this paper carries one \emph{maturity} tag and one \emph{provenance} tag.
+This is a promise to the reader, and it is the mechanism by which a reader can tell, at any point,
+which half of the paper they are in.
+
+\paragraph{Maturity.} \shipped means the behaviour is in code that is deployed and reachable on
+mainnet. \inprogress means the code exists and is under active development but is not activated on
+any network. \planned means a design exists and is specified in this paper but no implementation is
+deployed. \vision means a direction with requirements and interfaces but no construction.
+
+\paragraph{Provenance.} \srccode{repo/\allowbreak{}file}{line} cites deployed source. \srcbranch{repo}{branch}{file:line}
+cites a branch, which a reader may not be able to fetch. \srcdoc{name}, \srcroadmap{item} and
+\srcintent{file}
+cite documents, and are hearsay about behaviour. \srcmeasured{endpoint}{date} cites a public endpoint
+with its retrieval date. \srcinferred{} marks a conclusion drawn by the author from cited material
+rather than stated in it; it never supports \shipped. Citations into \texttt{flux/} are against the
+corpus checkout, commit \texttt{933614b1c} on \texttt{feat/\allowbreak{}appspec-\allowbreak{}v9}; in
+\texttt{ZelBack/\allowbreak{}config/\allowbreak{}default.js} the line numbers above 127 differ from
+\texttt{master} by up to fifteen lines.
+
+\paragraph{The rules.}
+\begin{enumerate}
+  \item \shipped requires a source citation or a measurement citation. A document alone is never
+        sufficient to support \shipped; a roadmap or a README describes intent, not behaviour.
+  \item \planned and \vision material never appears in the present tense. Where this paper writes
+        ``the pool would pay'' rather than ``the pool pays'', that is not hedging --- it is the tag
+        being honoured in the grammar.
+  \item A property the author cannot argue appears as a \texttt{Conjecture}, an
+        \texttt{Open Problem}, or a \emph{Not established by this survey} callout. It never appears
+        as an unlabelled assertion.
+  \item An undecided parameter carries its domain, the trade-off, and --- once decided --- a
+        \emph{Settled} callout recording the value. A guess is never inserted in place of a decision.
+\end{enumerate}
+
+%% Drain this section's float queue before the next begins.
+\FloatBarrier

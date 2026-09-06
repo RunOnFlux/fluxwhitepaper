@@ -1,0 +1,2303 @@
+\section{Bounded, publicly verifiable bridging --- replacing \Fusion, chain consolidation, and why not atomic swaps}
+\label{sec:bridging}\label{sec:bridge}
+
+A bridge lets FLUX that lives on the \Flux chain be used on Ethereum or BNB Smart Chain. Today that
+works because a single server holds one private key per chain and sends tokens out of a hot wallet
+when it observes an inbound payment. The replacement specified in this section locks FLUX in a
+publicly visible multi-key reserve on the \Flux L1 and lets one contract per foreign chain issue
+exactly that much FLUX there --- never more, because the contract itself refuses. Anyone with a
+\Flux node and a public RPC endpoint per chain would be able to check, at any moment, that the
+tokens in circulation on every chain add up to what is locked at home. The governing constraint is
+the team's own \srcintent{03-parallel-assets.md}: decentralization is the requirement, ``but done
+right'' --- \emph{a decentralized design that is exploitable is worse than the custodial
+incumbent}. This section takes that literally. It does not attempt to remove every trusted party.
+It makes every failure mode bounded by a contract, observable by anyone, and attributable to named
+signers, and it states plainly which requirements cannot be met without a \Flux L1 consensus
+change.
+
+\medskip
+\noindent\textbf{What is now decided, and the numbers that follow.} Six quantities that earlier
+drafts of this section carried as open parameters are fixed \srcintent{08-answers-round-2.md, rounds
+5--7, 13}: a \emph{global} supply cap of \num{560000000}\flux{} across all chains, enforced by
+the reserve invariant under honest-minority operation rather than by any contract (\Cref{rem:global-cap}); a mint rate limit of \num{10000000}\flux per
+\SI{24}{\hour} \emph{per chain}, with a matching burn ceiling of \num{10000000}\flux per chain per
+window; a 3-of-4 quorum for mint, release and administration alike, held by the four named
+co-founders; a guardian pause executable by \emph{any one} of four, with a bounded pause window; no
+premine on any surviving chain, the contracts being mint-and-burn so that supply on a chain is only
+what has been minted against locked reserve; and limits that are fixed at deployment and not
+adjustable --- against contracts that are nonetheless \emph{upgradable} under the same 3-of-4.
+Three consequences follow, and this section states all three rather than leaving them to the reader.
+
+\emph{First, the cap is a long-horizon backstop and the rate limit is the bound.}
+\num{560000000}\flux is where the emission curve arrives in the early 2050s
+(\Cref{sec:monetary-policy}), against a present measured liability of \num{223027781.21}\flux across
+all ten legacy assets \srcmeasured{scripts/\allowbreak{}13-issuer-balances.sh}{2026-09-03};
+\srcmeasured{scripts/\allowbreak{}15-nonevm-liability.sh, scripts/\allowbreak{}16-remaining-liability.sh}{2026-09-04}; reaching the cap on one
+chain at the permitted rate takes \SI{25}{\day}. So the security claim rests on the rate limit, and
+because the limit is per chain the worst case scales with the number of live chains: the sustained
+figure is \num{20000000}\flux at a \SI{24}{\hour} reaction time over the launch set
+$\{\mathrm{ETH}, \mathrm{BSC}\}$ and \num{30000000}\flux once Solana is added
+(\Cref{prop:worst-case}). $T_{\mathrm{react}}$, the time to detect a compromise and throw the pause,
+is therefore the single most important operational parameter in the bridge.
+
+\emph{Second, one quorum for mint, release and administration collapses the separation the
+construction is built around.} The design distinguishes those three roles precisely so that no
+single set can both mint and release; with 3-of-4 everywhere, a compromise of three keys obtains
+every one of them at once and the rate limit is the only control that still binds. What the 1-of-4
+pause preserves is exactly the thing that makes $T_{\mathrm{react}}$ finite: the fourth key can stop
+issuance without the other three (\Cref{cor:pause}). That is a single trust assumption bounded by a
+rate limit and a pause, and \Cref{sec:bridging-assumption} presents it as such rather than as a
+separation of powers.
+
+\emph{Third, and this was the load-bearing open item in the design until $\Delta_A$ was decided
+(\Cref{rem:timelock-decided}): an upgradable contract can remove its own rate limit.} A quorum that has been compromised is not obliged to respect a limit it can
+delete, and step one of a competent attack is to upgrade the contract rather than to mint under it.
+The bound of \Cref{prop:worst-case} therefore holds only if the upgrade path is slower than the
+reaction time --- formally, only under the timelock condition $\Delta_A > T_{\mathrm{react}}$ of
+\Cref{rem:upgrade-voids}. Without that condition this section can state the cap and cannot state a
+worst-case bound at all. \planned
+
+\medskip
+\noindent\textbf{Notation used in this section.} \texttt{notation.tex} originally carried no bridge symbols.
+The symbols below were local to \Cref{sec:bridging} and were proposed as additions to the canonical macro
+file. Three deliberately diverge from the internal mechanism specification to avoid collisions with
+symbols that are already canonical: reserve slack is $\varsigma$ (because $\sigma$ is the block
+subsidy \subsidy), the mint rate limit is $\varrho$ (because $\rho$ is the \PNR operator
+share \nodeshare), and cumulative bridge fees are $F_\bullet$ (because $\Phi$ is the \PNR fee pool
+\pool). Cumulative lock and release value are $V_{\mathrm{lock}}$ and $V_{\mathrm{rel}}$ (because
+$L$ is the default application lifetime \blockslasting). Existing macros are used wherever they
+apply: \hgt, \supply, \flux, \sat, \adv, \advbudget, \defeq, \maxmoney.
+These symbols have since been merged into \texttt{notation.tex} as
+\texttt{\textbackslash bslack}, \texttt{\textbackslash brate}, \texttt{\textbackslash bcap},
+\texttt{\textbackslash breserve}, \texttt{\textbackslash bminted}, \texttt{\textbackslash bflow},
+\texttt{\textbackslash bvalue} and \texttt{\textbackslash bquorum}, and appear in the notation index
+(\Cref{sec:app-notation}). The cap macro is \texttt{\textbackslash bcap}, rendering $\bcap{c}$;
+$\kappa$ is the collusion-set size of \Cref{sec:governance} and is not used in this section.
+
+\begin{table}[H]
+\centering\footnotesize
+\begin{tabular}{@{}llp{5.6cm}@{}}
+\toprule
+symbol & domain & meaning \\
+\midrule
+$\mathcal{C}$, $c$ & --- & the set of canonical parallel chains, and a member of it \\
+$M_c$ & $\mathbb{Z}_{\ge 0}$ \sat & minted supply of the canonical token on $c$ \\
+$\mathcal{S}_R$ & --- & the published set of L1 reserve scripts (transparent P2SH) \\
+$\mathsf{R}$, $\mathsf{R}_{\mathrm{hot}}$, $\mathsf{R}_{\mathrm{cold}}$ & $\mathbb{Z}_{\ge 0}$ \sat & reserve balance, and its hot/cold split \\
+$\varsigma$ & $\mathbb{Z}$ \sat & reserve slack, $\varsigma \defeq \mathsf{R} - \sum_c M_c$ \\
+$\bcap{c}$ & $\mathbb{Z}_{\ge 0}$ \sat & per-chain contract constant, defence-in-depth only; the \num{560000000}\flux{} cap is \emph{global} and enforced by \Cref{thm:reserve-dominance} under honest-minority operation (\Cref{rem:global-cap}) \\
+$\varrho_c$, $\varrho^{\mathrm{burn}}_c$, $T_{\mathrm{win}}$ & $\mathbb{Z}_{\ge 0}$ \sat, time & chain $c$'s contract-enforced mint rate limit and burn ceiling, each decided at \num{10000000}\flux per window; the sliding window, decided at \SI{24}{\hour}. Both are per chain: there is no bridge-wide quantity $\varrho$ \\
+$D_{L1}$, $D_c$ & blocks / finality & required confirmation depth on the L1 and on $c$ \\
+$(n_M, k_M)$, $(n_R, k_R)$ & $\mathbb{Z}_{>0}^2$ & mint-authorisation quorum; L1 release quorum; both decided at $(4,3)$ \\
+$(n_A, k_A)$, $\Delta_A$ & $\mathbb{Z}_{>0}^2$, time & administrative quorum, decided at $(4,3)$, and its timelock \\
+$\mathcal{G}$, $\Delta_g$ & set, time & guardian set, and the maximum guardian pause \\
+$(n_{\mathrm{att}}, k_{\mathrm{att}})$, $\beta_{\mathrm{att}}$ & $\mathbb{Z}_{>0}^2$, \flux & bonded attester set and per-attester bond \\
+$T_{\mathrm{att}}$, $T_{\mathrm{silence}}$, $T_{\mathrm{react}}$ & time & attestation cadence, silence timeout, reaction time \\
+$\Lambda_c$, $\Lambda$ & $\mathbb{Z}_{\ge 0}$ \sat & legacy circulating supply on $c$ at the snapshot; $\Lambda = \sum_c \Lambda_c$ \\
+$R_0$ & $\mathbb{Z}_{\ge 0}$ \sat & initial L1 backing locked before migration opens \\
+$\mathcal{I}_c$ & --- & issuer-held (Foundation) address set on $c$, published before $\hsnap$; its balances are excluded from $\Lambda_c$ \\
+$\hsnap$, $h^{\mathrm{mig}}_{\mathrm{close}}$ & height & migration snapshot height; the close of the redemption window, decided at six months from \hpa{} ($\approx \num{3992230}$) \\
+$\ell$, $\mathsf{used}_c$ & --- & lock identifier $(\mathrm{txid}, \mathrm{vout})$; consumed lock set on $c$ \\
+$n_b$, $B_c$ & $\mathbb{Z}_{\ge 0}$ & a burn nonce; the next burn nonce on $c$ \\
+$\varphi_{\mathrm{mint}}$, $\varphi_{\mathrm{rel}}$ & $\mathbb{Z}_{\ge 0}$ \sat & per-operation bridge fees; $F_{\mathrm{mint}}, F_{\mathrm{rel}}$ their cumulative sums \\
+$V_{\mathrm{lock}}$, $V_{\mathrm{rel}}$, $V_{\mathrm{top}}$, $V_{\mathrm{out}}$ & $\mathbb{Z}_{\ge 0}$ \sat & cumulative locks, releases paid, other reserve inflows, other outflows \\
+\bottomrule
+\end{tabular}
+\caption{Symbols local to \Cref{sec:bridging}. Every quantity is read at a stated pair of heights
+$(\hgt, \{h_c\}_{c \in \mathcal{C}})$.}
+\label{tab:bridge-symbols}
+\end{table}
+
+\subsection{The incumbent, stated factually}
+\label{sec:bridging-incumbent}
+
+Everything in this subsection is \shipped, bar the unfinished rewrite marked \inprogress, and is cited to the deployed source. The system has worked
+for years and its operators have recovered from failures by hand. The argument that follows is not
+that it has failed; it is that its worst case is unbounded and unobservable, and that a design
+exists whose worst case is neither.
+
+\paragraph{What it is.} \Fusion is a Node.js service listening on port \num{9876}
+\srccode{fusion/\allowbreak{}config/\allowbreak{}default.js}{6}, backed by MongoDB, that moves FLUX between eleven chains ---
+main, KDA, ETH, BSC, TRX, SOL, AVAX, ERG, ALGO, MATIC and BASE
+\srccode{fusion/\allowbreak{}config/\allowbreak{}default.js}{106,110}. It has three sub-systems: a snapshot/claim engine that
+pays out balances captured by an operator manually running \texttt{flux-\allowbreak{}cli printsnapshot}
+\srcdoc{fusion/README.md:27--29}; a swap engine with the state machine
+$\textit{new} \to \textit{waiting} \to \textit{confirming} \to \textit{exchanging} \to
+\textit{finished}$ and side-states \textit{hold}, \textit{expired}, \textit{dust}
+\srccode{fusion/\allowbreak{}src/\allowbreak{}services/\allowbreak{}swapService.js}{861--871}; and a coinbase-claim path. \shipped
+
+\paragraph{Custody.} For each of the eleven chains, \texttt{config/\allowbreak{}default.\allowbreak{}js} holds up to three
+role-specific secrets --- \texttt{snapshotsecrets}, \texttt{miningsecrets}, \texttt{swapsecrets} ---
+each a single address with a single raw private key, loaded into the process and used to sign
+in-process \srccode{fusion/\allowbreak{}config/\allowbreak{}default.js}{342--482}. That is $10 + 11 + 11 = 32$ hot keys, \texttt{main} having no snapshot secret. There
+is no MPC, no threshold signature and no multisig anywhere on the path that moves funds out on any
+chain \srccode{fusion/\allowbreak{}src/\allowbreak{}coinLibs/\allowbreak{}eth.js}{22,70--101}
+\srccode{fusion/\allowbreak{}src/\allowbreak{}coinLibs/\allowbreak{}main.js}{12--22}. The one function whose name contains ``multisig'',
+\texttt{signature\allowbreak{}Valid\allowbreak{}Flux\allowbreak{}Multisig}, verifies a \emph{user's} ownership of a P2SH address as a claim
+precondition; it says nothing about how outgoing funds are authorised
+\srccode{fusion/\allowbreak{}src/\allowbreak{}services/\allowbreak{}generalService.js}{413--432}. What the operator can therefore do
+unilaterally is move any balance held under any of the 32 keys to any address, at any time, with no
+second party. Whether a cold/hot split exists operationally is indicated only by three named
+addresses in a snapshot-exclusion list --- ``Flux Swap Pool LOCKED/HOT/COLD''; no code in the
+repository moves funds between them
+\srccode{fusion/\allowbreak{}snapshotScriptsMATIC/\allowbreak{}createFluxMainChainSnapshotMATIC.js}{60--70}. \shipped
+
+\paragraph{The in-progress rewrite does not change the model.} In \texttt{fusion-bridge},
+\texttt{Bridge\allowbreak{}ZUSDC.\allowbreak{}sol} lets either \texttt{owner} or \texttt{withdrawer} --- plain \texttt{address}
+state variables --- call \texttt{release\allowbreak{}USDC(to, amount)} for an arbitrary recipient and amount, with
+no proof-of-burn and no Merkle check inside the contract
+\srccode{fusion-bridge/\allowbreak{}packages/\allowbreak{}eth-contracts/\allowbreak{}contracts/\allowbreak{}BridgeZUSDC.sol}{13--14,97--102}. The Kadena
+side's mint requires a keyset of one public key under a \texttt{keys-all} predicate, i.e.\ 1-of-1
+\srccode{fusion-bridge/\allowbreak{}packages/\allowbreak{}kda-contracts/\allowbreak{}src/\allowbreak{}deploy/\allowbreak{}define\_keyset/\allowbreak{}ks.ktpl}{4--7}. The signer
+microservice reads its key from a plain environment variable, with Vault integration present only as
+commented-out code \srccode{fusion-bridge/\allowbreak{}apps/\allowbreak{}fusion-signer/\allowbreak{}src/\allowbreak{}config/\allowbreak{}keys.ts}{1--2,14--27}.
+\inprogress
+
+\paragraph{Correctness of the state machine.} Four facts, each a live code path. \shipped
+
+\begin{enumerate}
+\item A swap is written to the database as \texttt{status:\allowbreak{} 'finished'} with
+      \texttt{txidTo: 'Sent.\allowbreak{} Awaiting blockchain confirmation.\allowbreak{}.\allowbreak{}.\allowbreak{}'} \emph{before} the outbound send is
+      attempted \srccode{fusion/\allowbreak{}src/\allowbreak{}services/\allowbreak{}swapService.js}{893--902}; the real txid is written back
+      only under the guard \texttt{if (txid \&\& typeof txid === 'string')}
+      \srccode{fusion/\allowbreak{}src/\allowbreak{}services/\allowbreak{}swapService.js}{997--1006}; and every \texttt{send<Chain>()}
+      returns the \texttt{Error} object itself on failure
+      \srccode{fusion/\allowbreak{}src/\allowbreak{}coinLibs/\allowbreak{}eth.js}{106--112}. A failed send therefore leaves a
+      \textit{finished} record carrying a placeholder txid, with no retry, no alert and no rollback.
+\item Concurrency guards are module-level booleans (\texttt{swapNotSafe},
+      \texttt{some\allowbreak{}Claim\allowbreak{}In\allowbreak{}Process<CHAIN>}, \texttt{automation\allowbreak{}In\allowbreak{}Progress}) and an in-memory
+      \texttt{Set}; none survives a restart or a second process instance
+      \srccode{fusion/\allowbreak{}src/\allowbreak{}services/\allowbreak{}swapService.js}{443--461}
+      \srccode{fusion/\allowbreak{}src/\allowbreak{}services/\allowbreak{}claimSnapshotService.js}{181--190}. The swap-creation guard is a
+      busy-wait that proceeds anyway after \SI{8}{\second}
+      \srccode{fusion/\allowbreak{}src/\allowbreak{}services/\allowbreak{}swapService.js}{454--458}.
+\item Three different confirmation-multiplier tables exist for nominally the same ``enough
+      confirmations'' decision \srccode{fusion/\allowbreak{}src/\allowbreak{}services/\allowbreak{}swapService.js}{1085--1090,1181--1219}
+      \srccode{fusion/\allowbreak{}src/\allowbreak{}services/\allowbreak{}swapAutomationService.js}{164--182}.
+\item Recovery is manual: roughly fifty chain-pair-specific rollback scripts
+      (\texttt{helpers/\allowbreak{}adjusToPreviousClaimState*}, \texttt{unholdSwap.js},
+      \texttt{remove\allowbreak{}Swap\allowbreak{}TXID.\allowbreak{}js}) and a \textit{hold} state with no automated exit
+      \srccode{fusion/\allowbreak{}src/\allowbreak{}services/\allowbreak{}swapService.js}{1216--1219}
+      \srccode{fusion/\allowbreak{}helpers/\allowbreak{}processTransactionManual.js}{4--5}.
+\end{enumerate}
+
+\paragraph{Gating that exists, and where it lives.} Swap amounts above \num{100000}\flux
+(\num{1000000}\flux for a hardcoded premium list) are refused outright
+\srccode{fusion/\allowbreak{}src/\allowbreak{}services/\allowbreak{}swapService.js}{150--157}
+\srccode{fusion/\allowbreak{}config/\allowbreak{}default.js}{160--195}; swaps still \textit{new} after 90
+confirmations go to \textit{hold} \srccode{fusion/\allowbreak{}config/\allowbreak{}default.js}{111}; the blacklist and the
+premium list are source-code literals requiring a redeploy to change
+\srccode{fusion/\allowbreak{}config/\allowbreak{}blackList.js}{1--27} \srccode{fusion/\allowbreak{}config/\allowbreak{}premiumList.js}{1--12}. The fee is
+\SI{0.2}{\percent} plus a flat per-chain amount \srccode{fusion/\allowbreak{}config/\allowbreak{}default.js}{223--236}.
+Rate limiting is IP- and user-agent-based with hardcoded Origin/Referer bypass rules
+\srccode{fusion/\allowbreak{}src/\allowbreak{}lib/\allowbreak{}server.js}{29,39,54,65,80,91}. All of this gating is enforced in JavaScript
+inside one process, not on any chain. \shipped
+
+\paragraph{Reserve accounting.} The EVM tokens were created by minting \num{440000000}\flux to the
+deployer in the constructor, at \texttt{decimals =\allowbreak{} 8}
+\srccode{flux-eth-bsc/\allowbreak{}flux.sol}{6--13}. Circulating parallel supply is therefore measured as
+\texttt{totalSupply()} minus the sum of reserve wallets, and the two team-maintained
+reserve-wallet exclusion lists disagree --- neither is a superset of the other, so any such figure
+depends on which list is used (see \Cref{sec:parallel-assets}). \shipped
+
+\paragraph{Terminology.} Three separate systems share the name. This paper fixes the usage, and uses
+it consistently from here on:
+
+\begin{itemize}
+\item \Fusion is the incumbent custodial bridge backend --- the \texttt{Zel\allowbreak{}Core-\allowbreak{}io/\allowbreak{}fusion} service
+      described above, plus the unfinished \texttt{fusion-bridge} rewrite that shares its custody
+      model. This is what the construction in \Cref{sec:bridging-construction} would replace.
+\item \FusionX is the user-facing exchange and redemption product
+      \srcdoc{fusion-exchange-frontend/DISCLAIMER.md:1}, whose backend in the corpus is a
+      pass-through proxy to environment-configured third-party URLs
+      \srccode{fusion-exchange-backend/\allowbreak{}routes/\allowbreak{}trading/\allowbreak{}exchange.js}{96--100}. Its custody model is
+      outside the corpus and this paper makes no claim about it.
+\end{itemize}
+
+\noindent They are different things, and the distinction matters for
+\Cref{sec:bridging-alternatives}: atomic swaps are a plausible mechanism for \FusionX's product and
+are not a mechanism for \Fusion's.
+\notestablished{the actual custody model behind \FusionX's production backend host is not in the
+evidence corpus. The frontend's own ``non-custodial'' claim is unverified and is not repeated here.}
+
+\subsection{Requirements}
+\label{sec:bridging-requirements}
+
+The requirements below are derived from the failure modes of \Cref{sec:bridging-incumbent} plus the
+team constraint. They reference the participant and adversary definitions of
+\Cref{sec:02-system-model}. \textbf{H} denotes hard, \textbf{D} desirable.
+
+\begin{definition}[Dominance over the incumbent, H0]
+\label{def:h0}
+A replacement design \emph{dominates} the incumbent if, for every participant compromise the design
+admits, the worst-case loss is (i) strictly less than the incumbent's --- the entire balance held
+under all 32 hot keys, unbounded --- and (ii) publicly observable within a stated bound
+$T_{\mathrm{react}}$. A design that fails H0 at any point is rejected regardless of how decentralized
+it is.
+\end{definition}
+
+\noindent H0 is the team constraint made checkable, and it is the reason the construction leans on
+contract-enforced bounds rather than on the number of parties involved. The remaining hard
+requirements:
+
+\begin{description}
+\item[H1 --- supply is capped by the contract.] On every $c \in \mathcal{C}$, $M_c \le \overline{M}_c$ is
+  enforced by the contract, not by an operator, and $M_c$ is readable by anyone.
+\item[H2 --- no mint without a lock; no release without a burn.] Every unit minted on $c$
+  corresponds to a specific, confirmed, single-use lock on the L1; every unit released on the L1
+  corresponds to a specific, confirmed, single-use burn on some $c$.
+\item[H3 --- no single key moves funds.] No operation that increases $M_c$ or decreases $\mathsf{R}$
+  is authorisable by fewer than $k \ge 2$ independently held keys, and every such authorisation is
+  attributable on-chain to the signers that produced it.
+\item[H4 --- bounded failure under quorum compromise.] If $k_M$ mint signers collude, the loss is
+  bounded by the contract's rate limit and cap, not by the signers' restraint. If $k_R$ release
+  signers collude, the loss is bounded by $\mathsf{R}_{\mathrm{hot}}$. H4 is meaningful only against
+  a contract the colluding signers cannot rewrite: an upgrade path reachable by the same $k_M$ keys
+  reduces H4 to the signers' restraint, which is what \Cref{rem:upgrade-voids} states and what the
+  timelock condition there is for.
+\item[H5 --- burn is unconditional.] No role --- admin, guardian or attester --- can prevent a holder
+  from burning canonical tokens and thereby publishing a claim on the L1 reserve. Pausability applies
+  to mint only.
+\item[H6 --- auditability from outside.] The reserve invariant of \Cref{sec:bridging-invariant} is
+  verifiable by anyone with a \Flux node and public RPC access to each chain, with no privileged data
+  and no trust in any team-maintained wallet list. The migration carry alone takes a published
+  issuer-held set $\mathcal{I}_c$ as an input, checkable against the legacy contract
+  (Algorithm~\ref{alg:carry}); steady-state verification takes none
+  \srcintent{08-answers-round-2.md, round 18}.
+\item[H7 --- audit before deploy.] Every deployed contract and program has a published independent
+  audit of the exact deployed bytecode; migration and sink contracts are in scope
+  \srcintent{03-parallel-assets.md}.
+\item[H8 --- migration conserves value.] Each legacy unit is redeemable 1:1 into main-chain FLUX
+  \srcroadmap{flux-roadmap-public.md:133}; no legacy unit is redeemed twice; and $R_0 \ge \Lambda$
+  holds --- the L1 backing for the whole legacy circulating supply exists --- before any migration
+  mint occurs.
+\item[H9 --- every failure is a stall, not a silent success.] The incumbent's first failure mode ---
+  recording success before it happens --- is forbidden by construction: no off-chain record is
+  authoritative; chain state is.
+\end{description}
+
+\noindent Desirable, not hard: \textbf{D1} redemption liveness under an uncooperative operator
+(stated as desirable because \Cref{sec:bridging-open} shows it cannot be made unconditional);
+\textbf{D2} minimal admin surface --- the admin cannot mint, transfer, freeze accounts or change
+code, and every admin action that weakens a bound is timelocked and public; \textbf{D3}
+immutability --- deployed contracts are not upgradeable in place, replacement is by holder-initiated
+migration; \textbf{D4} a path to bonded attestation --- pause authority transferable from named
+guardians to the attestation network of \Cref{sec:attested-execution} without redeploying the token;
+\textbf{D5} one codebase --- ETH and BSC deployments are byte-identical source with chain-specific
+constructor parameters only \srcintent{03-parallel-assets.md}.
+
+\paragraph{Tensions, named rather than resolved silently.} Raising $k/n$ makes theft need more
+colluders and censorship need fewer refusers; at the decided $(n,k) = (4,3)$ theft needs 3 signers
+and censorship needs 2 \srcinferred. No setting maximises both. The design resolves this by making
+the \emph{consequences} asymmetric: theft is bounded by the contract (H4) and censorship is bounded
+by time, so $k$ may lean toward theft-resistance --- at the cost, at $n = 4$, that the censorship
+side is thin, which is why \Cref{op:liveness} is stated as widely as it is. Second, a rate limit
+tight enough to bound attacker damage also blocks an exchange migrating tens of millions of tokens at
+once, so the migration path is specified to bypass $\varrho_c$ and to be bounded instead by
+$\Lambda_c$ and a closing height --- which makes the migrator the largest single mint authority in
+the design and puts it squarely in audit scope. Third, H3 asks that no operation moving funds be
+authorisable by fewer than $k \ge 2$ \emph{independently held} keys; the decided configuration meets
+the arithmetic ($k = 3$) and not the independence, and \Cref{as:admin} says so rather than letting
+the requirement appear satisfied. Fourth, D3 asks that a bug be fixed by deploying again and migrating
+rather than by upgrading in place --- the price of an audit whose conclusions stay true, and
+\Cref{sec:bridging-incidents} records what an in-place upgrade cost Nomad. \textbf{D3 is not
+satisfied by the decided configuration}: the contracts are upgradable under the same 3-of-4
+\srcintent{08-answers-round-2.md, round 7}, so the construction below specifies immutability while
+the decision retains an upgrade path. \Cref{rem:upgrade-voids} states the consequence for
+\Cref{prop:worst-case}; it is not a drafting inconsistency to be smoothed over, because the bound
+this section exists to state depends on which of the two is deployed.
+
+\subsection{The construction}
+\label{sec:bridging-construction}
+
+Everything in this subsection is \planned. Nothing described here is deployed, and no sentence about
+it should be read in the present tense.
+
+\begin{definition}[Canonical parallel asset]
+\label{def:canonical}
+For a chain $c \in \mathcal{C}$, the \emph{canonical} FLUX token on $c$ is the unique contract or
+program that is the sole issuer of FLUX on $c$: it has no pre-mint, no owner mint, no proxy, and
+issuance only against a signed authorisation referencing a single-use L1 lock, subject to a cap
+$\overline{M}_c$ and a rate limit $\varrho_c$ that the contract enforces itself. Its unit is the satoshi
+(\texttt{decimals} $=8$ on every chain, matching the legacy EVM tokens
+\srccode{flux-eth-bsc/\allowbreak{}flux.sol}{11--13}), so the supply invariant is an integer identity. The decided
+launch set is $\mathcal{C}_0 = \{\mathrm{ETH}, \mathrm{BSC}\}$ with
+$\mathcal{C}_1 = \mathcal{C}_0 \cup \{\mathrm{SOL}\}$ following \srcintent{03-parallel-assets.md};
+one EVM codebase would be deployed twice, plus one Solana program later. \planned
+\end{definition}
+
+\begin{definition}[L1 reserve]
+\label{def:reserve}
+The reserve is a published set $\mathcal{S}_R = \{s_{\mathrm{hot}}, s_{\mathrm{cold},1}, \dots\}$ of
+transparent P2SH scripts on the \Flux L1, published together with their redeem scripts so that any
+party can recompute both the addresses and the key sets. Its balance is
+$\mathsf{R} \defeq \sum_{o \in \mathrm{UTXO}(\mathcal{S}_R)} \mathrm{value}(o)
+= \mathsf{R}_{\mathrm{hot}} + \mathsf{R}_{\mathrm{cold}}$. P2SH is used because it is the only
+multi-party spending condition \Flux's inherited script offers; the reserve cannot be shielded, both
+because a shielded reserve would defeat H6 and because the relevant shielded path is closed after
+height \num{835554} \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{1398--1408}. Three L1 ledgers are derivable from a
+full node: the \emph{lock ledger} (outputs to $s_{\mathrm{hot}}$ whose transaction carries an
+\texttt{FLXB1} memo), the \emph{release ledger} (spends from $\mathcal{S}_R$ carrying an
+\texttt{FLXR1} memo), and the \emph{top-up ledger} (all other inflows). No off-chain database is a
+source of truth (H9). \planned
+\end{definition}
+
+\begin{construction}[Canonical mint-and-burn with attested proof-of-reserve, \planned]
+\label{con:bridge}
+Lock-and-mint from the L1 to $c$; burn-and-release from $c$ to the L1. Four authorities are
+separated by role, as in \Cref{tab:bridge-roles}. The contract state on each $c$ is
+\begin{align*}
+&M_c,\ \overline{M}_c,\ \varrho_c,\ \varrho^{\mathrm{burn}}_c,\ T_{\mathrm{win}},\ \mathsf{bucket}_c,\ \mathsf{bucket}^{\mathrm{burn}}_c
+  &&\text{supply, caps, limits, window, buckets}\\
+&\mathsf{used}_c \subseteq \{0,1\}^{256} &&\text{consumed lock identifiers}\\
+&\mathsf{rem}_c &&\text{unminted remainder per pending lock}\\
+&B_c,\ \mathsf{cumBurn}_c,\ \mathsf{cumMint}_c,\ \mathsf{cumMig}_c &&\text{burn counter, cumulative totals}\\
+&\Lambda_c,\ h^{\mathrm{mig}}_{\mathrm{close}} &&\text{migration allowance and closing block}\\
+&Q_M,\ k_M,\ Q_A,\ k_A,\ \Delta_A,\ \mathsf{queue} &&\text{quorums, timelock, queued changes}\\
+&\mathcal{G},\ \mathsf{pausedUntil} &&\text{guardians; mint pause expiry}\\
+&\mathsf{migrationTarget},\ \mathsf{predecessor} &&\text{set at most once; fixed at construction}
+\end{align*}
+with no \texttt{owner}, no \texttt{withdrawer} and no proxy admin slot. The five messages are:
+
+\smallskip
+\noindent\textbf{Lock} (L1 transaction). Output $o_1$ pays $v$ \sat to $s_{\mathrm{hot}}$; output
+$o_2$ is an \texttt{OP\_RETURN} carrying
+$\texttt{"FLXB1"} \| \mathrm{ver}(1) \| \mathrm{chainId}_c(4) \| \mathrm{recipient}(32)$, with
+exactly one output to $\mathcal{S}_R$. The lock identifier is
+$\ell \defeq (\mathrm{txid}, \mathrm{index}(o_1))$. The transaction is ordinary and needs no
+cooperation from any party. The \CumulusVPN entitlement memo \texttt{CVPN1:} is the deployed
+precedent for an \texttt{OP\_RETURN}-carried binding on this chain
+\srccode{cumulusvpn/\allowbreak{}gateway/\allowbreak{}internal/\allowbreak{}entitle/\allowbreak{}entitle.go}{99--108}.
+
+\smallskip
+\noindent\textbf{MintAuth} (off-chain, self-authenticating). For $i \in Q_M$,
+\[
+\mathrm{sig}_i \;=\; \mathrm{Sign}_{sk_i}\!\Big(H\big(\texttt{"FLXMINT"} \,\|\, \mathrm{chainId}_c
+\,\|\, \mathrm{addr}(\mathrm{contract}_c) \,\|\, \ell \,\|\, v \,\|\, \mathrm{recipient}\big)\Big).
+\]
+The digest is domain-separated by chain identifier \emph{and} contract address, so an authorisation
+for one chain cannot be replayed on another or on a successor contract.
+
+\smallskip
+\noindent\textbf{Mint} (transaction on $c$). \texttt{mint($\ell$, v, recipient, sigs[])}, submittable
+by anyone, admitted by Algorithm~\ref{alg:mint}.
+
+\smallskip
+\noindent\textbf{Burn} (transaction on $c$). \texttt{burn(v, flux\allowbreak{}Addr)} emits
+$\mathrm{Burn}(n_b, v, \mathrm{fluxAddr}, \mathrm{sender})$ with $n_b \defeq B_c$, then
+$B_c \leftarrow B_c + 1$. It is permissionless, has no allowlist, and is never pausable by any role
+(H5). On Solana the mint's \texttt{freeze\_authority} is set to \texttt{None} at creation,
+irrevocably, for the same reason. The decided configuration adds a burn ceiling
+$\varrho^{\mathrm{burn}}_c = \num{10000000}\flux$ per window
+\srcintent{08-answers-round-2.md, round 7}, metered by a second leaky bucket
+$\mathsf{bucket}^{\mathrm{burn}}_c$ on the same $T_{\mathrm{win}}$. A ceiling on burn is not the same
+kind of object as a ceiling on mint --- mint is the direction that can create unbacked value, burn is
+the direction that lets a holder leave --- so its interaction with H5 has to be stated rather than
+assumed benign, and \Cref{rem:burn-ceiling} does so.
+
+\smallskip
+\noindent\textbf{Release} (L1 transaction). Inputs are $k_R$-of-$n_R$ spends of $s_{\mathrm{hot}}$
+UTXOs; outputs pay $v_j - \varphi_{\mathrm{rel}}$ to each \texttt{fluxAddr}$_j$ with change to
+$s_{\mathrm{hot}}$; an \texttt{OP\_RETURN} carries
+$\texttt{"FLXR1"} \| \mathrm{chainId}_c \| n_b^{\mathrm{from}}(8) \| n_b^{\mathrm{to}}(8)$ for a
+\emph{contiguous} nonce range. Batches are constructed by Algorithm~\ref{alg:release}.
+\end{construction}
+
+\begin{table}[H]
+\centering\footnotesize
+\begin{tabular}{@{}lp{3.9cm}p{5.4cm}@{}}
+\toprule
+role & may & may not \\
+\midrule
+MINT quorum $(n_M,k_M)$ & authorise a mint for a confirmed lock &
+  mint beyond $\overline{M}_c$ or $\varrho_c$; mint a used lock; pause; change parameters \\
+RELEASE quorum $(n_R,k_R)$ & co-sign L1 spends of $\mathsf{R}_{\mathrm{hot}}$ to burners &
+  anything on $c$ \\
+GUARDIAN $\mathcal{G}$ (any single member, 1-of-4) & pause mint for $\le \Delta_g$; cancel a
+  queued admin action or upgrade \srcintent{08-answers-round-2.md, round 18} &
+  pause burn or transfer; mint; release; change parameters \\
+ADMIN $(n_A,k_A)$, timelock $\Delta_A$ & change $\overline{M}_c$, $\varrho_c$, quorum sets, $\mathcal{G}$;
+  set \texttt{migration\allowbreak{}Target} once; \emph{upgrade the contract}
+  \srcintent{08-answers-round-2.md, round 7} & mint; transfer; freeze \\
+\bottomrule
+\end{tabular}
+\caption{The four authorities of \Cref{con:bridge}. The role separation is a property of the
+\emph{contract}: the MINT role cannot pause and the ADMIN role cannot mint directly, whoever holds
+the keys. It is \emph{not} a property of the signer sets at launch, because the MINT, RELEASE and
+ADMIN rows are held by the same 3-of-4 quorum (\Cref{tab:bridge-decided}), so three compromised keys
+hold all three at once. The GUARDIAN row is the exception that makes \Cref{prop:worst-case}
+evaluable: at 1-of-4 it is reachable by a key the attacker does not hold. The ADMIN row's upgrade
+power, however, reaches every other row indirectly --- see \Cref{rem:upgrade-voids}.
+\Cref{as:admin} and \Cref{rem:sets-coincide} state the consequence rather than the table implying
+otherwise. \planned}
+\label{tab:bridge-roles}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  font=\footnotesize,
+  box/.style={draw, rounded corners=2pt, align=center, minimum height=9mm, inner sep=3pt},
+  ar/.style={-{Stealth[length=2mm]}, thick}
+]
+\node[box, minimum width=34mm] (l1) at (0,0) {\Flux L1\\reserve $\mathcal{S}_R$, balance $\mathsf{R}$};
+\node[box, minimum width=34mm] (c) at (8,0) {canonical contract on $c$\\supply $M_c \le \overline{M}_c$};
+\node[box, minimum width=26mm, dashed] (q) at (4,2.0) {MINT quorum $(n_M,k_M)$\\attributable signatures};
+\node[box, minimum width=26mm, dashed] (r) at (4,-2.0) {RELEASE quorum $(n_R,k_R)$\\$k_R$-of-$n_R$ P2SH};
+\node[box, minimum width=30mm, dashed] (att) at (8,2.6) {attesters $\to$ guardian\\\texttt{pauseMint()} on $\varsigma<0$};
+\draw[ar] (l1) -- node[above, pos=0.5]{Lock $\ell$, depth $D_{L1}$} (q);
+\draw[ar] (q) -- node[above, pos=0.5]{Mint, rate-limited} (c);
+\draw[ar] (c) -- node[below, pos=0.5]{Burn $n_b$, depth $D_c$} (r);
+\draw[ar] (r) -- node[below, pos=0.5]{Release $[n_b^{\mathrm{from}},n_b^{\mathrm{to}}]$} (l1);
+\draw[ar, dashed] (att) -- (c);
+\end{tikzpicture}
+\caption{The two directions of \Cref{con:bridge}. Burn is permissionless and never pausable; mint is
+capped, rate-limited and pausable. \planned}
+\label{fig:bridge-cycle}
+\end{figure}
+
+\paragraph{The decided constants.} \Cref{tab:bridge-decided} fixes the parameters on which every
+quantitative claim in this section turns. All nine are decisions, not findings; the provenance is
+three intake rounds and the paper carries no independent confirmation of any of them. \planned
+
+\begin{table}[H]
+\centering\footnotesize
+\begin{tabular}{@{}llp{6.0cm}@{}}
+\toprule
+parameter & decided value & enforcement point \\
+\midrule
+$\bcap{c}$ & \num{250000000}\flux & contract constant on each $c$, checked on every mint path; the global \num{560000000}\flux{} cap is enforced by the reserve under honest-minority operation, not here (\Cref{rem:global-cap}) \\
+$\varrho_c$ & \num{10000000}\flux \emph{per chain} & leaky bucket inside each contract, Algorithm~\ref{alg:mint} \\
+$\varrho^{\mathrm{burn}}_c$ & \num{10000000}\flux \emph{per chain} & second bucket on the burn path (\Cref{rem:burn-ceiling}) \\
+$T_{\mathrm{win}}$ & \SI{24}{\hour} & leaky-bucket drain interval for both buckets \\
+$(n_M,k_M) = (n_R,k_R) = (n_A,k_A)$ & $(4,3)$ & one signer set for all three, the four named co-founders \\
+$\mathcal{G}$ & the same four, \textbf{1-of-4} & any single member pauses mint for $\le \Delta_g$ (\Cref{cor:pause}), or cancels a queued admin action or upgrade \srcintent{08-answers-round-2.md, round 18} \\
+limit adjustability & none & $\varrho_c$, $\varrho^{\mathrm{burn}}_c$ fixed at deployment \\
+upgrade path & \textbf{present}, under $(4,3)$, behind $\Delta_A = \qty{48}{\hour}$ & admin quorum may replace contract code after a \qty{48}{\hour} public queue (\Cref{rem:upgrade-voids}, \Cref{rem:timelock-decided}) \\
+premine & $0$ on every $c$ & no constructor mint; $M_c$ begins at zero \\
+\bottomrule
+\end{tabular}
+\caption{Decided bridge parameters \srcintent{08-answers-round-2.md, rounds 5--7}. The quorum figures
+supersede the $(n,k)$ recommendations that \Cref{as:admin} previously carried as open. The guardian
+row is no longer marked for confirmation: the pause is decided at 1-of-4, which is what makes
+\Cref{prop:worst-case} a bound rather than a restatement of the cap. The last two rows are in
+tension with each other --- limits that cannot be adjusted sit inside code that can be replaced ---
+and \Cref{rem:upgrade-voids} is where that tension is resolved or not. \planned}
+\label{tab:bridge-decided}
+\end{table}
+
+\paragraph{Why the limit is per chain and not per address, which is the team's argument and is
+correct.}
+A per-address mint limit is not a limit. Addresses on every $c \in \mathcal{C}$ are free to create:
+an EVM address is the hash of a locally generated public key and costs nothing to produce, so an
+adversary subject to a limit of $x$ per address obtains $nx$ by naming $n$ recipients, at the cost of
+$n$ transactions and nothing else \srcintent{08-answers-round-2.md, round 5} \srcinferred. Nothing in
+the Lock memo or the MintAuth digest of \Cref{con:bridge} binds \texttt{recipient} to an identity, and
+no such binding is available on any chain in $\mathcal{C}$ without an identity registry the design
+does not have and does not want. A rate control is only a control when the resource it meters cannot
+be manufactured by the party being metered; the bucket in Algorithm~\ref{alg:mint} meters issuance
+itself, which cannot be. The same reasoning rules out a per-lock or per-transaction ceiling, which an
+adversary splits the same way.
+
+\paragraph{Where the limit is enforced, and why a per-chain limit makes that question disappear.}
+The contracts are one per chain and cannot read each other's storage, so a limit defined over
+$\sum_{c} M_c$ would have no single enforcement point: it could only be a signing policy the mint
+quorum observes voluntarily, which bounds nothing in the case the limit exists for, since the party
+applying the policy is by hypothesis the compromised party. \textbf{The decision removes that
+problem rather than solving it.} $\varrho_c$ is a per-chain constant, and a statement about chain
+$c$'s own issuance over $c$'s own clock is exactly what $c$'s contract can check about itself. The
+bound therefore holds \emph{under quorum compromise}, because the contract applies it whatever the
+signatures say, and no allocation of a shared budget across $\mathcal{C}$ has to be decided,
+enforced or revisited. Two consequences are worth naming. Honest throughput is $|\mathcal{C}|
+\varrho_c$ rather than a shared $\varrho$, so capacity does not have to be predicted per market ---
+which was the operational argument against a fixed split. And the adversary's bound scales the same
+way: it is additive in the number of live chains (\Cref{prop:worst-case}), so \emph{adding a chain
+raises the worst case by \num{10000000}\flux per reaction window}, which makes chain count a security
+parameter and not only a product decision.
+
+\paragraph{No premine, and why that makes the cap unreachable by honest use.} The legacy EVM tokens
+were created by minting \num{440000000}\flux to the deployer in the constructor
+\srccode{flux-eth-bsc/\allowbreak{}flux.sol}{6--13}. The canonical contracts mint nothing at construction, so
+$M_c = 0$ at deployment and every unit on $c$ traces to a specific L1 lock or to a migration deposit
+(\Cref{def:canonical}, H2). Combined with \Cref{thm:reserve-dominance} this has a consequence worth
+stating: honest issuance is bounded by the reserve, $\sum_c M_c \le \mathsf{R}$, and $\mathsf{R}$
+cannot exceed issued main-chain supply, which was \num{429466823.97}\flux at height \num{2912015}
+\srcmeasured{emission model, observed mode}{2026-09-03} (\Cref{sec:app-emission}). The cap of
+\num{560000000}\flux --- global, and enforced by \Cref{thm:reserve-dominance} rather than by a
+contract constant (\Cref{rem:global-cap}) --- therefore cannot bind on any honest path for as long as
+issued supply is below it. On the deployed schedule that is the early 2050s: issued supply reaches \num{548043625.86}\flux
+at the end of \PoN year 20 (height \num{24095199}, approximately 2046-10) and then grows at a
+constant \num{1789219.274256}\flux per year, so \num{560000000}\flux is first issued about
+$\num{11956374}/\num{1789219} \approx 6.7$ years later, in 2053 \srcinferred
+(\Cref{sec:app-emission}). Only the per-chain constant $\bcap{c}$ binds on the unbacked path, and it
+is reached in \SI{25}{\day} at the permitted rate. That is the precise sense in which the cap is a backstop and not
+a bound.
+
+\SetKwInput{KwBrInv}{Invariant}
+\SetKwInput{KwBrFail}{Failure mode}
+
+\begin{algorithm}[H]
+\caption{Contract-side admission of \texttt{mint} on chain $c$. \planned}
+\label{alg:mint}
+\KwIn{$(\ell, v, \mathrm{recipient}, \mathrm{sigs}[])$; contract state of \Cref{con:bridge}; wall
+clock \texttt{now}.}
+\KwOut{$v' = v - \varphi_{\mathrm{mint}}$ minted to \texttt{recipient}, or revert.}
+\KwBrInv{On any successful return: $M_c \le \overline{M}_c$, $\ell \in \mathsf{used}_c$ once
+$\mathsf{rem}_c[\ell] = 0$, $\mathsf{bucket}_c \le \varrho_c$, and $\mathsf{cumMint}_c$ increased by
+exactly $u$.}
+\KwBrFail{Revert. Execution on $c$ is atomic per transaction, so no partial state change is
+possible; the caller may resubmit. No off-chain record is written anywhere (H9).}
+\BlankLine
+\lIf{$\mathrm{now} < \mathsf{pausedUntil}$}{\Return revert (paused)}
+$S \leftarrow$ the set of distinct members of $Q_M$ with a valid signature in $\mathrm{sigs}[]$ over
+the MintAuth digest for \emph{this} chain identifier and \emph{this} contract address\;
+\lIf{$|S| < k_M$}{\Return revert (quorum)}
+\lIf{$\ell \in \mathsf{used}_c$}{\Return revert (lock fully consumed)}
+$v' \leftarrow \mathsf{rem}_c[\ell]$ if set, else $v - \varphi_{\mathrm{mint}}$
+\tcp*{unminted remainder of a pending lock}
+\lIf{$v' \le 0$ \textbf{or} $v < v_{\min}$}{\Return revert (dust)}
+$\mathsf{bucket}_c \leftarrow \max\!\big(0,\ \mathsf{bucket}_c - \varrho_c \cdot \Delta t / T_{\mathrm{win}}\big)$
+\tcp*{leak since last update}
+$u \leftarrow \min\!\big(v',\ \overline{M}_c - M_c,\ \varrho_c - \mathsf{bucket}_c\big)$
+\tcp*{admissible now}
+\lIf{$u \le 0$}{\Return revert (cap or rate limit; $\ell$ stays pending)}
+$\mathsf{rem}_c[\ell] \leftarrow v' - u$;\quad
+\lIf{$\mathsf{rem}_c[\ell] = 0$}{$\mathsf{used}_c \leftarrow \mathsf{used}_c \cup \{\ell\}$}
+$\mathsf{bucket}_c \mathrel{+}= u$;\quad
+$\mathsf{cumMint}_c \mathrel{+}= u$\;
+mint $u$ to \texttt{recipient}\;
+\end{algorithm}
+
+\paragraph{Why a sliding window and not an epoch counter.} The bucket in
+Algorithm~\ref{alg:mint} drains linearly over $T_{\mathrm{win}}$ rather than resetting at fixed epoch
+boundaries. With fixed epochs, an adversary who times a compromise at a boundary obtains
+$2\varrho_c$ instantly, before any reaction is possible; with a sliding window the total admitted over
+an interval of length $T$ is the headroom left in the bucket at the start plus the leak over $T$,
+which is at most $\varrho_c(1 + T/T_{\mathrm{win}})$ and is the accounting
+\Cref{prop:worst-case} rests on \srcinferred. This is the same class of timing attack that a
+deterministic payout schedule admits, and the leaky bucket removes it.
+
+\paragraph{The mint path in full.} A holder broadcasts a Lock. Each mint-quorum signer, from
+\emph{its own} L1 node rather than a shared RPC, waits until the lock is at depth $\ge D_{L1}$. The
+floor is $D_{L1} \ge 40 = \texttt{MAX\_REORG\_LENGTH}$ \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.h}{74}, because a
+reorganisation deeper than 40 blocks is rejected by consensus and the lock is then irreversible for
+every node following the rules; at the \PoN target spacing this is
+$40 \times \SI{30}{\second} = \SI{20}{\minute}$ \srcinferred. The signer checks memo
+well-formedness, that $o_1$ is the only reserve output, and that $\ell \notin \mathsf{used}_c$ read
+from its own node on $c$, then publishes its signature. Anyone may then submit the mint; the fee
+$\varphi_{\mathrm{mint}}$ was locked and never minted, so it remains in $\mathsf{R}$ as surplus and
+requires no fee key. A lock whose value exceeds the bucket's headroom --- including any single lock
+above $\varrho_c$ --- is neither refused nor refunded: it stays pending and is minted in instalments
+across successive windows, and no admin refund power exists
+\srcintent{08-answers-round-2.md, round 18}. Algorithm~\ref{alg:mint} is written for the whole-lock
+case; the instalment form keeps an unminted remainder per $\ell$ in place of the binary
+$\mathsf{used}_c$ and admits $\min(v',\ \varrho_c - \mathsf{bucket}_c,\ \bcap{c} - M_c)$ per call,
+and every bound below is unchanged by it because each instalment passes the same tests.
+\settlednote{$D_{L1} = \num{40}$ (\Cref{tab:22-recommended}). $D_{L1} \ge 40$ blocks. Raising it above 40 adds latency and buys nothing against the
+2-of-4 emergency-block path \srccode{fluxd/\allowbreak{}src/\allowbreak{}emergencyblock.cpp}{183--191}, which bypasses
+eligibility but not the reorg limit. Trade-off: user-visible mint latency against nothing;
+40 is both the floor and the chosen value: it is exactly the consensus reorg bound, and exceeding it buys nothing.}
+\settlednote{$v_{\min} = \num{10}\flux$, $\varphi_{\mathrm{mint}} = 0$, $\varphi_{\mathrm{rel}} =$ the batch's gas share, recipient Foundation operations (\Cref{tab:22-recommended}). $v_{\min}$ and the fee schedule $(\varphi_{\mathrm{mint}}, \varphi_{\mathrm{rel}})$, plus
+the fee recipient. Domain: $v_{\min} > $ L1 dust threshold $+\ \varphi_{\mathrm{rel}}$. Trade-off:
+griefing resistance and release-batch size against small-holder access. Constraint: fees must not
+scale a signer's income with volume that signer can itself generate.}
+\settlednote{A Flux-hosted feed plus a mandatory IPFS mirror (\Cref{tab:22-recommended}). Transport for MintAuth signatures. A Flux-hosted feed is acceptable on the merits ---
+signatures are self-authenticating and anyone may relay them, so the feed can withhold but cannot
+forge --- but the choice of transport and whether a Flux-independent mirror is mandatory were the
+open items, settled as above. Trade-off: operational simplicity against a withholding vector that delays holders who
+rely on one relayer.}
+
+\begin{algorithm}[H]
+\caption{Release-batch construction, executed independently by each release signer. \planned}
+\label{alg:release}
+\KwIn{The burn log of chain $c$ up to depth $D_c$; the L1 release ledger for $c$; the UTXO set of
+$s_{\mathrm{hot}}$; batch cadence $T_{\mathrm{rel}}$.}
+\KwOut{A signature share on a Release transaction covering a contiguous nonce range, or abstention.}
+\KwBrInv{The set of nonce ranges released for $c$ is pairwise disjoint and every released nonce is
+$< B_c$. Value paid never exceeds $\sum_c \mathsf{cumBurn}_c$ minus what was already released.}
+\KwBrFail{Fewer than $k_R$ signers sign $\Rightarrow$ the batch is not broadcast and exits
+\emph{stall visibly}; no partial payment occurs and no burn is lost, because the claim remains
+on-chain on $c$. A signer that detects an overlapping range abstains, which is the enforcement
+point for the disjointness invariant --- the L1 does not check it. A malformed address forfeits its
+own burn and blocks no other \srcintent{08-answers-round-2.md, round 18}.}
+\BlankLine
+$\mathcal{N} \leftarrow$ nonces $n_b$ of burns on $c$ at depth $\ge D_c$, ordered\;
+$\mathsf{released}_c \leftarrow$ union of nonce ranges appearing in \texttt{FLXR1} memos for $c$ on the L1\;
+$[n^{\mathrm{from}}, n^{\mathrm{to}}] \leftarrow$ the maximal contiguous prefix of
+$\mathcal{N} \setminus \mathsf{released}_c$\;
+\lIf{$[n^{\mathrm{from}}, n^{\mathrm{to}}] \cap \mathsf{released}_c \ne \emptyset$}{\Return abstain (double
+release)}
+\lIf{$n^{\mathrm{to}} \ge B_c$}{\Return abstain (nonce beyond counter)}
+\ForEach{burn $j$ in the range}{
+  verify \texttt{fluxAddr}$_j$ is a well-formed transparent address\;
+  \lIf{malformed}{$v_j \leftarrow 0$ (the nonce stays inside the range and is paid nothing; the
+  memo records it as \emph{unpayable}, so the prefix advances)}
+}
+choose inputs $i$ and burners $b$ subject to $34b + 401i + 60 \le \num{2000000}$ bytes
+\tcp*{$\le$ \texttt{MAX\_TX\_SIZE\_AFTER\_SAPLING} at the decided 3-of-4}
+\Return signature share on the resulting transaction\;
+\end{algorithm}
+
+\begin{remark}[The burn ceiling never refuses, and H5 therefore holds --- recommended, not decided]
+\label{rem:burn-ceiling}
+The burn ceiling $\varrho^{\mathrm{burn}}_c$ admitted two implementations that are indistinguishable
+in a parameter table and are not the same object. Under a \emph{refusing} implementation
+\texttt{burn} reverts once the window's bucket is full, and a holder is then prevented by a contract
+rule from publishing a claim on the reserve --- which is exactly what H5 forbids, and which makes
+\Cref{op:liveness} worse rather than better. Under a \emph{delaying} implementation the exit is
+deferred to a later window but never refused across the sequence of windows.
+
+\proposednote{A burn is never refused: the delaying implementation, recommended by this paper.
+Round 7 decided the \num{10000000}\flux{} ceiling and not which of the two implementations carries
+it \srcintent{08-answers-round-2.md, round 7}; no later round chooses, so the choice is recorded here
+as a recommendation rather than a decision \srcintent{08-answers-round-2.md, round 18}. Under it H5
+holds in the form \emph{no role can prevent a burn from eventually succeeding}, and whether the
+implementation carries an explicit deferral queue or simply declines to rate-limit burns at all is
+not consequential to any property in this section.}
+
+The reasoning is worth recording, because it also explains why the asymmetry between the two ceilings
+is correct rather than an oversight. A mint ceiling protects the reserve: it bounds how much
+unbacked supply a compromised quorum can issue, which is the whole content of
+\Cref{prop:worst-case}. A burn does the opposite --- it destroys parallel supply and strictly
+\emph{improves} the conservation position of \Cref{thm:reserve-dominance}. Limiting it therefore protects
+nothing while creating a liveness risk, and the risk lands at the worst possible moment: a burn
+ceiling binds during a loss-of-confidence exit, which is precisely the scenario in which holders most
+need the exit to work. A refusing ceiling would additionally be cheap to weaponise --- an adversary
+could saturate the window with small burns to trap other holders inside it --- so the refusing
+reading is not merely worse on principle, it is exploitable.
+\end{remark}
+
+\paragraph{The burn path in full.} A holder calls \texttt{burn}; no role can block it. Each release
+signer waits for finality on $c$, not a confirmation count: on Ethereum the finalized checkpoint at
+two epochs is $2 \times 32 \times \SI{12}{\second} = \SI{768}{\second} = \SI{12.8}{\minute}$, or
+\SI{19.2}{\minute} if a third epoch is needed \srcinferred. Signers then co-sign a batch covering a
+contiguous nonce range. Contiguity is what makes double-release auditable from the two public
+ledgers. Sizing is a bounded, stated quantity rather than an emergent one, and the decided quorum
+makes it generous: at $(n_R,k_R) = (4,3)$ the redeem script is $4 \times 34 + 3 = \num{139}$ bytes and
+one P2SH input is approximately \num{401} bytes --- three signatures plus the script --- against
+\texttt{MAX\_TX\_SIZE\_AFTER\_SAPLING} of \num{2000000} bytes, so one release paying roughly
+\num{1000} burners in about \SI{34}{\kilo\byte} of outputs can still consume on the order of
+\num{4900} reserve inputs \srcinferred. The same computation at the previously recommended 9-of-15
+gave approximately \num{1215} bytes per input and roughly \num{1600} inputs; the small set costs
+independence and buys transaction capacity, which is the honest way round to state the trade.
+\settlednote{Each chain's own finality tag, never a confirmation count (\Cref{tab:22-recommended}). $D_{\mathrm{ETH}}, D_{\mathrm{BSC}}, D_{\mathrm{SOL}}$ must each be set \emph{at finality},
+not at a confirmation count --- the latter is the error class that the BNB Bridge incident belongs
+to. Ethereum's value follows from the protocol constant above; BSC's depth under fast finality and
+Solana's \texttt{finalized} commitment are deploy-time parameters, set to each chain's own finality predicate rather than to a count. Trade-off:
+redemption latency against reorg exposure bounded by $\mathsf{R}_{\mathrm{hot}}$.}
+\settlednote{$T_{\mathrm{rel}} = \SI{4}{\hour}$ (\Cref{tab:22-recommended}). Release cadence $T_{\mathrm{rel}}$, domain $[\SI{1}{\hour}, \SI{24}{\hour}]$. Trade-off:
+user-visible exit latency against batch efficiency and signer operational load.}
+\settlednote{$\mathsf{R}_{\mathrm{hot}} = \num{500000}\flux$, top-up when hot ${<}\ \num{200000}\flux$ (\Cref{tab:22-recommended}). $\mathsf{R}_{\mathrm{hot}}$ target, the cold-reserve threshold, and the cold$\to$hot top-up
+cadence. Domain: $\mathsf{R}_{\mathrm{hot}} \approx$ several days of expected redemption volume.
+Trade-off: this quantity \emph{is} the L1-side loss bound under H4, against release latency when the
+hot balance is exhausted. Sharpened by the quorum decision: the three keys that reach the mint bound
+of \Cref{prop:worst-case} are the same three that reach this one, so the exposure of a single 3-key
+compromise is $\mathcal{L}(T_{\mathrm{react}}) + \mathsf{R}_{\mathrm{hot}}$ and this target is a
+security parameter, not only an operational one.}
+
+\paragraph{Administration, guardianship, and the upgrade path the decision retains.} Any single
+$g \in \mathcal{G}$ may call \texttt{pauseMint()}, setting
+$\mathsf{pausedUntil} \leftarrow \max(\mathsf{pausedUntil}, \mathrm{now} + \Delta_g)$; the call is
+attributable to $g$, and the decided rule is 1-of-4 \srcintent{08-answers-round-2.md, round 7}. The
+admin quorum may extend by $\Delta_A$ per signed extension, each on-chain. Burn, transfer and
+\texttt{migrate} are never paused, so a pause that is never lifted is a public, attributable,
+repeatedly-renewed act by named individuals, which is the whole defence against
+pause-as-censorship --- and the bounded window $\Delta_g$ is what keeps a single malicious guardian
+able to stall the mint path but not to halt it, since the pause lapses unless renewed and renewal is
+again public and attributable. Admin parameter changes are queued on-chain and visible for
+$\Delta_A$; \emph{tightening} (lowering $\overline{M}_c$ or $\varrho_c$, removing a signer) executes
+immediately, \emph{loosening} waits. Any single $g \in \mathcal{G}$ may also call
+\texttt{cancel($q$)} on a queued admin action or upgrade $q$, removing it from $\mathsf{queue}$
+before it executes \srcintent{08-answers-round-2.md, round 18}; the call is attributable to $g$, as
+the pause is.
+
+\textbf{The construction specifies no proxy, no \texttt{upgradeTo} and no \texttt{delegatecall} to
+mutable code (D3); the decided configuration keeps an upgrade path under the same 3-of-4}
+\srcintent{08-answers-round-2.md, round 7}. Under D3, replacement on EVM would be by migration:
+ADMIN sets \texttt{migration\allowbreak{}Target} once, holders call \texttt{migrate(v)}, which burns on the old
+contract and calls \texttt{mintMigrated} on the new one whose \texttt{predecessor} is fixed at
+construction; the old contract keeps \texttt{burn} live forever, so a holder who never migrates can
+still exit to the L1. The predecessor path is uncapped by $\Lambda_c$ and capped by $\bcap{c}$, and
+the burn inside \texttt{migrate} takes no nonce and emits no \texttt{Burn}, so it enters no release
+range \srcintent{08-answers-round-2.md, round 18}: were it a nonced burn, Algorithm~\ref{alg:release}
+would pay a claim whose value had already been reissued on the successor and $\varsigma$ would go
+negative. Under the decided configuration the same replacement is available without
+holder action and without notice, which is convenient for repair and is the attack step of
+\Cref{rem:upgrade-voids}. The two are not reconcilable by drafting; they are reconcilable only by
+the timelock $\Delta_A$, and only if $\Delta_A > T_{\mathrm{react}}$.
+
+Guardian membership at launch is decided: the same four co-founders
+\srcintent{08-answers-round-2.md, round 5}, with the single-member pause of \Cref{con:bridge}
+retained and now confirmed at source --- \Cref{cor:pause} shows why that retention is load-bearing
+rather than incidental. $(n_A, k_A) = (4,3)$ is likewise decided, so the previously open clauses
+$n_A \le n_R$ and $k_A \ge k_R$ are satisfied trivially and vacuously: they hold because the sets are
+identical, which is not what they were written to secure (\Cref{rem:sets-coincide}).
+\settlednote{$\Delta_g = \SI{48}{\hour}$ (\Cref{tab:22-recommended}). $\Delta_g$, domain $[\SI{6}{\hour}, \SI{7}{\day}]$. Note that $\Delta_g > T_{\mathrm{react}}$
+is \emph{not} a constraint here: \Cref{prop:worst-case} needs the pause to begin, not to persist, so
+what $\Delta_g$ must outlast is only the time to convene the admin quorum and decide what to do.
+Trade-off: at 1-of-4 the pause is cheap to trigger by design, so $\Delta_g$ is
+exactly the cost a single malicious or mistaken guardian can impose per call. Longer is a stronger
+stop and a longer stall; the bound on abuse is that stalling is repeated, public and attributable,
+while halting outright is not available at any $\Delta_g$.}
+The parameter timelock is likewise $\qty{48}{\hour}$ (\Cref{rem:timelock-decided}), which
+satisfies $\Delta_A > T_{\mathrm{react}}$ for any reaction time under two days and leaves a holder
+that long to complete a burn-and-release round trip before a parameter change binds them.
+
+\paragraph{Which multisig implementation, and why not the audited one.} On EVM the mint check would
+be per-signer ECDSA verification inside the bridge contract --- a distinct-signer bitmap and
+\texttt{ecrecover} against $Q_M$ --- and specifically \emph{not} the Halborn-audited Schnorr
+\texttt{Multi\allowbreak{}Sig\allowbreak{}Smart\allowbreak{}Account} \srcdoc{account-abstraction/aa-schnorr-multisig-sdk/README.md:76}. Two
+evidence-based reasons. First, the aggregated Schnorr signature is verified as a single combined
+address, so the contract never learns \emph{which} $k$ signers participated
+\srccode{account-abstraction/\allowbreak{}contracts/\allowbreak{}schnorr/\allowbreak{}Schnorr.sol}{7--26}, which defeats H3. Second, its
+X-of-Y semantics are realised by enumerating every qualifying signer subset as a separate owner
+address \srccode{account-abstraction/\allowbreak{}aa-schnorr-multisig-sdk/\allowbreak{}src/\allowbreak{}helpers/\allowbreak{}schnorr-helpers.ts}{129--152},
+i.e.\ $\sum_{j \ge k}\binom{n}{j}$ role grants --- 29 for $(7,5)$ but \num{4944} for $(15,10)$, on the
+order of \num{124e6} gas of grants at initialisation \srcinferred --- while the SDK's nonce-reuse
+protection is process-local and the documented consequence of reuse is private-key exposure
+\srcdoc{account-abstraction/aa-schnorr-multisig-sdk/README.md:14--16}. The Schnorr account is the
+right tool for a 2-of-2 wallet and the wrong tool for a bridge quorum. On Solana, the SSP
+\texttt{Solana-\allowbreak{}Multisig} program keeps \texttt{approvals:\allowbreak{} Vec<Pubkey>} on-chain and is therefore
+attributable \srccode{Solana-Multisig/\allowbreak{}programs/\allowbreak{}solana-multisig/\allowbreak{}src/\allowbreak{}lib.rs}{880--918}, with the
+threshold enforced at spend time \srccode{Solana-Multisig/\allowbreak{}programs/\allowbreak{}solana-multisig/\allowbreak{}src/\allowbreak{}lib.rs}{468--471};
+it is a candidate for the ADMIN and upgrade authority, but only after an external audit --- none is
+recorded in the corpus --- and after its own mainnet upgrade authority is moved off the single
+keypair it is on today \srcdoc{Solana-Multisig/docs/MAINNET\_RUNBOOK.md:1--13}. The bridge program's
+Solana mint check would verify $k_M$ Ed25519 signatures through the native Ed25519 program with
+instruction introspection: precisely the code path whose sysvar check was the Wormhole vector
+(\Cref{sec:bridging-incidents}), and therefore a named audit focus.
+
+\noindent\textbf{The quorum question is closed.} $(n_M, k_M) = (n_R, k_R) = (4,3)$, one set, the four
+named co-founders \srcintent{08-answers-round-2.md, round 5}. Both sets sit well inside the P2SH
+ceiling --- standardness caps the redeem script at 520 bytes, which is 15 compressed keys
+\srcinferred --- so the constraint that bounded $n_R$ from above is not active. The theft/censorship
+trade-off resolves as follows at $(4,3)$: theft needs 3 colluders and censorship needs 2 refusers, so
+the release path is easier to stall than to rob, and \Cref{op:liveness} is correspondingly wider than
+it would be at a larger $n_R$. \Cref{sec:bridging-assumption} states what the shared membership costs.
+\settlednote{The named hardware class and procedure of \S\ref{sec:22:recommended}. Custody standard for the four keys: dedicated signing hardware, keys never on a host
+running a relayer, an RPC or the incumbent service, and a documented key-generation ceremony.
+Domain: a named hardware class plus a published procedure. Trade-off: a stricter standard slows
+signing and reduces the chance that one compromise of a general-purpose host yields a key --- which
+under a single 3-of-4 set yields every capability at once. Note that the clauses about
+\emph{organisational} distribution and jurisdictional spread are not open parameters any more; they
+are not satisfied at all, and \Cref{as:admin} says so.}
+
+\subsection{The supply invariant}
+\label{sec:bridging-invariant}
+
+\begin{theorem}[Reserve dominance]
+\label{thm:reserve-dominance}
+Let all quantities be read at a stated pair of heights $(\hgt, \{h_c\})$, and assume
+(i) every mint on every $c$ passed the checks of Algorithm~\ref{alg:mint};
+(ii) at most $k_M - 1$ mint signers and at most $k_R - 1$ release signers are corrupt on each chain;
+(iii) $R_0 \ge \Lambda$ (H8); and
+(iv) $V_{\mathrm{out}} = 0$, i.e.\ no reserve outflow occurs other than releases.
+Then
+\begin{align*}
+\varsigma \;\defeq\; \mathsf{R} - \sum_{c \in \mathcal{C}} M_c
+\;=\;& \underbrace{\Big(\Lambda - \sum_c \mathsf{cumMig}_c\Big)}_{\text{(1) unmigrated legacy}}
+\;+\; \underbrace{\Big(V_{\mathrm{lock}} - \sum_c \mathsf{cumMint}_c - F_{\mathrm{mint}}\Big)}_{\text{(2) locks not yet minted}} \\[0.6em]
+{}+\;& \underbrace{\Big(\sum_c \mathsf{cumBurn}_c - V_{\mathrm{rel}} - F_{\mathrm{rel}}\Big)}_{\text{(3) burns not yet released}}
+\;+\; \underbrace{\Big((R_0 - \Lambda) + V_{\mathrm{top}} + F_{\mathrm{mint}} + F_{\mathrm{rel}} - V_{\mathrm{out}}\Big)}_{\text{(4) surplus}}
+\end{align*}
+and every bracket is non-negative; hence $\varsigma \ge 0$, i.e.\ $\mathsf{R} \ge \sum_c M_c$, at
+every pair of heights. \planned
+\end{theorem}
+
+\begin{proof}[Proof sketch]
+The contract's arithmetic admits exactly three mutators of \texttt{totalSupply}, so
+$M_c = \mathsf{cumMig}_c + \mathsf{cumMint}_c - \mathsf{cumBurn}_c$. UTXO accounting over
+$\mathcal{S}_R$ gives $\mathsf{R} = R_0 + V_{\mathrm{lock}} + V_{\mathrm{top}} - V_{\mathrm{rel}}
+- V_{\mathrm{out}}$, where $V_{\mathrm{rel}}$ counts only value paid to burners --- fees withheld at
+release never leave the reserve and are therefore counted once, in bracket~(4). Substituting and
+grouping yields the displayed identity by cancellation of $\Lambda$, $F_{\mathrm{mint}}$ and
+$F_{\mathrm{rel}}$.
+
+Non-negativity, bracket by bracket. (1) The migration mint path is bounded by
+$\mathsf{cumMig}_c + v \le \Lambda_c$ inside the contract, and $\sum_c \Lambda_c = \Lambda$. (2)
+Each public mint consumes a distinct $\ell$ from the lock ledger and mints $v' = v -
+\varphi_{\mathrm{mint}} \le v$; single-use is enforced by $\mathsf{used}_c$ under consensus on $c$,
+and value correctness by the honest signer that assumption (ii) guarantees is present in any set of
+$k_M$ valid signatures. (3) Each release pays a nonce range contained in $[0, B_c)$, and
+disjointness is enforced by the abstention rule of Algorithm~\ref{alg:release}, which runs whenever
+at least one of the $k_R$ required signers is honest --- again assumption (ii). (4) $R_0 - \Lambda
+\ge 0$ by assumption (iii), $V_{\mathrm{top}} \ge 0$ and $F_\bullet \ge 0$ by construction, and
+$V_{\mathrm{out}} = 0$ by assumption (iv).
+
+Two dynamic cases. \emph{Across the migration}: bracket~(1) drains into $\sum_c M_c$ while $R_0$
+stays in $\mathsf{R}$, so $\varsigma$ decreases monotonically toward the surplus and never below it.
+\emph{Across a successor contract}: \texttt{migrate} burns on the predecessor and mints on the
+successor within one transaction, so $\sum_c M_c$ is unchanged and $\varsigma$ is invariant; neither
+leg is a nonced burn or a migration mint, so brackets~(1) and~(3) are unchanged as well.
+\end{proof}
+
+\begin{corollary}[The quiescent form, and what the roadmap says]
+\label{cor:quiescent}
+Write $\supply_{\mathrm{main}} \defeq \supply(\hgt) - \mathsf{R}$ for main-chain circulating supply.
+In the quiescent state --- no operation in flight, migration complete
+($\sum_c \mathsf{cumMig}_c = \Lambda$), surplus swept --- every bracket vanishes, so $\varsigma = 0$
+and therefore $\sum_c M_c + \supply_{\mathrm{main}} = \supply(\hgt)$. That identity is the roadmap's
+phrasing, ``minted supply across every chain plus main-chain supply equals total issuance''
+\srcroadmap{flux-roadmap-public.md:99}. The live form is the inequality $\varsigma \ge 0$ with the
+decomposition of \Cref{thm:reserve-dominance}, which is strictly more useful: it is what makes a
+\emph{negative} $\varsigma$ diagnosable, because each bracket going negative names a distinct
+failure --- migrator overrun, unbacked mint, unbacked release, or reserve theft --- and each is
+attributable to exactly one role in \Cref{tab:bridge-roles}. \planned
+\end{corollary}
+
+\begin{algorithm}[H]
+\caption{Public verification of the reserve invariant. Runnable by anyone. \planned}
+\label{alg:verify}
+\KwIn{A \Flux full node; one RPC endpoint per $c \in \mathcal{C}$; the published $\mathcal{S}_R$ with
+redeem scripts; a chosen height pair $(\hgt, \{h_c\})$.}
+\KwOut{$\varsigma$ and the four brackets of \Cref{thm:reserve-dominance}.}
+\KwBrInv{The computation reads only public chain state. It requires \textbf{no} team-maintained
+wallet list and no privileged endpoint.}
+\KwBrFail{If any bracket is negative, report it together with the role it implicates. If an RPC is
+unreachable, the run aborts rather than substituting a cached value --- a partial read must not
+produce a reassuring number.}
+\BlankLine
+recompute each address in $\mathcal{S}_R$ from its published redeem script; abort on mismatch\;
+$\mathsf{R} \leftarrow$ sum of unspent outputs to $\mathcal{S}_R$ at height $\hgt$\;
+$V_{\mathrm{lock}} \leftarrow$ sum over the \texttt{FLXB1} lock ledger;\quad
+$V_{\mathrm{rel}} \leftarrow$ sum paid to burners over the \texttt{FLXR1} release ledger\;
+\ForEach{$c \in \mathcal{C}$}{
+  read $M_c, \mathsf{cumMint}_c, \mathsf{cumMig}_c, \mathsf{cumBurn}_c, B_c$ from contract storage at
+  $h_c$\;
+  check the released nonce ranges for $c$ are pairwise disjoint and all $< B_c$\;
+}
+$\varsigma \leftarrow \mathsf{R} - \sum_c M_c$; evaluate brackets (1)--(4)\;
+\Return $\varsigma$ and the brackets\;
+\end{algorithm}
+
+\paragraph{Who can verify, and why the absence of a wallet list matters.} Anyone. $\mathsf{R}$ and
+the three L1 ledgers are transparent chain facts by \Cref{def:reserve}; $M_c$ and the four
+cumulative counters are public contract storage on $c$. A verifier needs a \Flux full node and one
+RPC endpoint per chain, and needs \emph{no} team-maintained wallet list. This is not a stylistic
+point. \Cref{sec:parallel-assets} establishes that two team-maintained reserve-wallet exclusion
+lists exist today and that they disagree --- neither is a superset of the other --- so any current
+circulating-supply figure that nets out team reserves depends on which list the reader happens to
+use. Having exactly one published $\mathcal{S}_R$, recomputable from published redeem scripts,
+removes that dependency entirely. Total issuance $\supply(\hgt)$ is itself verifiable from
+\texttt{gettxoutsetinfo} together with \texttt{valuePools}, with the standing caveat that ZIP-209
+turnstile enforcement is compiled in but dormant
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{322--327}; note that \Cref{thm:reserve-dominance} does not
+depend on that caveat, because it compares $\mathsf{R}$ against $\sum_c M_c$ and never against
+$\supply(\hgt)$.
+
+\begin{proposition}[Bounded loss under full mint-quorum compromise]
+\label{prop:bounded-mint}
+Drop assumption (ii) of \Cref{thm:reserve-dominance} and suppose $k_M$ or more mint signers on chain
+$c$ are corrupt from time $t_0$, with a pause first effective at $t_0 + T_{\mathrm{react}}$. Write
+$b_c(t) \in [0, \varrho_c]$ for the bucket fill. Then the unbacked issuance they can produce on $c$
+is at most
+\[
+\big(\varrho_c - b_c(t_0)\big) \;+\; \varrho_c \cdot \frac{T_{\mathrm{react}}}{T_{\mathrm{win}}}
+\;\le\; \varrho_c\Big(1 + \frac{T_{\mathrm{react}}}{T_{\mathrm{win}}}\Big),
+\]
+and at most $\bcap{c} - M_c(t_0)$ in total; every such mint is an on-chain transaction from which the
+colluding signers' identities are recoverable. \planned
+\end{proposition}
+
+\begin{proof}[Proof sketch]
+Algorithm~\ref{alg:mint} applies the cap and bucket checks after the quorum check and regardless of
+its outcome, so no set of signatures can exceed them; corruption removes only the guarantee that a
+lock exists, never the guarantee that the bounds hold. For the bucket term, every admitted mint of
+$v'$ increases $b_c$ by exactly $v'$ and the only decrease is the leak at rate
+$\varrho_c / T_{\mathrm{win}}$, so the total admitted over $[t_0, t_0 + T]$ equals
+$b_c(t_0 + T) - b_c(t_0) + \varrho_c T / T_{\mathrm{win}}$, and $b_c(t_0+T) \le \varrho_c$ by the
+admission test. Mints authorised before $t_0$ and submitted after it consume the same bucket, so they
+displace rather than add to the adversary's share; the earlier phrasing ``plus in-flight
+authorisations'' overstated the bound and is withdrawn. Attributability follows from per-signer
+ECDSA verification against $Q_M$: the signatures are contract inputs and are therefore permanently
+public.
+\end{proof}
+
+\noindent With the parameters of \Cref{tab:bridge-decided} this becomes a number, and it is the
+number on which the section's security claim now rests. Two hypotheses have to be carried
+explicitly, because each of them is a decision that can be taken either way and the property is
+false without them.
+
+\begin{property}[Worst-case loss of the replacement bridge]
+\label{prop:worst-case}
+Let $\varrho^\star \defeq \num{10000000}\flux$ be the decided per-chain mint rate limit, so
+$\varrho_c = \varrho^\star$ for every $c \in \mathcal{C}$, with
+$T_{\mathrm{win}} = \SI{24}{\hour}$ (\Cref{tab:bridge-decided}). Suppose the 3-of-4 quorum of
+\Cref{as:admin} is compromised at $t_0$ and the adversary mints as fast as
+Algorithm~\ref{alg:mint} admits on every $c$. Assume
+\begin{description}
+\item[(P)] a pause is first effective at $t_0 + T_{\mathrm{react}}$ with $T_{\mathrm{react}}$ finite,
+  which is what the 1-of-4 guardian rule of \Cref{cor:pause} supplies; and
+\item[(U)] the adversary cannot replace the contract's code inside $T_{\mathrm{react}}$, which
+  requires an upgrade timelock $\Delta_A > T_{\mathrm{react}}$ (\Cref{rem:upgrade-voids}).
+\end{description}
+Then the unbacked issuance over $[t_0,\, t_0 + T_{\mathrm{react}}]$ is
+\[
+\mathcal{L}(T_{\mathrm{react}})
+\;\le\;
+\underbrace{|\mathcal{C}|\,\varrho^\star \cdot \frac{T_{\mathrm{react}}}{T_{\mathrm{win}}}}_{\text{sustained}}
+\;+\;
+\underbrace{\textstyle\sum_{c \in \mathcal{C}}\big(\varrho^\star - b_c(t_0)\big)}_{\text{headroom at } t_0,\ \le\ |\mathcal{C}|\,\varrho^\star}
+\qquad\text{and}\qquad
+\mathcal{L} \;\le\; \sum_{c \in \mathcal{C}}\big(\bcap{c} - M_c(t_0)\big).
+\]
+The sustained term is additive in the number of live chains and evaluates as in
+\Cref{tab:worst-case}. The headroom term adds at most one further $|\mathcal{C}|\,\varrho^\star$ ---
+\num{20000000}\flux over the launch set --- and is largest exactly when the bridge is idle at the
+moment of compromise. The cap term does not bind on any chain for
+$T_{\mathrm{react}} < \SI{25}{\day}$. \planned
+\end{property}
+
+\begin{proof}
+Sum the per-chain bound of \Cref{prop:bounded-mint} over $c \in \mathcal{C}$ with
+$\varrho_c = \varrho^\star$ on both the sustained and the headroom term; the cap bound is the check
+$M_c + v' \le \bcap{c}$, which Algorithm~\ref{alg:mint} applies on every path. Hypothesis (P) is what
+makes $T_{\mathrm{react}}$ a finite quantity to substitute, and \Cref{cor:pause} discharges it.
+Hypothesis (U) is what makes Algorithm~\ref{alg:mint} the code that runs for the whole of
+$[t_0, t_0 + T_{\mathrm{react}}]$; \Cref{prop:bounded-mint} bounds what \emph{that} algorithm admits
+and says nothing about a successor contract, so without (U) the sum is over an empty set of
+enforced checks. For the numbers, with $|\mathcal{C}_0| = 2$ at launch:
+$2\varrho^\star \cdot (24/24) = \num{20000000}\flux$, $2\varrho^\star \cdot (48/24) =
+\num{40000000}\flux$, and $3\varrho^\star \cdot (24/24) = \num{30000000}\flux$ once
+$\mathcal{C}_1 = \mathcal{C}_0 \cup \{\mathrm{SOL}\}$; and
+$\bcap{c} / \varrho^\star = \num{250000000}/\num{10000000} = 25$ windows of \SI{24}{\hour}, so from
+an empty contract the cap on one chain is first reached at \SI{25}{\day}, which exceeds any
+$T_{\mathrm{react}}$ the design contemplates \srcinferred.
+\end{proof}
+
+\begin{table}[H]
+\centering\footnotesize
+\begin{tabular}{@{}llr@{}}
+\toprule
+chains live & $T_{\mathrm{react}}$ & sustained worst-case mint \\
+\midrule
+$\mathcal{C}_0 = \{\mathrm{ETH}, \mathrm{BSC}\}$ (launch) & \SI{24}{\hour} & \num{20000000}\flux \\
+$\mathcal{C}_0 = \{\mathrm{ETH}, \mathrm{BSC}\}$ & \SI{48}{\hour} & \num{40000000}\flux \\
+$\mathcal{C}_1 = \mathcal{C}_0 \cup \{\mathrm{SOL}\}$ & \SI{24}{\hour} & \num{30000000}\flux \\
+\bottomrule
+\end{tabular}
+\caption{The sustained term of \Cref{prop:worst-case} at the decided per-chain limit
+$\varrho^\star = \num{10000000}\flux$ per \SI{24}{\hour}
+\srcintent{08-answers-round-2.md, round 7}. Headroom at $t_0$ adds at most a further
+$|\mathcal{C}|\,\varrho^\star$. These figures hold under hypotheses (P) and (U) and not otherwise.
+\planned}
+\label{tab:worst-case}
+\end{table}
+
+\begin{corollary}[The pause is reachable by a party outside any 3-key compromise]
+\label{cor:pause}
+\Cref{prop:worst-case} is a statement about $T_{\mathrm{react}}$, so it would be vacuous if the
+adversary also held the pause. The adversary does not. The decided rule is that \texttt{pauseMint()} is a
+\textbf{single-member action of $\mathcal{G}$ at $|\mathcal{G}| = 4$} --- 1-of-4, with the bounded
+window $\Delta_g$ \srcintent{08-answers-round-2.md, round 7}. An adversary holding three of the four
+keys therefore does not control the pause: one guardian remains able to act, and
+$T_{\mathrm{react}}$ is bounded above by that member's detection-and-response time. Hypothesis (P)
+of \Cref{prop:worst-case} is discharged, and the worst-case bound holds rather than collapsing to
+the cap. \planned
+\end{corollary}
+
+\begin{proof}[Proof sketch]
+$T_{\mathrm{react}}$ enters \Cref{prop:worst-case} only through the time at which
+$\mathsf{pausedUntil}$ first exceeds \texttt{now} in Algorithm~\ref{alg:mint}. That state is written
+only by \texttt{pauseMint()}, whose authorisation predicate is the guardian rule. Under the decided
+single-member rule the predicate is satisfiable by any one of four keys; an adversary holding three
+cannot prevent the fourth from broadcasting, because the call is a permissionless transaction on $c$
+once signed, and nothing in Algorithm~\ref{alg:mint} lets a mint consume or reset
+$\mathsf{pausedUntil}$. The bound is on $T_{\mathrm{react}}$ as a \emph{human} latency, not a
+protocol one: the honest guardian must notice, decide and sign, which is the subject of the
+paragraph after \Cref{rem:upgrade-voids}. Note what the proof does \emph{not} establish --- that the
+pause holds. It expires at $\Delta_g$ unless renewed, and renewal against a compromised admin quorum
+is a repeated race the guardian wins only by repeating the call.
+\end{proof}
+
+\paragraph{Why the pause is cheap and the mint is not, which is the design reason and not a
+compromise.} Pausing and minting have opposite requirements. \textbf{Pausing is a safety action that
+should be cheap to trigger and expensive to abuse; minting is a value-creating action that should be
+expensive to trigger and is not abusable at all if the trigger holds.} A high threshold on the mint
+quorum buys exactly what a high threshold is for --- more colluders needed to create value from
+nothing. The same threshold on the pause buys nothing and costs the bound, because the set that must
+be unable to mint is the set that would then also be able to refuse to stop. So the two thresholds
+are set in opposite directions, 3-of-4 and 1-of-4, and the asymmetry is the point rather than an
+inconsistency. What makes the cheap trigger tolerable is the bounded window: a single malicious or
+mistaken guardian can impose $\Delta_g$ of stalled minting per call, publicly and attributably, and
+cannot halt the bridge, because burn, transfer and \texttt{migrate} are never pausable (H5) and the
+pause lapses on its own.
+
+\paragraph{Why the bound is proved against quorum compromise at all, since the objection is fair.}
+A reader may reasonably ask why the section spends its central property on a scenario in which three
+of four named co-founders' keys are in an attacker's hands --- a bar that is high, and this section
+says so. Two answers, and the section states them rather than assuming the reader shares the
+premise. First, \textbf{a bound that holds only when nobody is compromised is not a security
+property.} It is a description of normal operation, which the contract's ordinary behaviour already
+supplies. The entire value of a rate limit is what it guarantees in the case one hopes never happens;
+evaluated against an honest quorum it guarantees nothing that was in doubt. Second, \textbf{the case
+is not hypothetical in this domain.} Ronin was a 5-of-9 validator compromise, and
+\Cref{tab:bridge-incidents} lists it alongside other multi-signer quorums that were taken whole. The
+bar being high is a real and stateable mitigation, and it is the reason the design is defensible at
+launch (\Cref{sec:bridging-assumption}); it is not a reason to leave the case unmodelled. \planned
+
+\begin{remark}[Upgradability voids the rate limit unless the upgrade is slower than the reaction]
+\label{rem:upgrade-voids}
+The limits are fixed at deployment and not adjustable --- and the contracts are upgradable under the
+same 3-of-4 \srcintent{08-answers-round-2.md, round 7}. An adversary holding three keys is not
+obliged to mint under a limit it can delete: \textbf{step one of the attack is to upgrade the
+contract and remove the limit}, after which the bound of \Cref{prop:worst-case} constrains code that
+is no longer running. As specified today the rate limit therefore bounds nothing under exactly the
+scenario it exists to bound, and the strongest true statement available is the cap term,
+$\sum_c(\bcap{c} - M_c(t_0))$ --- a quantity starting from $\bcap{c} = \num{250000000}\flux$ per
+chain against a present outstanding liability of \num{223027781.21}\flux across all ten measured
+legacy chains \srcmeasured{scripts/\allowbreak{}13-issuer-balances.sh}{2026-09-03}, and therefore more than an
+order of magnitude weaker than \Cref{tab:worst-case}. Note that the 1-of-4 pause does not rescue
+this on its own: an upgrade that removes the limit can remove the guardian rule in the same
+transaction.
+
+\textbf{The fix composes with what is already decided and costs nothing new.} Put the upgrade path
+behind the admin timelock $\Delta_A$ and require
+\[
+\Delta_A \;>\; T_{\mathrm{react}},
+\]
+which is hypothesis (U). Then a malicious upgrade is queued on-chain and publicly visible before it
+takes effect; the 1-of-4 pause can fire during the delay; the limit is still the code that runs for
+the whole reaction window; and the rate limit binds again. The mechanism is the one the construction
+already specifies for loosening parameter changes, applied to the code as well as to the constants.
+Cancellation of a queued upgrade or admin change is likewise a single-member guardian action
+\srcintent{08-answers-round-2.md, round 18}; without it the pause would defer the upgrade's effect
+only until $\Delta_g$ lapses, the queued upgrade would execute at $t_0 + \Delta_A$ regardless, and
+the bound of \Cref{prop:worst-case} would end there with $\sum_c \bcap{c}$ as the only ceiling
+after it.
+\textbf{Without a timelock on the upgrade path, this section can state the cap and cannot state a
+worst-case bound at all}, and every figure in \Cref{tab:worst-case} is conditional on it. This was
+the load-bearing open item in the bridge design; the decision follows. \planned
+\begin{remark}[$\Delta_A$ decided: \qty{48}{\hour}]
+\label{rem:timelock-decided}
+The upgrade timelock is set at $\Delta_A = \qty{48}{\hour}$, with upgrades remaining $3$-of-$4$
+\srcintent{evidence/design/08-answers-round-2.md}. Unanimity was considered and rejected for a
+reason worth recording, because it is the opposite of the one that first suggests itself: $4$-of-$4$
+would indeed prevent an adversary holding three keys from upgrading, but it has no fault tolerance
+at all --- a single lost, destroyed or unavailable key would make the contract permanently
+unupgradable, converting a key-theft risk into a key-loss risk, and for signer sets this small key
+loss is the more common failure. The recovery path from that state is a fresh deployment and another
+migration, which is precisely the event upgradability exists to avoid.
+
+\textbf{Upgradability is a bring-up mechanism with immutability as its stated destination.} The
+team's reasoning for keeping it, and for keeping the quorum at 3-of-4, is that a management path is a
+safety net while the system is being verified to work without bugs, and that ``it's easier to upgrade
+contract rather than releasing a new one and doing migration''; as the network evolves the intent is
+to move to non-upgradable contracts and automate what the quorum does today
+\srcintent{08-answers-round-2.md, round 11} (\vision). The paper records this because it changes what
+the trust assumption \emph{is}: not a permanent property of the design, but an explicitly temporary
+one whose removal is intended and undated.
+
+That framing is coherent, and the honest statement of its weakness is a matter of sequencing rather
+than of principle. An upgradable contract under a 3-of-4 quorum is, for as long as it lasts, a
+contract whose rules those three signers can rewrite --- the \SI{48}{\hour} timelock bounds the speed
+of that rewrite, not its scope (\S\ref{sec:bridging-assumption}). A commitment to eventual immutability
+constrains nothing until it has a trigger, and none is stated: no value threshold, no elapsed-time
+condition, no audit milestone. \Cref{tab:22-recommended} does not assign one, because a date the
+team has not chosen would be an invention. What the paper can say is what a trigger would need to
+look like --- a published condition, checkable by a third party, after which the upgrade path is
+renounced on chain --- and that until such a condition exists, the bridge should be described as
+administered rather than trust-minimized, which is how \S\ref{sec:bridging-assumption} describes it.
+\paragraph{The renunciation trigger: stated in shape, proposed here in checkable form.} Two
+preconditions for locking immutability are settled: a \textbf{third-party security audit}, and a
+\textbf{proven operating record across edge scenarios --- chain reorganizations named explicitly}
+\srcintent{08-answers-round-2.md, round 12} (\planned). Separately, the team states that code will
+primarily be written and audited using state-of-the-art AI models, with the third-party audit as an
+additional and distinct requirement rather than a substitute
+\srcintent{08-answers-round-2.md, round 12}. The paper records that as the stated development
+practice; it is a claim about process, and this document takes no position on the assurance it
+provides, which is why the separate third-party requirement is the load-bearing one here.
+
+Both preconditions are the right ones, and neither is yet a trigger, because a trigger has to be
+checkable by someone who does not work on the project. ``A proven time record'' is not falsifiable
+without a duration, and --- more importantly --- \textbf{elapsed time proves nothing on a bridge
+nobody uses}. A contract that sits idle for a year has demonstrated nothing about its behaviour
+under load, under reorganization, or under an adversary; it has demonstrated only that it was idle.
+Any time-based condition therefore needs a volume condition beside it, or it can be satisfied by
+inactivity. The following formulation is this paper's proposal, chosen so that every clause is
+verifiable from public data:
+
+\begin{enumerate}
+  \item \textbf{Audit.} A third-party security audit of the \emph{deployed bytecode} --- not of a
+  source tree that was later modified --- published in full, with every critical and high finding
+  either resolved in a deployed upgrade or publicly accepted with reasoning.
+  \item \textbf{Duration.} At least \num{1051200} L1 blocks ($\approx$ 12 months at the
+  \SI{30}{\second} target) of continuous mainnet operation \emph{after} the audit's publication.
+  \item \textbf{Exercise.} Cumulative bridged volume over that period of at least
+  \num{10000000}\flux{} --- one day of a single chain's rate limit, and enough that the record reflects
+  use rather than idleness.
+  \item \textbf{Clean record.} Within that period: zero emergency pauses invoked, and zero upgrades
+  executed to correct a contract defect. Upgrades for unrelated feature work do not reset the clock;
+  an upgrade fixing a correctness bug does, because the record being demonstrated is precisely that
+  no such bug remains.
+  \item \textbf{Reorganization evidence.} A published log of reorganizations observed on each
+  connected chain during the period, with the deepest handled on each, demonstrating that the
+  finality parameters of \Cref{tab:22-recommended} were exercised rather than merely configured.
+  \item \textbf{Renunciation on chain.} The upgrade path is then removed by transaction --- the
+  admin role renounced, not merely unused --- so that the change is verifiable by reading the
+  contract rather than by trusting a statement about it.
+\end{enumerate}
+
+Clause~5 is the one that speaks directly to the stated concern, and it is also the one most likely to
+be unsatisfiable on schedule: reorganizations on the connected chains are not events the project can
+schedule, and a quiet year produces no evidence. If the record is thin when the other clauses are
+met, the honest options are to wait or to state that the reorganization evidence is absent --- not to
+treat silence as proof.
+
+\proposednote{The six renunciation criteria above are this paper's construction. What is settled
+is their \emph{shape}: a third-party security audit plus a proven operating record across edge
+scenarios including chain reorganizations \srcintent{08-answers-round-2.md, round 12}. The
+quantities --- twelve months, \num{10000000}\flux{} of cumulative volume, zero defect-fixing upgrades
+--- are proposed so that the stated shape becomes checkable by a third party rather than asserted;
+they can be changed without changing the shape. One element is a design point rather than a number and
+should not be dropped when the numbers are revised: renunciation must be executed \emph{on chain}, by
+removing the admin role, so that it is verifiable by reading the contract rather than by trusting a
+statement about it.}
+
+At \qty{48}{\hour} the hypothesis (U) of \Cref{prop:worst-case} is discharged for any
+$T_{\mathrm{react}} < \qty{48}{\hour}$, and the value sits at the low end of the interval this
+specification gave, matching common practice for governance timelocks. Two consequences follow and
+neither is enforced by code, so both are stated as conditions rather than assumed.
+
+\emph{First, the timelock bounds the attack only if the upgrade queue is watched.} A malicious
+upgrade announced and unnoticed for \qty{48}{\hour} takes effect, the rate limit is deleted, and the
+loss reverts to being bounded only by the cap. Monitoring the queue is therefore a security control
+of the same standing as $T_{\mathrm{react}}$, not an operational nicety.
+
+\emph{Second, \qty{48}{\hour} is sized for the bound rather than for notice.} A timelock does two
+jobs: it bounds a compromise, and it gives holders time to exit before a rule change binds them. Two
+days is adequate for the first and thin for the second on a bridge carrying a nine-figure balance ---
+a holder who does not look over a weekend misses the window entirely. A longer delay on changes that
+affect holders, with \qty{48}{\hour} retained for security fixes, would serve both; the paper notes
+this once and does not press it.
+\end{remark}
+\end{remark}
+
+\paragraph{$T_{\mathrm{react}}$ is now the most important operational parameter in the bridge, and
+this is not obvious from the construction.} $\mathcal{L}$ is linear in $T_{\mathrm{react}}$ with
+slope $|\mathcal{C}|\,\varrho^\star / T_{\mathrm{win}}$, so over the launch set every hour of
+detection-and-response latency is worth $2 \times \num{10000000}\flux / 24 \approx
+\num{833333}\flux$, rising to approximately \num{1250000}\flux per hour once Solana is live
+\srcinferred. Three things change that slope and the design should be read as choosing among them:
+the number of live chains, the per-chain limit, and $T_{\mathrm{react}}$ itself. Several things
+that look as though they should do not. The cap does not: it is \SI{25}{\day} away. The quorum does
+not: it is compromised by hypothesis. The audit does not: \Cref{prop:worst-case} assumes the
+contract behaves as specified, and an audit is what makes that assumption true rather than what
+makes the loss smaller. Reserve custody does not, because the mint side never touches $\mathsf{R}$.
+What does compress $T_{\mathrm{react}}$ is monitoring cadence,
+alert routing, who is on call, whether a guardian key is reachable at 03:00 local time, and how long
+a human takes to believe an alarm --- none of which are contract parameters and all of which are the
+operational questions this bound turns into first-order security questions. The attestation link of
+\Cref{sec:bridging-attestation} exists to compress $T_{\mathrm{react}}$, and its fail-closed silence
+timeout $T_{\mathrm{silence}}$ is the mechanism that puts a ceiling on it without a human in the loop.
+\planned
+
+\begin{proposition}[Dominance over the incumbent, H0, with a number on one side]
+\label{prop:dominance}
+Under \Cref{tab:bridge-decided} and hypotheses (P) and (U) of \Cref{prop:worst-case}, the
+replacement's worst-case loss over a reaction window is $\mathcal{L}(T_{\mathrm{react}})$, which is
+\num{20000000}\flux over the launch set at $T_{\mathrm{react}} = \SI{24}{\hour}$ --- a quantity fixed
+by contract constants before any compromise occurs, and the same for every compromise class that can
+reach the mint path, since
+Algorithm~\ref{alg:mint} applies the bucket regardless of which signatures it saw. The other
+directions are bounded separately and also in advance: the release side by
+$\mathsf{R}_{\mathrm{hot}}$, and the guardian and relayer roles by nothing they can move. Every
+bound-consuming event is a public
+transaction that Algorithm~\ref{alg:verify} reads, so H0(ii) is satisfied with $T_{\mathrm{react}}$
+as the stated observability bound. The incumbent's corresponding worst case is the entire balance
+held under 32 single-signature hot keys across eleven chains at the moment of compromise
+\srccode{fusion/\allowbreak{}config/\allowbreak{}default.js}{342--482}: a quantity fixed by nobody, published nowhere, and
+detectable only by an operator reading its own records, since an unauthorised outgoing transfer from
+a hot wallet is indistinguishable on-chain from an authorised one. \planned
+\end{proposition}
+
+\begin{proof}[Proof sketch]
+The replacement half is \Cref{prop:worst-case} for the mint direction, the hot/cold custody split for
+the release direction, and \Cref{tab:bridge-roles} for the remaining roles, none of which can mint,
+transfer or freeze. The observability half follows because each bound-consuming event is a
+transaction on a public chain and Algorithm~\ref{alg:verify} reads exactly those transactions from
+public state, with no team-maintained list. The incumbent half is \Cref{sec:bridging-incumbent}:
+single-key in-process signing on all eleven chains, with every gate --- amount ceiling, blacklist,
+rate limit --- enforced in the same process that holds the keys
+\srccode{fusion/\allowbreak{}src/\allowbreak{}services/\allowbreak{}swapService.js}{150--157} \srccode{fusion/\allowbreak{}src/\allowbreak{}lib/\allowbreak{}server.js}{29,38}.
+\end{proof}
+
+\noindent\textbf{What the comparison is, stated exactly.} H0(ii) is met outright: a stated
+$T_{\mathrm{react}}$ (\SI{24}{\hour}, \Cref{tab:22-recommended}) against no detection bound at all. H0(i) is met in the form that matters --- a
+finite bound fixed in advance against an exposure bounded by nothing in the design --- and this is
+the substantive change from earlier drafts, which could state only the shape of the bound and not its
+value. It is \emph{not} a comparison of two measured numbers, because the incumbent's side has never
+been measured.
+\notestablished{the incumbent's current hot-wallet balances across the 32 keys are not in
+the evidence corpus. \Cref{prop:dominance} therefore compares a stated finite bound against an
+unbounded exposure. Should that balance ever be measured and found below
+$\mathcal{L}(T_{\mathrm{react}})$, H0(i) would need restating in per-window rather than absolute
+terms; the measurement is a prerequisite task, not a paper gap.}
+
+\subsection{The attestation link}
+\label{sec:bridging-attestation}
+
+\begin{definition}[Attestation]
+\label{def:attestation}
+An attestation is the tuple
+\begin{multline*}
+\mathsf{A} = \big(\hgt,\ \mathrm{hash}_{L1}(\hgt),\ \mathsf{R}_{\mathrm{hot}},\ \mathsf{R}_{\mathrm{cold}}, \\
+\{(c, h_c, \mathrm{hash}_c(h_c), M_c, \mathsf{cumMint}_c, \mathsf{cumMig}_c, \mathsf{cumBurn}_c, B_c)\}_{c \in \mathcal{C}}, \\
+V_{\mathrm{lock}},\ V_{\mathrm{rel}},\ \varsigma,\ \mathsf{flags}\big)
+\end{multline*}
+signed by attester $j$ as $\mathrm{Sign}_{sk_j}\!\big(H(\texttt{"FLXATT1"} \| \mathsf{A})\big)$.
+Every field is an objective chain fact at a stated height --- the roadmap's ``states they observed''
+category \srcroadmap{flux-roadmap-public.md:135--136} --- so a false attestation is provably false to
+anyone holding the relevant block. $\mathsf{flags}$ carries the signer's verdicts on the two policy
+invariants the L1 cannot enforce: that every \texttt{FLXR1} range is disjoint and below $B_c$, and
+that every release corresponds to a burn at depth $\ge D_c$. An attestation is \emph{valid} when
+$\ge k_{\mathrm{att}}$ distinct bonded attesters sign the same $\mathsf{A}$. \planned
+\end{definition}
+
+\paragraph{Where it lives, and the cost finding that decides it.} Attestations would be published
+off-chain on a public feed, with only the \emph{consequence} on-chain. Posting every attestation to
+Ethereum is not viable: at one attestation per L1 block, \num{2880} per day, and
+$k_{\mathrm{att}} = 9$ signatures each, the cost is approximately \num{346e6} gas per day ---
+between eight and twelve Ethereum blocks' worth of gas daily for one bridge's bookkeeping
+\srcinferred. At $k_{\mathrm{att}} = 5$ it is \num{276e6} and at $15$ it is \num{449e6}. The
+on-chain component is therefore a single guardian contract, \texttt{Attester\allowbreak{}Guardian}, one per
+chain, added to $\mathcal{G}$ alongside the four named guardians of \Cref{tab:bridge-decided} once
+the attestation network exists --- which is exactly the D4 transfer path, and the only mechanism in
+the design by which pause authority reaches a party outside the four: it stores the attester key set
+and $k_{\mathrm{att}}$, and
+exposes \texttt{pause\allowbreak{}On\allowbreak{}Attestation(A, sigs[])}, which pauses mint if and only if the signatures are
+valid and $\mathsf{A}$ asserts $\varsigma < 0$ or a false policy flag. It would additionally
+\emph{fail closed on silence}: if no valid attestation is submitted within $T_{\mathrm{silence}}$,
+the guardian pauses mint for $\Delta_g$. That direction is deliberate. The deployed \SAS watchdog
+fails \emph{open} on hash-service outage --- if both hash endpoints are unreachable it treats the
+node as secure and does nothing \srccode{fluxsas/\allowbreak{}src/\allowbreak{}watchdog.h}{566--596} --- and under the team
+constraint an attester outage should stop issuance rather than continue it. Burn is unaffected in
+either case, so the degraded bridge is exit-only, which is the correct degradation.
+\settlednote{$T_{\mathrm{att}} = \num{120}$ blocks, $T_{\mathrm{silence}} = \SI{6}{\hour}$, fail-closed adopted (\Cref{tab:22-recommended}). $T_{\mathrm{att}}$ (natural domain: one attestation per L1 block, \num{2880} per day, down
+to one per hour), $T_{\mathrm{silence}}$, and whether fail-closed is adopted. Trade-off: a shorter
+cadence and a shorter silence timeout detect faster and make an availability failure of the feed
+into a liveness failure of the bridge.}
+\settlednote{The independent mirror is mandatory (\Cref{tab:22-recommended}). The feed itself and whether a Flux-independent mirror is mandatory. IPFS is the precedent
+the project already uses for parameter distribution
+\srccode{fluxd/\allowbreak{}zcutil/\allowbreak{}fetch-params.sh}{17}. Trade-off: a single Flux-operated feed can withhold
+but not forge; an independent mirror removes the withholding vector at operational cost.}
+
+\paragraph{Detecting a false attestation, and what the bond is at risk for.} A false attestation is
+one whose fields do not match the canonical chains at the stated heights, or whose flags assert a
+policy invariant the ledgers contradict. Detection is by any party running Algorithm~\ref{alg:verify}
+--- the same computation, no privileged access --- and the proof of falsity is the relevant block
+header plus a Merkle inclusion or storage proof for the contradicting value. Equivocation, meaning
+two different $\mathsf{A}$ for the same heights, is proven by the two signatures alone and needs no
+chain data. The bond $\beta_{\mathrm{att}}$ would be at risk for signing a false $\mathsf{A}$, for
+equivocation, and (minor, to keep the set honest) for sustained non-participation. The economic
+condition that makes collusion unprofitable is
+\begin{equation}
+\label{eq:bond-condition}
+k_{\mathrm{att}} \cdot \beta_{\mathrm{att}} \;>\; \varrho_c \cdot
+\left\lceil \frac{T_{\mathrm{react}}}{T_{\mathrm{win}}} \right\rceil
+\qquad \text{for every } c \in \mathcal{C},
+\end{equation}
+i.e.\ the forfeited bonds must exceed what a false ``all is well'' can cover for, which is exactly
+the bound of \Cref{prop:bounded-mint}.
+
+\medskip
+\noindent\textbf{The decided rate limit makes \eqref{eq:bond-condition} very expensive, and this is
+worth stating rather than discovering later.} The condition is per chain, so the per-chain limit
+decision leaves it unchanged in form and in magnitude: substituting
+$\varrho_c = \varrho^\star = \num{10000000}\flux$ and
+$T_{\mathrm{react}} = T_{\mathrm{win}} = \SI{24}{\hour}$ gives
+$k_{\mathrm{att}} \cdot \beta_{\mathrm{att}} > \num{10000000}\flux$. Using the deployed Stratus tier
+collateral of \num{40000}\flux purely as a yardstick and not as a recommendation, that is
+$k_{\mathrm{att}} > 250$ bonded attesters --- against $k_{\mathrm{att}} = 9$, which would put only
+\num{360000}\flux at risk, short of the condition by a factor of about 28 \srcinferred. Three
+responses exist and the design does not yet choose between them: raise $\beta_{\mathrm{att}}$, which
+concentrates the attester set and is the failure the network exists to avoid; lower $\varrho^\star$,
+which lowers the bound of \Cref{prop:worst-case} and the honest throughput ceiling together; or
+accept that
+the attester layer is a \emph{detector} that compresses $T_{\mathrm{react}}$ rather than a
+\emph{deterrent} that makes collusion unprofitable, and say so. The third is the honest description
+of any attester set small enough to operate, and it is consistent with the fail-closed pause being
+the attesters' only on-chain power. \planned
+\notestablished{$(n_{\mathrm{att}}, k_{\mathrm{att}})$ --- the size and threshold of the attester
+set. Round 23's ruling that nothing is ever slashed changes the character of this gap rather than
+merely deferring it. $\beta_{\mathrm{att}}$ is \emph{void}: a bond that cannot be forfeited is a
+deposit, so there is no bond to size, and \eqref{eq:bond-condition} is withdrawn rather than left
+unparameterised. What remains is an ordinary quorum choice over an accountability-based attester set
+--- how many named attesters, and how many must agree --- undetermined because nobody has picked the
+numbers, not because the construction is unsolved. That is a materially smaller gap than this marker
+previously recorded, and it closes by decision whenever the author makes one.}
+
+\noindent The cap, the rate limit and the window are no longer open:
+$\bcap{c} = \num{250000000}\flux$, $\varrho_c = \num{10000000}\flux$ per chain and
+$T_{\mathrm{win}} = \SI{24}{\hour}$ (\Cref{tab:bridge-decided}). Two constraints that the open form of
+those parameters carried should be checked against the decided values rather than dropped. The first,
+$\bcap{c} \ge \Lambda_c$, holds with room: the measured legacy liability on the largest chain is
+\num{156217342.78}\flux on Ethereum \srcmeasured{scripts/\allowbreak{}13-issuer-balances.sh}{2026-09-03}, well
+below \num{250000000}\flux. The second, $\varrho_c \ll \bcap{c}$, holds at exactly a factor of 25 and
+is what makes \Cref{prop:worst-case}'s cap term inactive.
+
+\begin{remark}[The \num{560000000}\flux{} cap is global, and no contract can enforce it]
+\label{rem:global-cap}
+This paper read \num{560000000}\flux{} as a per-chain contract constant $\bcap{c}$, because that is
+the only reading a per-chain construction can enforce by itself. That reading is wrong: the figure is
+a \textbf{global cap across all chains} \srcintent{08-answers-round-2.md, round 13} (\planned).
+The correction matters, because it relocates the enforcement rather than the number.
+
+\textbf{No contract can enforce a global cap.} A contract on chain $c$ can read its own
+\texttt{totalSupply} and nothing else; it cannot observe supply on the other chains or on the L1, so
+it cannot evaluate the global constraint it would need to enforce. Setting $\bcap{c} =
+\num{560000000}$ on every chain yields an aggregate contract-enforced ceiling of $|\mathcal{C}|
+\times \num{560000000}\flux$, which for the surviving pair is \num{1120000000}\flux{} --- twice
+the intended global cap. As a backstop the constant is therefore \emph{inert}: it is set far above
+any level at which it could bind.
+
+\textbf{What actually enforces the global cap is the reserve invariant.}
+\Cref{thm:reserve-dominance} establishes $\mathsf{R} \ge \sum_c M_c$: minted supply on the parallel
+chains is dominated by value locked on the L1, so the global total is bounded by L1 supply and cannot
+exceed it however many chains exist. This is the correct and sufficient mechanism, it is already
+specified, and it is exactly the mint-and-burn discipline the team describes --- ``if we mint on some
+chain, another chain is burning it or locking somewhere''
+\srcintent{08-answers-round-2.md, round 8}. The global cap is a property of the reserve, not of the
+contracts. That holds under honest-minority operation, assumption~(ii) of the theorem; under the
+quorum compromise \Cref{prop:worst-case} models, the only contract-enforced aggregate is
+$\sum_c \bcap{c}$ --- \num{500000000}\flux{} at launch, \num{750000000}\flux{} with Solana --- and
+$\bcap{c}$ is not lowered for that, because the guardian's cancel over queued upgrades
+(\Cref{rem:upgrade-voids}) removes the path by which the aggregate was reachable
+\srcintent{08-answers-round-2.md, round 18}.
+
+\textbf{Recommendation: set $\bcap{c}$ far lower, so it is a real backstop rather than a decoration.}
+A per-chain constant is genuinely useful as defence-in-depth --- it bounds the damage from a mint-path
+bug or a compromised quorum on one chain, and it does so without needing cross-chain visibility. But
+it only does that work if it can bind. The largest measured per-chain liability is
+\num{156217342.78}\flux{} on Ethereum (\Cref{tab:issuer-liability}), so a constant of
+\num{250000000}\flux{} leaves roughly \SI{60}{\percent} headroom over the largest realistic
+requirement while capping single-chain damage at under half the global supply. That is this paper's
+recommendation; \num{560000000} on each chain is not a cap, it is the absence of one.
+\textbf{Settled at \num{250000000}\flux{}} \srcintent{08-answers-round-2.md, round 14}
+(\planned): the per-chain constant binds at a level that bounds single-chain damage below half the
+global supply, while leaving roughly \SI{60}{\percent} headroom over the largest measured per-chain
+liability.
+\end{remark}
+
+\paragraph{The dependency, stated honestly.} An attestation network built on today's primitives
+would inherit a defect that voids its central security claim, and \Cref{sec:attested-execution}
+states the same finding from the other side. The \fluxsas attestation signing seed for every purpose
+is derived by HKDF over salt and domain values compiled identically into every binary; none of the
+inputs depends on the TPM, on Secure Boot state, or on any per-machine value
+\srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{411--481,466--469,503--506}. A signature from that key therefore
+demonstrates that the signer holds a value shipped in every copy of the software. It does not
+demonstrate that a particular machine observed a particular chain state. \textbf{A key that everyone
+holds cannot be slashed, and a signature it produces cannot be attributed to a bond.} The
+node-identity key does mix machine-derived values, but the key protecting its random component is
+itself a baked-in constant \srccode{fluxsas/\allowbreak{}src/\allowbreak{}disk\_encryption.h}{200--228}. What
+\Cref{sec:attested-execution} calls Requirement~0 --- per-node attester keys, generated on the node,
+whose public half is committed on the L1 in the bonded-tier registration transaction so that a
+signature is attributable to a specific bond outpoint --- must be met before any of
+\Cref{sec:bridging-attestation} is more than a specification. The \texttt{purpose=\allowbreak{}mesh} voucher
+already present in \fluxsas with no consumer \srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{438--445} is the
+natural place for such a key to land once it is per-node. Note also that the same finding applies to
+the benchmark signing path, so a bonded-tier registration must not reuse it.
+
+\begin{openproblem}[Slashing on the \Flux L1]
+\label{op:slashing}
+A bond held as a plain UTXO cannot be taken from its owner by consensus, and \Flux's inherited
+Bitcoin script cannot express a slashing condition. The two options are (a) a consensus change
+introducing a bonded-tier transaction type with a slashing rule verified by \fluxd, or (b) bonds
+escrowed in a $k$-of-$n$ that adjudicates --- which reintroduces exactly the trusted quorum the
+network exists to replace. This is the load-bearing hole in the attestation link. Until it is
+filled, the ``bonded'' tier is a \emph{registered} tier: attributable but not slashable, and its
+attestations should be weighted in $\mathcal{G}$ accordingly.
+\decided{there is no slashing, here or anywhere in \Flux{}: no mechanism destroys or forfeits a
+holder's \flux{} \srcintent{08-answers-round-2.md, round 23}. That closes the construction question
+by removing the mechanism rather than by supplying one, and the consequence has to be carried rather
+than absorbed. \textbf{An attester bond that cannot be forfeited is a deposit, not a stake}, so
+\eqref{eq:bond-condition} cannot rest on it and the cryptoeconomic form of the security argument is
+unavailable. What remains is accountability: a named, non-anonymous attester set whose members can be
+excluded from future participation and who answer for their attestations personally, in the same
+shape as the key custody of \Cref{sec:model}. That is a materially weaker claim than a bonded one,
+and this paper does not dress it as equivalent --- an attester who lies loses future income and
+standing, not principal, and what bounds a dishonest quorum is the rate limit and the reserve
+invariant of \Cref{con:bridge}, not a forfeiture.}
+\end{openproblem}
+
+\subsection{Why not the alternatives}
+\label{sec:bridging-alternatives}
+
+\paragraph{Atomic swaps --- the question is closed, not open.} An HTLC atomic swap exchanges an
+asset one party holds on chain A for an asset a counterparty holds on chain B, atomically, with no
+custodian \citep{herlihy2018atomic}. \Flux's inherited script carries the primitives. But an atomic
+swap cannot do what a bridge does: \textbf{it cannot issue FLUX on Ethereum}, only exchange FLUX for
+something that already exists there. Everything else is secondary and still disqualifying: it
+requires a counterparty holding the other asset, a discovery layer to find them, both parties online
+for the duration, and it hands the initiator a free option to abort if the price moves during the
+timelock. The correct conclusion is not that atomic swaps are a rejected bridge design but that they
+address a different problem --- the \emph{exchange} of FLUX against ETH, USDC or another asset
+against a market maker, which is \FusionX's product (\Cref{sec:bridging-incumbent}), not the
+bridge's. Atomic swaps are a settled construction in the literature \citep{herlihy2018atomic}; the boundary drawn here is a product decision, not a doubt about the primitive.
+
+\paragraph{Light-client verification --- not constructible for \Flux, and here is exactly why.} The
+trust-minimizing answer would be an Ethereum contract that verifies \Flux headers directly, as IBC
+does between Tendermint chains \citep{cosmosibc} and as the interoperability literature identifies as
+the strongest available class \citep{zamyatin2021sok}. It is not constructible from the current
+\PoN header, for three compounding reasons:
+
+\begin{enumerate}
+\item The \PoN block header carries \texttt{nodes\allowbreak{}Collateral} and \texttt{vchBlockSig} but
+      \textbf{no commitment to the confirmed node set}
+      \srccode{fluxd/\allowbreak{}src/\allowbreak{}primitives/\allowbreak{}block.h}{44--45,64--96}, so a verifier cannot check that a
+      block's signer was eligible without the full \FluxNode registry --- which is to say, without
+      being a full node.
+\item Chainwork is a fixed $2^{40}$ per block regardless of difficulty target
+      \srccode{fluxd/\allowbreak{}src/\allowbreak{}pow.cpp}{284--290}, so fork choice degenerates to a block-count race and
+      there is no cumulative-work heuristic by which a light client could prefer one chain over
+      another.
+\item The 2-of-4 emergency-block path can produce a valid block outside the normal rules, with no
+      time or stall-detection gating \srccode{fluxd/\allowbreak{}src/\allowbreak{}emergencyblock.cpp}{183--191}, so no
+      light-client rule derived from \PoN eligibility is sound; a perfect light client would still
+      be trusting those four keys.
+\end{enumerate}
+
+\noindent A future header commitment to the deterministic node list's Merkle root would reopen the
+question --- after which verifying \num{2880} headers a day on Ethereum becomes a cost question, one
+\texttt{ecrecover} plus a $\lceil \log_2 6489 \rceil = 13$-hash Merkle proof per header
+\srcinferred --- and \Cref{sec:chain-evolution} should treat it as a candidate for the same network
+upgrade that carries collateral maturity. \textbf{This is the paper's clearest instance of vertical
+integration cutting both ways.} Controlling the L1 is what lets \Flux put an entitlement memo in an
+\texttt{OP\_RETURN}, freeze a halving by hand, and change the reorg limit to launch \PoN; it is also
+what produced a header format that forecloses the most trust-minimizing bridge architecture
+available to other chains. Owning the stack does not automatically mean the stack was designed for
+what you later want from it. The same tension runs through \Cref{sec:fluxos}. The reverse direction
+--- \fluxd verifying Ethereum --- would need an EVM and BLS light client inside the daemon, a
+consensus change of a different order.
+
+\paragraph{Threshold-signature and MPC bridges.} One aggregate key, signed by a threshold of parties
+holding shares. \emph{Trust assumption:} fewer than the threshold of share-holders collude, and the
+share distribution is what it is claimed to be. \emph{Failure mode:} on-chain the contract sees a
+single signer, so who participated is invisible and the claimed distribution is unfalsifiable from
+outside; if the shares sit on one organisation's servers the threshold is cosmetic, which is
+precisely the Multichain outcome (\Cref{sec:bridging-incidents}). \emph{Why not chosen:}
+attributability is a hard requirement here (H3), and the construction additionally declines to rely
+on the threshold alone --- the contract bounds the damage whatever the signing scheme. A TSS could
+still be used \emph{inside} one signer organisation to protect its own key.
+
+\paragraph{External validator sets.} A named set signs mint messages; the contract mints on
+$k$ signatures. \emph{Trust assumption:} fewer than $k$ collude or are compromised.
+\emph{Failure mode:} the contract does whatever $k$ signatures say, without bound --- Wormhole's 19
+guardians at 13 and Ronin's 9 validators at 5 both failed this way, for different reasons.
+\emph{Why not chosen, and the honest statement:} at the signing layer this construction \emph{is} a
+validator-set bridge with a smaller set than either --- 4 signers at a threshold of 3, against
+Wormhole's 19 at 13 and Ronin's 9 at 5 --- and pretending otherwise would be dishonest. What differs
+is not the size or the independence of the set but that the cap, the per-chain rate limit, the
+1-of-4 guardian pause and the admin timelock are intended to make $k$-collusion bounded and slow
+rather than total and instant: \num{20000000}\flux per \SI{24}{\hour} of reaction time over the
+launch set (\Cref{prop:worst-case}) instead of the pooled value. That sentence is true only under
+the timelock condition of \Cref{rem:upgrade-voids}; an upgradable contract without one puts this
+construction back in the same row as the systems it is being distinguished from, which is why that
+item was the section's load-bearing open one until \Cref{rem:timelock-decided}. The
+collateral-backed alternative in the literature --- overcollateralized vaults with automatic
+liquidation \citep{zamyatin2019xclaim} --- removes the trusted set at the cost of locking capital
+worth more than the bridged value on the destination chain, and of a price oracle for the
+collateral-to-asset ratio. That trade is available and was not taken; the reason is that it
+substitutes an oracle dependency and a capital cost for a signer dependency, and does not remove the
+need for the L1-side release quorum, which is where \Cref{sec:bridging-open} shows the residual
+trust actually sits.
+
+\paragraph{Canonical rollup bridges and IBC, for completeness.} Optimism's and Arbitrum's canonical
+bridges derive security from the L1 verifying the L2 through fraud or validity proofs with a
+challenge window; neither \Flux nor Ethereum can verify the other, so this is not available.
+Their \emph{operational} pattern --- guardian pause, security-council timelock, no silent upgrades
+--- is adopted wholesale. IBC requires cheap, fast-final header verification on both ends
+\citep{cosmosibc}; \Flux has neither cheap header verification nor a node-set commitment, so it is
+not applicable without the header change above.
+
+\paragraph{Issuer-attested burn-and-mint, which is the model chosen.} Circle's CCTP signs burn
+messages with an issuer-operated attestation service; destination contracts mint only against
+attested, nonce-bound messages, and no pooled liquidity exists to steal \citep{cctp}. Its trust
+assumption is the issuer's attester key --- which, for USDC, belongs to the same party that can mint
+USDC anyway, so the bridge adds no new trust. \Flux is the closest analogue and this is the chosen
+model. Two differences follow from the fact that \Flux's attesters are \emph{not} already trusted for
+the whole supply: an explicit $k$-of-$n$ with on-chain attribution rather than a single issuer
+signature, and contract-level cap and rate limit, which CCTP does not need.
+
+\subsection{The launch trust assumption: one quorum, bounded by a rate limit}
+\label{sec:bridging-assumption}
+
+\begin{assumption}[Single attributable quorum, bounded by contract]
+\label{as:admin}
+At launch the MINT, RELEASE and ADMIN authorities of \Cref{tab:bridge-roles} are held by \emph{one}
+set: $n_M = n_R = n_A = 4$ and $k_M = k_R = k_A = 3$, the four keys held by the four named
+co-founders --- Tadeas Kmenta, Daniel Keller, Jeremy Anderson, Valter Silva
+\srcintent{08-answers-round-2.md, round 5} --- with $\mathcal{G}$ the same four individuals but at a
+threshold of \textbf{one} (\Cref{tab:bridge-decided}). The assumption is that fewer than three of
+those four keys are compromised or collude. It is one assumption, not four independent ones. What
+supports it:
+(i) each key is per-signer, so every authorisation is attributable on-chain to the key that produced
+it, and the signer set is published;
+(ii) each key is generated and held on dedicated signing hardware and never on a host that runs a
+relayer, an RPC, or the incumbent service --- co-locating the key with the process that decides is
+the incumbent's defining mistake (\Cref{sec:bridging-incumbent});
+(iii) $k/n = 3/4 \ge \lceil 2n/3 \rceil / n$, so the threshold ratio is at or above the shape the
+requirements recommended.
+What is \emph{not} satisfied, and was written into the earlier form of this assumption precisely
+because it matters: signers are named individuals rather than independent named organisations; one
+organisation's founders hold every key in every set, so no clause bounding a single organisation's
+share of a quorum can hold; the four memberships coincide exactly; and jurisdictional spread is
+whatever those four individuals happen to have rather than a design parameter.
+If the assumption fails, the contract still bounds unbacked issuance to
+$\mathcal{L}(T_{\mathrm{react}})$ (\Cref{prop:worst-case}) --- the pause remains reachable at 1-of-4
+(\Cref{cor:pause}), and the bound additionally requires the upgrade timelock of
+\Cref{rem:upgrade-voids} --- and the L1 side to $\mathsf{R}_{\mathrm{hot}}$. \planned
+\end{assumption}
+
+\begin{remark}[The separation of powers is not available at launch, and saying otherwise would be false]
+\label{rem:sets-coincide}
+Three compromised keys can, in one sequence and with no second party: authorise mints up to the rate
+limit; co-sign L1 spends of $\mathsf{R}_{\mathrm{hot}}$; queue an admin change raising $\bcap{c}$ and
+$\varrho_c$ and replacing $Q_M$ with keys of their own; and \emph{upgrade the contract}, which
+reaches every rule in \Cref{tab:bridge-roles} at once including the guardian rule
+(\Cref{rem:upgrade-voids}). What they cannot do is throw the pause on the honest guardian's behalf,
+prevent that guardian from throwing it, or prevent that guardian from cancelling what they queue,
+because the pause and the cancel are 1-of-4 (\Cref{cor:pause}) --- and
+that single exception is what the whole quantitative claim of this section rests on. The $\Delta_A$
+notice period survives for parameter changes --- an admin change is still visible for $\Delta_A$
+before it executes --- but the exit it is supposed to protect runs through a release quorum
+consisting of the same three keys, so a holder who burns during the notice period has a public claim
+and the same adversary decides whether it is paid (\Cref{op:liveness}). The total exposure of a
+3-key compromise is therefore $\mathcal{L}(T_{\mathrm{react}}) + \mathsf{R}_{\mathrm{hot}}$, with
+the cold reserve as the last line and $\sum_c \bcap{c}$ as the ceiling if the upgrade path is not
+timelocked or a queued upgrade is not cancelled within $\Delta_A$. This is stated as a property of
+the launch configuration, not as a hypothetical: the
+earlier draft of this remark described the collapse as the reason separation was a requirement, and
+the configuration that has been decided is the collapsed one everywhere except the pause.
+\end{remark}
+
+\paragraph{Why this is defensible, on the team's own constraint --- and what would make it not.} The
+governing constraint of this section is that \emph{a decentralized design that is exploitable is
+worse than the custodial incumbent} \srcintent{03-parallel-assets.md}. Taken seriously, it settles
+the launch question. A more distributed signer set would have to be assembled from parties who can be
+held to their signatures; the mechanism for holding them --- a bond that can be forfeited --- does
+not exist on this chain (\Cref{op:slashing}), and the attestation keys that would identify them are
+today fleet-shared rather than per-node (\Cref{sec:bridging-attestation}). A fifteen-key set
+recruited without either property is not obviously more decentralized than four named founders: it is
+the same trust assumption spread across more people who are harder to identify and cannot be
+penalised, which is the shape the Ronin and Multichain rows describe
+(\Cref{tab:bridge-incidents}). Against that, the decided
+configuration takes the trust concentration as given and spends its design effort on making the
+consequence bounded and public: the contract refuses beyond $\varrho_c$ and $\bcap{c}$ whatever the
+three keys say, and anyone can run Algorithm~\ref{alg:verify} without asking the signers for
+anything. \textbf{The accurate description is a custodial bridge with contract-enforced bounds and
+public verification, moving toward autonomy} --- not a decentralized bridge, and not a separation of
+powers. The intent on record is explicit about the direction and about the fallback: full autonomy
+afterwards, and ``if the autonomous design is not ready in time, ship 3-of-4 and take a second fork
+for the autonomous bridge'' \srcintent{08-answers-round-2.md}. Two things would make the position
+indefensible rather than defensible, and both are checkable. \textbf{If the upgrade path ships
+without a timelock satisfying $\Delta_A > T_{\mathrm{react}}$, the bound is the cap rather than
+\num{20000000}\flux, and the argument above does not survive the substitution}
+(\Cref{rem:upgrade-voids}) --- the contract that ``refuses beyond $\varrho_c$ and $\bcap{c}$
+whatever the three keys say'' is then a contract those same three keys can replace before it
+refuses anything. And if the second fork does not follow, what is described here as a launch
+configuration becomes the design, at which point the honest comparison is no longer against the
+incumbent but against a competently run custodian. \planned
+
+\paragraph{The path off the single quorum, specified as requirements because the construction is
+open.} The intent is autonomy, and no design for it exists in the evidence corpus. What replaces the
+3-of-4 must satisfy, at minimum: \textbf{(R1)} authorisation attributable to a set whose membership
+is derivable from public chain state rather than from a published list, so that an observer can
+recompute who was entitled to sign at a height; \textbf{(R2)} a penalty that can actually be applied
+to a misbehaving member, which on this L1 means \Cref{op:slashing} is answered first; \textbf{(R3)}
+per-member keys generated on the member's own machine, which means \Cref{sec:attested-execution}'s
+Requirement~0 is met first; \textbf{(R4)} liveness under member churn, since a set derived from the
+node registry changes between blocks while an L1 P2SH redeem script does not; and \textbf{(R5)} a
+migration path from the 3-of-4 that does not require holders to act, which under D3 means the ADMIN
+role rotating $Q_M$ and $Q_R$ rather than a contract replacement. The interfaces are already fixed by
+\Cref{con:bridge} and do not change: the MintAuth digest, the $k$-of-$n$ check inside
+Algorithm~\ref{alg:mint}, and the P2SH release path. \textbf{The construction that meets R1--R5 is
+open}, and R2 and R4 are the binding pair on this chain specifically: R2 requires a consensus change
+(\Cref{op:slashing}), and R4 is in direct tension with a release path whose signer set is frozen into
+a P2SH redeem script at funding time and capped at 15 keys.
+\proposednote{The autonomous replacement for the 3-of-4 quorum --- requirements R1--R5 above,
+interfaces unchanged --- is not constructed here, and the reason is now specific rather than
+general: it is gated on the same slashing problem that leaves $\beta_{\mathrm{att}}$ undeterminable,
+because any replacement that removes the quorum must put something forfeitable in its place. What
+\emph{is} settled is the intent and the exit condition: the quorum is an explicitly temporary
+bring-up mechanism, and immutability is the stated destination, reachable through the criteria above
+\srcintent{08-answers-round-2.md, rounds 11--12}.}
+
+\subsection{Migration and consolidation}
+\label{sec:bridging-migration}
+
+\Cref{sec:parallel-assets} inventories ten chains carrying FLUX today. All ten legacy contracts
+would be retired, including the legacy Ethereum, BSC and Solana tokens, because the survivors are
+\emph{relaunched} rather than kept \srcintent{03-parallel-assets.md}; three new deployments would
+follow, ETH and BSC at launch and Solana later. \planned
+
+\begin{remark}[Two migration paths, and ``surviving'' is not the same set as ``carried'']
+\label{rem:two-paths}
+The distinction matters more than the phrasing suggests, and conflating the two sets is the easiest
+mistake a reader could make here. \textbf{Only Ethereum and BSC are snapshot-and-distributed}: their
+balances are captured at $\hsnap$ and reissued $1{:}1$ into the new contracts, coordinated
+with exchange partners and ecosystem integrators, and their holders take no action at all
+\srcintent{evidence/design/08-answers-round-2.md}. \textbf{Every other chain redeems through the
+incumbent bridge} to the main chain during the six-month window, with unclaimed balances passing to
+the Foundation at close.
+
+\textbf{Solana sits in both descriptions and belongs to the second.} It is a surviving chain in the
+sense that a new Solana deployment follows the launch pair --- but its \emph{legacy} holders are not
+carried across. They redeem to the main chain like the holders of any retired chain, and re-enter the
+new Solana deployment later if they choose. So the snapshot-carried set is exactly
+$\{\mathrm{ETH}, \mathrm{BSC}\}$, and the redeeming set is the other eight chains, Solana included.
+
+This has a measurement consequence \Cref{sec:bridging-migration} states below rather than leaves
+implicit. An earlier draft of this remark cautioned that Solana might prove the largest single
+component of the redeeming set, on the reasoning that its legacy \texttt{totalSupply} measures
+\num{59999990.375} \srcmeasured{api.mainnet-beta.solana.com \texttt{getTokenSupply}}{2026-09-03}.
+That caution was wrong, and measuring it is what showed so: \SI{99.4}{\percent} of that supply is
+issuer-held --- \num{54000000} in the \texttt{LOCKED} account alone --- leaving
+\num{373067.20}\flux{} outstanding, the \emph{smallest} component of the redeeming set rather than
+the largest \srcmeasured{scripts/\allowbreak{}15-nonevm-liability.sh}{2026-09-04}. Supply is not liability, and
+the gap between them on Solana is a factor of \num{161}. The general point survives the specific
+error: an unmeasured chain contributes an unknown, not a small, quantity, and the direction of the
+surprise is not predictable in advance --- which is why the redesign requires
+$\Lambda_c$ measured rather than assumed.
+\end{remark}
+
+\paragraph{The measurement prerequisite: partly done.} Before any migration mint, $\Lambda_c$ must be
+measured for each of the ten legacy assets at a published snapshot height $\hsnap$ by
+transfer-log replay, and the available backing $R_0$ (\Cref{def:reserve}) must be established and
+shown to satisfy $R_0 \ge \Lambda$. $\Lambda_c$ is now measured for all ten legacy assets
+(\Cref{tab:issuer-liability}), totalling \num{223027781.21}\flux outstanding \shipped
+\srcmeasured{scripts/\allowbreak{}13-issuer-balances.sh}{2026-09-03};
+\srcmeasured{scripts/\allowbreak{}15-nonevm-liability.sh, scripts/\allowbreak{}16-remaining-liability.sh}{2026-09-04}. The
+distribution matters more than the total: \num{216800880.41}\flux --- \SI{97.21}{\percent} --- is on
+the two surviving chains and is carried by snapshot, and the eight retiring chains that require
+holder action carry \num{6226900.80}\flux between them --- \SI{2.79}{\percent} of the total.
+Kadena required a different operand: its Pact module exposes no total-supply accessor, so supply was
+recovered by summing the \texttt{ledger} table across all twenty Chainweb chains
+\srcmeasured{scripts/\allowbreak{}19-kadena-ledger.js}{2026-09-04}. What remains needed before a migration mint is
+confirmation that reserves cover \num{223027781.21}\flux. H8 forbids opening migration at 1:1 on any
+chain until both the measurement and its coverage confirmation are in hand for that chain.
+\notestablished{the composition and balance of $R_0$ against the now fully-measured
+\num{223027781.21}\flux of legacy liability; and per-chain holder counts are not established anywhere in the evidence
+corpus. This is a prerequisite task blocking \Cref{sec:bridging-migration} and
+\Cref{sec:parallel-assets}, not a gap the paper can close by argument. If the measurement shows a
+shortfall, the migration cannot open at 1:1 until it is covered, and the paper must say so.}
+
+\paragraph{Two migration mechanisms, not one, and the difference decides who is exposed.} The
+decided plan uses \emph{different} mechanisms for the surviving and the retiring chains
+\srcintent{08-answers-round-2.md, round 7}, and conflating them is what produced the
+two-orders-of-magnitude error in earlier drafts of this subsection and of
+\Cref{sec:parallel-assets}. \textbf{Surviving chains are carried by snapshot; retiring chains are
+redeemed by the holder.} The first requires no holder action and therefore no holder is at risk of
+the forfeiture term; the second requires an act within a six-month window and therefore every
+non-acting holder is. \planned
+
+\smallskip
+\noindent\emph{Snapshot-and-carry (ETH, BSC --- surviving).} Because the surviving contracts are
+\emph{relaunched} rather than kept (\Cref{sec:parallel-assets}), holders of the legacy token are
+moved to the new contract by the issuer rather than by themselves. The holder set is reconstructed
+off-chain at a published height $\hsnap$ by \texttt{Transfer}-log replay --- the same
+computation the team's own crawler already performs on four of the five EVM chains
+\srccode{holder-snapshot/\allowbreak{}eth.js}{63--88} --- and written into the new contract by
+Algorithm~\ref{alg:carry}, which consumes the same $\Lambda_c$ migration allowance that
+\texttt{mintMigrated} does, so bracket~(1) of \Cref{thm:reserve-dominance} and the conservation
+argument are unchanged. What changes is only who acts. The exercise is coordinated in advance with
+exchange partners and ecosystem integrators \srcintent{08-answers-round-2.md, round 7}, which is not
+a courtesy: a custodian's users hold no address of their own on the legacy contract, so a credit to
+the custodian's address is the only carry available for them and the custodian's internal ledger is
+what makes it reach a user.
+
+\begin{algorithm}[H]
+\caption{Snapshot carry onto the relaunched contract for a surviving chain $c$. \planned}
+\label{alg:carry}
+\KwIn{The published snapshot height $\hsnap$; the published issuer-held address set
+$\mathcal{I}_c \subseteq \mathcal{A}_c$, whose balances are excluded from $\Lambda_c$
+(\Cref{tab:issuer-liability}) \srcintent{08-answers-round-2.md, round 18}; the balance map
+$\mathsf{bal}: \mathcal{A}_c \to \mathbb{Z}_{>0}$ reconstructed by \texttt{Transfer}-log replay of
+the legacy contract at $\hsnap$, over the address set $\mathcal{A}_c$; the migration
+allowance $\Lambda_c$; the new contract with $M_c = 0$, public mint paused.}
+\KwOut{Each $a \in \mathcal{A}_c \setminus \mathcal{I}_c$ credited exactly $\mathsf{bal}(a)$, then
+$\mathsf{snapshotComplete}_c \leftarrow \mathsf{true}$.}
+\KwBrInv{$\mathsf{cumMig}_c = \sum_{a \,\mathrm{credited}} \mathsf{bal}(a) \le \Lambda_c$ at every
+point, and no $a$ is credited twice --- enforced by a per-address
+$\mathsf{carried}_c \subseteq \mathcal{A}_c$ set in contract storage, not by the caller's
+bookkeeping. Transfers and public mint stay disabled until
+$\mathsf{snapshotComplete}_c$, so no partially-carried supply is ever tradeable.}
+\KwBrFail{A batch reverts atomically and is resubmitted; a batch naming an already-carried address
+reverts rather than double-crediting. If the replay is wrong, the error is public and diffable
+against the legacy contract at $\hsnap$ by anyone, which is the only reason this path is
+acceptable at all --- it is an issuer-executed mint whose correctness is checkable by third
+parties.}
+\BlankLine
+publish $\hsnap$, $\mathcal{I}_c$, the reconstructed $\mathsf{bal}$ and its Merkle root before executing\;
+\ForEach{batch $\mathcal{K} \subseteq \mathcal{A}_c \setminus (\mathsf{carried}_c \cup \mathcal{I}_c)$}{
+  \lIf{$\mathsf{cumMig}_c + \sum_{a \in \mathcal{K}} \mathsf{bal}(a) > \Lambda_c$}{\Return revert (allowance)}
+  credit each $a \in \mathcal{K}$; $\mathsf{carried}_c \mathrel{\cup}= \mathcal{K}$;
+  $\mathsf{cumMig}_c \mathrel{+}= \sum_{a \in \mathcal{K}} \mathsf{bal}(a)$\;
+}
+\lIf{$\mathsf{carried}_c \ne \mathcal{A}_c \setminus \mathcal{I}_c$}{\Return abort (incomplete carry; do not enable transfers)}
+$\mathsf{snapshotComplete}_c \leftarrow \mathsf{true}$; enable transfers and public mint\;
+\end{algorithm}
+
+\begin{remark}[The snapshot carry --- two elements settled, one specified here]
+\label{rem:snapshot-settled}
+\textbf{(i) Contract-held balances: resolve through to the beneficial holder.} A legacy balance held
+by an AMM pair, a lending market or a third-party bridge cannot be carried by crediting the
+contract's address --- the new token is a different address and the position does not follow it. The
+settled treatment is to read the position and credit the actual holder: ``from LP, staking we can see
+from the LP positions who is the actual holder and that we will distribute to the actual holder like
+we did in the past'' \srcintent{08-answers-round-2.md, round 9} (\planned). This is a stronger
+commitment than any of the three options previously listed, and the team reports precedent for
+having done it before. Two obligations follow and the paper states them: the resolution is
+\emph{per-protocol} work --- an AMM pair, a lending market and a bridge each expose beneficial
+ownership differently, and some expose it only at a block height, not retrospectively --- and it must
+be published as a list before $\hsnap$, because a holder cannot check a resolution they
+cannot see. \decided{the contract-held positions are not measured in this paper, and that is a scoping choice
+rather than a limit. Balances held in liquidity-pool and staking contracts on Ethereum and BSC are
+public on-chain, readable by the same holder-enumeration method already used for the parallel-asset
+snapshots of \Cref{sec:parallel-assets}, and the team has performed that measurement before
+\srcintent{08-answers-round-2.md, round 24}. What matters for the migration argument is that the
+quantity is \emph{obtainable}: a holder-address snapshot alone will miss these positions, and the
+carry of \Cref{sec:bridging-migration} must therefore resolve them per protocol before
+$h_{\mathrm{snap}}$ --- work this paper specifies but does not perform, because running it belongs to
+the migration rather than to the survey.}
+
+\textbf{(ii) Announcement: $\hsnap$ is announced in advance} \srcintent{08-answers-round-2.md,
+round 9} (\planned). This is the right choice and the paper does not hedge it: it lets holders
+arrange their balances, and it is the only option compatible with publishing a contract-held
+resolution list beforehand. It does admit the griefing vector previously noted --- an adversary may
+fragment a balance across many addresses to inflate the carry's gas cost --- and that vector has no
+defence in this construction. It is cheap for the adversary and merely expensive for the issuer, so
+the paper records it as an accepted cost rather than an open problem, and \Cref{rem:batch-carry}
+sizes the exposure.
+
+\textbf{(iii) Batch size and gas: specified below} (\Cref{rem:batch-carry}), as a recommendation.
+\end{remark}
+
+\begin{remark}[Batch sizing for the carry --- recommendation]
+\label{rem:batch-carry}
+The carry is $|\mathcal{A}_c|$ storage writes and the issuer pays the gas. A cold \texttt{SSTORE} on
+an EVM chain costs \num{20000} gas, plus per-call overhead and calldata; at a \num{30000000} gas
+block limit, a batch of \num{500} credits consumes roughly \SI{35}{\percent} of one block and leaves
+headroom for the base transaction and calldata \srcinferred. The paper recommends
+\textbf{batches of \num{500} recipients}, submitted sequentially with each batch's completion
+confirmed before the next is sent, and an idempotent \texttt{claimed} flag per recipient so a
+reverted or re-sent batch cannot double-credit.
+
+The trade-off is stated exactly: larger batches are cheaper per recipient and put more value at risk
+in a single reverted transaction. At \num{500} the worst case is one reverted batch of \num{500}
+credits, which is recoverable by resubmission because the flag makes the operation idempotent; the
+gas is lost, the entitlements are not. Smaller batches buy little, because the per-recipient cost is
+dominated by the \texttt{SSTORE}, not the per-transaction overhead.
+\end{remark}
+
+\smallskip
+\noindent\emph{Holder-initiated redemption (Avalanche, Base, Polygon, and the non-EVM retirees).}
+The holder must act, within the window, or lose the claim. This is the path the forfeiture term
+applies to, and it is the only one it applies to. \emph{Retired EVM chains} (the disposal construction
+this section first specified; it will not be deployed, \Cref{rem:no-legacysink}): a
+\texttt{LegacySink} contract per chain holds legacy tokens forever with no withdraw function --- the
+legacy ERC-20 has no \texttt{burn} \srccode{flux-eth-bsc/\allowbreak{}flux.sol}{6--13}, so a sink is the only
+irreversible disposal --- and
+\texttt{deposit(v, flux\allowbreak{}Addr)} emits an event the RELEASE quorum treats exactly as a Burn --- depth
+$D_c$, contiguous nonce ranges, \texttt{FLXR1} memo --- paying L1 FLUX 1:1. \emph{Retired non-EVM
+chains} (legacy Solana, Kadena, Tron, Algorand, Ergo): the holder makes the legacy balance provably
+unspendable and binds the disposal to a \texttt{fluxAddr}; Solana has a self-custodial SPL
+\texttt{Burn}, and Ergo admits a \texttt{sigma\allowbreak{}Prop(false)} box.
+\settlednote{Moot: no disposal contract is deployed on any chain (\Cref{rem:no-legacysink}), so no sink construction is required for Kadena, Tron or Algorand. Retained as a pointer because \S\ref{sec:22:recommended} records what the three constructions would be if a sink is ever wanted.}
+
+\paragraph{The decided migration terms.} Four terms are settled
+\srcintent{08-answers-round-2.md, rounds 5 and 7}, and they replace the window and disposition
+parameters this subsection previously carried as open. \planned
+
+\begin{enumerate}
+\item \textbf{Effective date.} The contract changes are prepared now and take effect at PA Depletion,
+      $\hpa = \num{3466630}$ (approximately 2027-03), \emph{simultaneously} with the swap contract
+      and with \PNR activation (\Cref{sec:pnr}, \Cref{sec:migration}). Nothing takes effect earlier
+      and there is no phased cutover.
+\item \textbf{Redemption window.} Six months from $\hpa$ --- \SI{182.5}{\day} nominal, approximately
+      \num{525600} L1 blocks at the \PoN target spacing \srcinferred --- so
+      $h^{\mathrm{mig}}_{\mathrm{close}} \approx \num{3992230}$. During the window, redemption
+      back to main-chain FLUX runs at 1:1 through the \textbf{existing bridge}.
+\item \textbf{The redemption route is one-directional.} During the window the existing bridge permits
+      migrating \emph{to} the main chain and claiming \emph{on} the main chain, and nothing else:
+      holders can move to the main chain and nowhere else
+      \srcintent{08-answers-round-2.md, round 7}.
+\item \textbf{Unclaimed balances.} At window close, \textbf{unclaimed balances pass to the Flux
+      Foundation to fund development.}
+\end{enumerate}
+
+\noindent The fourth term is stated here in those words because it is a transfer from non-acting
+holders to the issuer, and naming it, its window and its destination is what makes it defensible.
+Unclaimed value must belong to someone; a stated destination is better than an unstated one; and the
+alternative --- an open migration authority honoured forever --- keeps the largest single mint
+authority in the design alive indefinitely, which is a cost paid by everyone rather than by the
+non-acting holder. What passes is not the legacy tokens themselves, which sit on foreign chains and
+cannot be recalled by anyone (see \emph{The long tail} below); it is the residual main-chain backing
+$\Lambda - \sum_c \mathsf{cumMig}_c - V^{\mathrm{mig}}_{\mathrm{rel}}$, which is an explicit public
+number at every height and is computed by Algorithm~\ref{alg:verify} without privileged data.
+
+\medskip
+\noindent\textbf{The amount actually exposed to the window, which is two orders of magnitude below
+the measured liability.} The forfeiture term applies only to the holder-initiated path, so the
+exposed quantity is the outstanding balance on the \emph{retiring} chains and not the ten-chain
+total. Of the \num{223027781.21}\flux measured across all ten chains
+\srcmeasured{scripts/\allowbreak{}13-issuer-balances.sh}{2026-09-03}:
+
+\begin{table}[H]
+\centering\footnotesize
+\begin{tabular}{@{}llr@{}}
+\toprule
+chains & migration path & outstanding (\flux) \\
+\midrule
+Ethereum, BNB Chain & snapshot-and-carry; \textbf{no holder action}; not exposed & \num{216800880.41} \\
+\midrule
+Base & holder-initiated redemption; \textbf{exposed to the window} & \num{2528858.43} \\
+Polygon & \textit{as above} & \num{647928.73} \\
+Avalanche C-Chain & \textit{as above} & \num{628582.62} \\
+Ergo & \textit{as above} & \num{486746.62} \\
+Algorand & \textit{as above} & \num{389643.01} \\
+Solana & \textit{as above} & \num{373067.20} \\
+Kadena & \textit{as above} & \num{798207.66} \\
+Tron & \textit{as above} & \num{373866.53} \\
+\midrule
+eight retiring chains & --- & \textbf{\num{6226900.80}} \\
+all ten chains & --- & \num{223027781.21} \\
+\bottomrule
+\end{tabular}
+\caption{Exposure to the six-month window and the unclaimed-balance term, by migration path.
+Surviving-chain holders are carried across by \Cref{alg:carry} and take no action, so they are not
+at risk of forfeiture; only the retiring chains are. Figures are
+\srcmeasured{scripts/\allowbreak{}13-issuer-balances.sh}{2026-09-03} and
+\srcmeasured{scripts/\allowbreak{}15-nonevm-liability.sh, scripts/\allowbreak{}16-remaining-liability.sh,
+scripts/\allowbreak{}18-tron-final.sh, scripts/\allowbreak{}19-kadena-ledger.js, scripts/\allowbreak{}20-kadena-issuer.js}{2026-09-04},
+the exact measured values of \Cref{tab:issuer-liability}, not rounded to make the point. All ten
+legacy assets are measured; no component of this table is an estimate.}
+\label{tab:migration-exposure}
+\end{table}
+
+\noindent So the amount exposed to the six-month window and the unclaimed-balance term is
+\textbf{\num{6226900.80}\flux across the eight retiring chains}. That is \SI{2.79}{\percent} of
+the \num{223027781.21}\flux measured across all ten chains: the overwhelming majority of parallel-asset supply is
+issuer-held and never left the treasury, and the overwhelming majority of what did is on the two
+chains that survive and are carried across without holder action. \textbf{The fraction of that which fails to migrate
+within six months is unknown, and this paper does not estimate it}: there is no holder-count or
+dormancy measurement for any of the ten legacy assets in the evidence corpus, and a number produced
+without one would be a guess placed next to a real measurement.
+\srcintent{08-answers-round-2.md, round 7}
+
+\paragraph{Three consequences of routing redemption through the incumbent, one of which is a real
+mitigation.} First, the incumbent's custody model is not retired at $\hpa$ but at window close six
+months later. For that interval the bound of \Cref{prop:worst-case} applies to the new
+lock-and-mint path and \emph{not} to the redemption path, whose exposure remains the balance under
+the 32 hot keys with no bound and no on-chain attribution (\Cref{prop:dominance}). The section's
+dominance claim is therefore a claim about the steady state after window close, and about the new
+path from $\hpa$; it is not a claim about the window. \textbf{Second, and this materially narrows
+the first: the route is one-directional} \srcintent{08-answers-round-2.md, round 7}. The incumbent's
+residual role during the window is an \emph{exit to the main chain}, not general two-way traffic, so
+the swap engine's chain-pair matrix, its several disagreeing confirmation tables and its
+finished-before-sent state machine (\Cref{sec:bridging-incumbent}) are not all in use for it. The
+exposure that remains is real --- the same single hot key per chain authorises the outbound main-chain
+payment --- but it is the exposure of one direction rather than of eleven chains' worth of pairs, and
+the section states it that way rather than repeating the stronger earlier framing. Third, the
+\texttt{LegacySink}-plus-RELEASE-quorum path specified above becomes a \emph{disposal} mechanism for
+retired units rather than the redemption route, which changes what has to exist at $\hpa$ and what
+may follow later.
+\begin{remark}[\texttt{LegacySink} is not deployed --- settled]
+\label{rem:no-legacysink}
+\texttt{LegacySink} was a construction proposed by this paper, not an existing component: a contract
+with a \texttt{deposit} function and no withdraw function, supplying the irreversible disposal that
+the legacy ERC-20 lacks, since it has no \texttt{burn}
+\srccode{flux-eth-bsc/flux.sol}{6--13}. Its purpose was to prevent a unit being redeemed for L1 FLUX
+and then sold on to a buyer who does not know the claim has already been made.
+
+\textbf{It will not be deployed} \srcintent{08-answers-round-2.md, round 14} (\planned), and the
+reasoning is a cost comparison the decision to route redemption through the incumbent makes decisive.
+Building, auditing and deploying a disposal contract on eight retiring chains --- including the three
+non-EVM constructions that have no common shape (\S\ref{sec:22:recommended}) --- is substantial work
+whose only benefit is preventing resale of already-claimed units. Against it: the entire retiring
+exposure is \num{6226900.80}\flux{} (\Cref{tab:migration-exposure}), the contracts are being
+abandoned in any case, and audit A1 would have to cover a contract deployed only to be discarded.
+
+\textbf{The mitigation is therefore the public record alone, and the paper says so rather than
+implying more.} A redemption is an on-chain event on both the legacy chain and the L1, so a
+prospective buyer of a legacy unit \emph{can} check whether it has been claimed --- but they must
+know to look, and nothing in the token prevents the transfer. The residual risk is borne by
+uninformed secondary buyers of retired-chain units during and after the window. That risk is real,
+it is not mitigated by any mechanism, and its bound is the retiring exposure above.
+\end{remark}
+
+\paragraph{Reaching holders --- which now means reaching the holders who must act.} The snapshot path
+removes ETH and BSC holders from this problem entirely, so the outreach target is the retiring
+chains: \num{6226900.80}\flux, now measured across all eight of them
+(\Cref{tab:migration-exposure}). That is a smaller and better-defined communication problem than the
+one earlier drafts described, and it should be stated as smaller rather than left overstated. The
+roadmap's own precedent for a parallel-asset change is announcement at least \SI{90}{\day} ahead
+\srcroadmap{flux-roadmap-public.md:159}, which is \num{259200} L1 blocks \srcinferred;
+$\hsnap$ would be published at announcement, i.e.\ no later than
+$\hpa - \num{259200}$, together with each chain's issuer-held set $\mathcal{I}_c$ and the per-chain
+dead addresses to which the Foundation transfers its own holdings, since both are needed before
+$\hsnap$ \srcintent{08-answers-round-2.md, round 18}. Holders would be reached through per-asset redemption statistics
+published from the snapshot, relabelled explorer token pages, exchange notices, wallet banners, and
+the incumbent \Fusion endpoints answering with migration instructions for the whole window. The
+single most important public act is that the Foundation immobilises its own
+legacy holdings first, by transferring them to a published per-chain dead address
+\srcintent{08-answers-round-2.md, round 18} --- the bulk of five EVM contracts' \num{440000000}-unit pre-mint each,
+\num{2.2e9} units in total \srcinferred --- because after it, a legacy contract's remaining
+\texttt{totalSupply} is public holdings only, the two disagreeing reserve-wallet lists stop
+mattering, and the residual that passes to the Foundation at close is a number about third-party
+holders rather than a number dominated by the Foundation's own unmoved supply.
+\settlednote{Zero, gasless via \texttt{permit} (\Cref{tab:22-recommended}). Migration fee (zero recommended --- holders should not pay for a consolidation they did
+not ask for), and whether \texttt{permit}/gasless migration is offered.}
+\proposednote{Direct notice by zero-value calldata to holder addresses above a threshold
+(approximately \num{21000} gas per holder) is this paper's proposal, with the threshold and whether
+to send the notices at all unchosen; who pays for the gasless \texttt{permit} path is likewise not
+recorded as decided \srcintent{08-answers-round-2.md, round 18}.}
+
+\paragraph{Base, explicitly.} Base carries a deployed FLUX contract today
+\srccode{flux-supply-tracker/\allowbreak{}index.html}{346}, added after the 2023 holder-snapshot tooling and
+absent from it. The public roadmap names Base a survivor twice
+\srcroadmap{flux-roadmap-public.md:97,131}; the settled decision recorded for this paper names ETH
+and BSC \srcintent{03-parallel-assets.md}. Base is not BSC --- it is an Ethereum L2, and they differ
+in finality, bridging architecture, audit surface and holder base. Three statements follow, and the
+paper makes all three. First, under the settled decision Base is retired at $\hpa$ and its holders
+redeem through the route of the preceding paragraphs. Second, \textbf{the decision is final and no later
+re-addition is contemplated} \srcintent{08-answers-round-2.md, round 5} --- this closes a question
+earlier drafts left open. The engineering observation that made it worth leaving open remains true
+and is now only an observation: because the canonical contract is one EVM codebase, a later Base
+deployment would carry near-zero marginal audit surface, so retirement is a decision about
+consolidation and liquidity rather than an engineering necessity, and it should be read as such.
+Third, the supersession of a published roadmap statement must be stated explicitly in the paper and
+in the migration notice, because Base holders were told otherwise, and Base's measured outstanding
+balance is \num{2528858.42991062}\flux
+\srcmeasured{scripts/\allowbreak{}13-issuer-balances.sh}{2026-09-03} --- \SI{1.13}{\percent} of the ten-chain
+total, but \SI{40.6}{\percent} of the balance actually exposed to the redemption window
+(\Cref{tab:migration-exposure}) \srcinferred. Base is therefore not a rounding error in the
+migration: it is most of the holder-initiated migration problem. That is a communication liability,
+not an engineering one, and it is discharged by saying so.
+
+\paragraph{Sequencing against audits and exchanges.} The order below is a hard ordering, and nothing
+in it permits a public mint before the audit, before the backing is locked, or before the exchanges
+hold the new address. \planned
+
+\begin{enumerate}
+\item \textbf{Audit A1} (hard gate, H7): the EVM bridge contract, the migrator
+      path and \texttt{Attester\allowbreak{}Guardian} --- one codebase, published report, deployed bytecode
+      matched to the audited commit.
+\item \textbf{Measure} $\Lambda_c$ at $\hsnap$ and $R_0$; publish; confirm
+      $R_0 \ge \Lambda$.
+\item \textbf{Lock} $R_0$ into $\mathcal{S}_R$ in a public L1 transaction, with the reserve and
+      redeem scripts published the same day.
+\item \textbf{Deploy} ETH and BSC contracts with public mint \emph{paused}, transfers disabled
+      pending $\mathsf{snapshotComplete}_c$, migrator \emph{enabled}, and the signer set published as
+      four named individuals with their per-key public halves (\Cref{as:admin}), together with the
+      per-chain limit $\varrho_c$ each contract enforces.
+\item \textbf{Carry the snapshot} on ETH and BSC (Algorithm~\ref{alg:carry}), with exchange partners
+      and ecosystem integrators coordinated in advance
+      \srcintent{08-answers-round-2.md, round 7}. A custodian must know before $\hsnap$
+      which of its addresses will be credited and must have decided how the credit reaches its users;
+      contract-held balances are the open item of the note above. Transfers enable only when the
+      carry is complete.
+\item \textbf{Foundation immobilises its legacy reserves} on the retiring chains, by transfer to
+      the published per-chain dead addresses \srcintent{08-answers-round-2.md, round 18}.
+\item \textbf{Open} holder-initiated migration on the retiring assets and public lock-to-mint on ETH
+      and BSC.
+\item \textbf{Solana}: audit A2 --- the bridge program \emph{and} the SSP multisig program, the
+      latter already roadmap-gated --- then steps 4--7 for Solana.
+\item \textbf{Close} the window at $h^{\mathrm{mig}}_{\mathrm{close}} \approx \num{3992230}$; the
+      migrator dies; the residual backing --- against the \num{6226900.80}\flux measured exposure of
+      \Cref{tab:migration-exposure}, not against the ten-chain total --- passes to the Flux
+      Foundation.
+\end{enumerate}
+
+\noindent Steps 3--7 land at $\hpa = \num{3466630}$, since the contract changes take effect there and
+not before; steps 1 and 2 must complete earlier, and step 2 is not complete: $\Lambda_c$ is measured
+for all ten legacy assets, and $R_0$ is not yet established. \textbf{Whether public mint opens under the named quorum or waits for a bonded
+attester feed is settled by the same decision:} the launch configuration is 3-of-4 with autonomy to
+follow, and the fallback on record is to ship 3-of-4 and take a second fork
+\srcintent{08-answers-round-2.md}, so public mint opens under named signers and the attestation link
+of \Cref{sec:bridging-attestation} arrives afterwards. The interval during which the pause authority
+is four named individuals rather than a bonded set is therefore not an accident of sequencing; it is
+the design until the second fork, and \Cref{cor:pause} is what bounds it.
+\settlednote{Exchange swaps sequence \emph{before} the public window (\Cref{tab:22-recommended}). Sequencing of exchange contract swaps relative to the public window --- before, or
+simultaneous. Trade-off: stranded custodial users against coordination cost with venues the project
+does not control.}
+
+\paragraph{The long tail.} Legacy contracts cannot be paused or destroyed: a plain ERC-20 has no
+such function \srccode{flux-eth-bsc/\allowbreak{}flux.sol}{6--13}. They remain transferable and tradeable forever.
+After the Foundation immobilises its reserves and the window closes, the remaining legacy supply is
+\emph{declared} worthless but is still a token someone may sell to someone who has not read the
+notice. The adversary's gain in that case is bounded by the buyer's capital and touches no bridge
+state; the mitigation is the public record --- immobilised balances, the closed window, and per-chain
+statistics --- which is what an explorer or an aggregator uses to mark the legacy token as migrated.
+
+\subsection{Recommended values for the open parameters}
+\label{sec:22:recommended}
+
+The construction above leaves nineteen parameters open. Seventeen are recommended here; two are left
+open because they are genuinely undetermined rather than merely unchosen, and the section says which
+and why. Each was proposed by this paper and \textbf{confirmed by the author}
+\srcintent{08-answers-round-2.md, round 11}, the $T_{\mathrm{react}}$ target in round 18.
+
+\begin{table}[H]
+\centering\footnotesize
+\caption{Bridge parameters. Proposed by this paper and \textbf{confirmed by the author}
+\srcintent{08-answers-round-2.md, round 11}, the $T_{\mathrm{react}}$ target in round 18; the two
+marked \emph{open} remain so. \planned,
+\srcinferred{} for the derivations except where cited.}
+\label{tab:22-recommended}
+\begin{tabular}{@{}llp{0.42\linewidth}@{}}
+\toprule
+Parameter & \textbf{Recommended} & Reason \\
+\midrule
+$D_{L1}$ & \textbf{\num{40} blocks} & exactly \texttt{MAX\_REORG\_LENGTH}
+\srccode{fluxd/src/main.h}{74}; more adds latency and buys nothing \\
+$D_{\mathrm{ETH}},D_{\mathrm{BSC}},D_{\mathrm{SOL}}$ & \textbf{each chain's finality tag} & a
+confirmation \emph{count} is the BNB Bridge error class \\
+$v_{\min}$ & \textbf{\num{10}\flux} & exceeds dust $+\ \varphi_{\mathrm{rel}}$ with margin; keeps a
+batch entry worth its gas share \\
+$\varphi_{\mathrm{mint}}$ & \textbf{0} & do not tax entry \\
+$\varphi_{\mathrm{rel}}$ & \textbf{actual gas share of the batch} & cost recovery, not revenue \\
+fee recipient & \textbf{Foundation operations} & not $\pool$: bridge fees must not pay node rewards \\
+$T_{\mathrm{rel}}$ release cadence & \textbf{\SI{4}{\hour}} & 6 batches/day; bounded exit latency,
+modest signer load \\
+$\mathsf{R}_{\mathrm{hot}}$ (window) & \textbf{\num{500000}\flux} & $\approx$ 14 days at the measured
+mean; covers front-loading \\
+cold$\to$hot top-up & \textbf{when hot $<\ $\num{200000}\flux} & $\approx$ 6 days' cover at trigger \\
+$\Delta_g$ pause guard & \textbf{\SI{48}{\hour}} & reuses the agreed upgrade timelock; one
+operational constant \\
+MintAuth transport & \textbf{Flux feed $+$ mandatory IPFS mirror} & IPFS is existing project
+precedent \srccode{fluxd/zcutil/fetch-params.sh}{17} \\
+$T_{\mathrm{att}}$ & \textbf{\num{120} blocks} (\SI{1}{\hour}) & attestation cost is per-post; hourly
+is ample for a daily-scale limit \\
+$T_{\mathrm{silence}}$ & \textbf{\SI{6}{\hour}} & 6 missed attestations before fail-closed \\
+fail-closed on silence & \textbf{yes} & a bridge that mints while blind is the failure being designed
+against \\
+$T_{\mathrm{react}}$ (launch operating target) & \textbf{\SI{24}{\hour}} & the value at which
+\Cref{tab:worst-case} and \Cref{prop:dominance} are evaluated; a published operational target, not a
+contract constant \srcintent{08-answers-round-2.md, round 18} \\
+migration fee & \textbf{0}, gasless via \texttt{permit} & holders did not ask for this consolidation \\
+exchange sequencing & \textbf{before the public window} & venues need lead time; stranded custodial
+users are the larger harm \\
+\midrule
+$(n_{\mathrm{att}}, k_{\mathrm{att}}), \beta_{\mathrm{att}}$ & \emph{open} & determined by the
+slashing construction below \\
+slashing construction & \emph{open} & Research-class \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Where the reserve number comes from.} $\mathsf{R}_{\mathrm{hot}}$ is the one parameter
+here that can be derived rather than judged, and \Cref{tab:issuer-liability} now supplies the
+operand. The measured redeeming set is \num{6226900.80}\flux{} across the eight retiring chains, and
+the migration window is six months, so the \emph{mean} redemption rate over the window is
+$\num{6226900.80}/180 \approx \num{34594}\flux$ per day \srcinferred. Redemption will not be uniform
+--- announcement-driven flows are front-loaded, and the \SI{40.6}{\percent} of the set sitting on
+Base concentrates it further --- so a hot reserve sized at the mean would be drained by the first
+week. \num{500000}\flux{} is roughly fourteen days at the mean, which absorbs a first-week surge of
+several times the average without a cold-storage round trip, and the \num{200000}\flux{} top-up
+trigger leaves about six days of cover at the point the top-up is initiated. Both figures should be
+re-derived once real redemption data exists; they are sized from the only measurement available.
+
+\paragraph{Finality, not confirmations.} $D_{\mathrm{ETH}}$, $D_{\mathrm{BSC}}$ and
+$D_{\mathrm{SOL}}$ should be expressed as each chain's own finality predicate --- Ethereum's
+\texttt{finalized} block tag, BNB Chain's fast-finality tag, Solana's \texttt{finalized} commitment
+--- and never as a block count. A count is a guess about reorg depth that is wrong precisely when it
+matters, which is the error class the BNB Bridge incident belongs to. Using the finality gadget makes
+the bridge's safety argument inherit each chain's own, which is the strongest available statement and
+also the only one that stays correct when those chains change their parameters.
+
+\paragraph{Burn-sink constructions --- superseded, and recorded for the record.} An earlier draft of
+this section specified disposal constructions for the three non-EVM retiring chains: a Pact module
+guard that unconditionally fails on Kadena, an unconditionally-rejecting \texttt{LogicSig} account on
+Algorand, and, on Tron, the token contract's own \texttt{burn} entry point if one exists. That work is
+superseded by the decision not to deploy \texttt{LegacySink} at all
+(\Cref{rem:no-legacysink}): with redemption running through the incumbent for the window, no
+disposal contract is deployed on any chain, EVM or otherwise, and the residual risk is carried by the
+public record as that remark states. The constructions are recorded here because they remain the
+right answers if a sink is ever wanted, and because the Tron case illustrates why the three chains
+were not equivalent: Kadena and Algorand both admit a spending condition that is provably
+unsatisfiable from the chain's own rules, whereas a Tron sink would have rested either on a
+\texttt{burn} entry point whose presence this paper could not establish --- the deployed contract's
+ABI is not returned by Tronscan's public contract endpoint --- or on the weaker convention that no
+key exists for the zero address.
+
+\paragraph{Custody standard for the four keys.} The recommendation is a named class rather than a
+principle: keys generated and held in FIPS~140-2 Level~3 hardware or equivalent, one signer per
+physical location, no signing key ever resident on a host that runs a relayer, an RPC endpoint or the
+incumbent bridge service, a key-generation ceremony with published witness attestations, and a
+documented rotation procedure exercised at least once before the bridge holds material value. The
+last clause matters more than it looks: a rotation procedure that has never been executed is a plan,
+not a control, and the first time it is attempted should not be during an incident.
+
+\paragraph{What is left open, and why.} $(n_{\mathrm{att}}, k_{\mathrm{att}})$ and
+$\beta_{\mathrm{att}}$ cannot be fixed independently of the slashing construction, because
+\eqref{eq:bond-condition} is vacuous if no bond can actually be forfeited: a bond that cannot be
+slashed is a deposit, and sizing it is a decision about optics rather than security. The slashing
+construction is Research-class (\S\ref{sec:feasibility}), so both remain open and are not given
+recommended values here. Assigning a number to $\beta_{\mathrm{att}}$ before that is settled would
+be exactly the kind of plausible-looking fill this paper exists to avoid.
+
+\subsection{What cannot be achieved}
+\label{sec:bridging-open}
+
+\begin{openproblem}[Unconditional redemption liveness against a refusing quorum]
+\label{op:liveness}
+Every holder can always execute \texttt{burn}: no role can prevent it, and the resulting claim is
+on-chain, public and provable (H5). But the corresponding release requires $k_R$ signatures on an L1
+transaction, and \Flux's inherited Bitcoin script can enforce nothing beyond ``$k_R$ of these $n_R$
+keys signed'' --- it cannot enforce a rate limit, a cap, or a proof of burn. Consequently, if
+$n_R - k_R + 1$ or more release signers refuse, for any reason, the holder has a provable, public,
+outstanding claim and \emph{no cryptographic recourse}. At the decided $(n_R, k_R) = (4,3)$ that
+number is \textbf{two}: any two of the four co-founders, by refusal, absence, incapacity or legal
+order, stop every redemption to the L1 indefinitely. One refuser does not, so D1 survives against a
+single uncooperative party --- but by a margin of one key, and no longer for the reason the earlier
+form of this argument gave. That reason was that the Foundation holds at most $n_R - k_R$ keys and so
+cannot block alone; it is not available now, because the Foundation's founders hold all four
+(\Cref{as:admin}), and a correlated unavailability of two of them is a single event rather than two
+independent ones. \textbf{D1 is therefore satisfied against one uncooperative party, with no margin
+beyond that, and cannot be satisfied against a refusing quorum without an L1
+consensus change} --- a covenant, or a bridge-vault transaction type verified by \fluxd. No such
+primitive exists today. The same limitation holds for every lock-and-mint bridge whose home chain
+cannot verify the foreign chain, including the incumbent, where it holds with $k = 1$.
+\end{openproblem}
+
+\noindent Two related items are open rather than solved and are recorded here so that later sections
+can reference them: \Cref{op:slashing} (slashing on the L1), and the light-client construction of
+\Cref{sec:bridging-alternatives}, which is closed by the header format rather than by cost. All
+three are Research-class in the sense of \Cref{sec:chain-evolution}: each requires a consensus
+change, not an implementation.
+
+\subsection{Comparison with real incidents and with designs that held}
+\label{sec:bridging-incidents}
+
+Each row of \Cref{tab:bridge-incidents} is a design that the language of a bridge roadmap could be
+mistaken for, together with what actually broke. The thread through the failures is not ``too
+centralized''. It is \textbf{unbounded consequence}: in every failed row, once the check was defeated
+--- by a bug, by a key, or by an upgrade --- the contract paid out whatever it was told to pay. The
+construction's claim is correspondingly narrower than trustlessness, and defensible for that reason:
+whatever is defeated, the contract issues at most $\varrho_c$ per window and at most $\bcap{c}$ ever,
+visibly, and to signers whose identities are recoverable from the transaction. With the decided
+parameters that ``whatever is defeated'' clause carries a number --- \num{20000000}\flux per
+\SI{24}{\hour} of reaction time across the launch set of two chains (\Cref{prop:worst-case}) --- and
+the third column below should be read as claiming that and nothing more. In particular, the launch
+configuration does \emph{not} differ from the Ronin and Multichain rows in signer distribution; it
+differs in what the contract permits after the distribution has failed. \textbf{That distinction
+survives only under \Cref{rem:upgrade-voids}}: an upgradable contract without a timelock permits
+whatever its next version permits, which is the Nomad row's mechanism arriving by intent rather than
+by mistake.
+
+%% longtable: nine incidents overran the fixed float's page.
+{\footnotesize
+\begin{longtable}{@{}p{2.0cm}p{4.6cm}p{6.4cm}@{}}
+\toprule
+system & what failed & how \Cref{con:bridge} differs \\
+\midrule
+\endfirsthead
+\multicolumn{3}{@{}l}{\emph{(Table \ref{tab:bridge-incidents} continued)}}\\
+\toprule
+system & what failed & how \Cref{con:bridge} differs \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\textbf{Poly Network} \newline Aug 2021 &
+The cross-chain manager contract could call the data contract holding the trusted keeper set, so a
+crafted cross-chain message replaced the keepers with the attacker's key. \emph{The bridge's own
+message path could alter its trust root.} &
+No message path can touch $Q_M$, $Q_A$ or $\mathcal{G}$; only ADMIN, under $\Delta_A$, on-chain.
+Mint authorisations are domain-separated by chain identifier and contract address. \\
+\addlinespace
+\textbf{Wormhole} \newline Feb 2022 &
+Solana signature verification accepted a spoofed sysvar because a deprecated instruction-loading
+function did not check the account; guardian signatures were never actually verified.
+\emph{Implementation bug, not key compromise.} &
+$\varrho_c$ and $\overline{M}_c$ bound what \emph{any} verification bug can issue before a pause
+(\Cref{prop:bounded-mint}); the Solana Ed25519 introspection path is a named audit focus. \\
+\addlinespace
+\textbf{Ronin} \newline Mar 2022 &
+5-of-9 validators, four run by one company plus a DAO key delegated to that same company and never
+revoked; one organisation was socially engineered; undetected for six days. \emph{Threshold nominal,
+concentration real, no monitoring.} &
+\textbf{Not by distribution.} At launch all four keys sit with one organisation's founders
+(\Cref{as:admin}), which is the Ronin concentration and this paper says so. This row is also the
+answer to why \Cref{prop:worst-case} models a 3-of-4 compromise at all: a 5-of-9 quorum was taken
+whole. What differs: every signature is attributable to a named key; the pause is 1-of-4, so a
+3-key compromise does not control it (\Cref{cor:pause}); and issuance after a full compromise is
+bounded to \num{20000000}\flux per \SI{24}{\hour} of detection latency across two chains
+(\Cref{prop:worst-case}) rather than to the whole reserve. Ronin's six undetected days exceed
+$\Delta_A$: the rate limit would have held the loss to $2 \times \num{20000000}\flux$ for the
+\qty{48}{\hour} until a queued upgrade landed, and the contract-enforced ceiling thereafter is
+$\sum_c \bcap{c}$ (\Cref{rem:global-cap}), not the rate limit's number. \\
+\addlinespace
+\textbf{Harmony Horizon} \newline Jun 2022 &
+2-of-5 multisig; two keys compromised. \emph{Threshold too low for the value at risk.} &
+$(n,k) = (4,3)$ decided (\Cref{tab:bridge-decided}): a higher threshold ratio than Harmony's on a
+smaller set, so two independent key compromises are survivable and three are not. The loss is
+bounded by \Cref{prop:worst-case} or $\mathsf{R}_{\mathrm{hot}}$ regardless. \\
+\addlinespace
+\textbf{Nomad} \newline Aug 2022 &
+An upgrade initialised the trusted root to zero, so every unproven message verified and anyone could
+copy the exploit. \emph{An in-place upgrade regressed a security invariant.} &
+\textbf{This row is answered only by the timelock.} The construction specifies no upgradeability (D3), with
+replacement only by holder-initiated migration to a separately audited contract; the decided
+configuration keeps an upgrade path under the same 3-of-4
+\srcintent{08-answers-round-2.md, round 7}. Under D3 the Nomad mechanism is unavailable; under the
+decision it is available to three keys, and the \qty{48}{\hour} timelock of \Cref{rem:timelock-decided} is what
+makes it slow and public instead. \\
+\addlinespace
+\textbf{BNB Bridge} \newline Oct 2022 &
+A flaw in the IAVL Merkle-proof verification used by the light client let a forged proof pass;
+validators halted the chain to stop it. \emph{Even a light client is only as good as its proof
+verifier, and there was no rate limit.} &
+$\varrho_c$ per window makes an equivalent forgery worth $\varrho_c$ rather than the cap, and the
+pause is a contract action rather than a chain halt. \\
+\addlinespace
+\textbf{Multichain} \newline Jul 2023 &
+MPC ``nodes'' whose keys and servers were under one person's sole control; his arrest left the
+bridge inoperable, then drained. \emph{A threshold with one holder is one key.} &
+Per-signer keys held by four separately named individuals, not shares of one aggregate key, so the
+contract sees which three signed and a single holder cannot produce a valid authorisation. The
+concentration risk is not removed --- see the Ronin row --- and the incumbent's 32-key model is the
+same failure class, which this paper says rather than implies. \\
+\midrule
+\textbf{Circle CCTP} \citep{cctp} \newline held &
+Issuer-attested burn-and-mint; no liquidity pool to steal; nonce-bound messages. Trust is the
+issuer, who is already trusted for the whole supply. &
+Adopted as the model. Adds explicit $k$-of-$n$ attribution and contract-level bounds, because
+\Flux's attesters are \emph{not} already trusted for the whole supply. \\
+\addlinespace
+\textbf{Optimism / Arbitrum} \newline held &
+L1 verifies L2; challenge window; guardian pause; security-council timelock. &
+Cross-verification is unavailable (\Cref{sec:bridging-alternatives}); the guardian, timelock and
+no-silent-upgrade pattern is adopted. \\
+\addlinespace
+\textbf{IBC} \citep{cosmosibc} \newline held &
+Light clients in both directions on fast-finality chains. &
+Not applicable without a node-set commitment in the \PoN header --- the constraint of
+\Cref{sec:bridging-alternatives}, not a preference. \\
+\caption{Bridge incidents and designs that held, against \Cref{con:bridge}. Loss figures are omitted
+deliberately: they are widely reported, they vary by source and by the price used, and the argument
+does not depend on them. What the argument depends on is the failure mechanism in the middle column.
+\srcinferred, from published incident post-mortems; see \Cref{sec:bridging-alternatives} for the
+design references.}
+\label{tab:bridge-incidents}\\
+\end{longtable}
+}
+
+\paragraph{Feasibility, in one paragraph.} The canonical EVM contract, the migrator, and the
+off-chain attestation feed with its on-chain guardian are \emph{engineering}: standard Solidity and
+standard verification, where the novelty is discipline rather than cryptography. The L1 reserve as a
+published P2SH set, the memo-carried ledgers, and the anyone-verifiable $\varsigma$ of
+Algorithm~\ref{alg:verify} are \emph{extensions} of primitives the chain already has and the project
+already uses. Per-node, L1-registered attester keys are engineering, but they replace a fleet-shared
+derivation and their registration transaction is new design. Two items are Research:
+\Cref{op:slashing}, and a \Flux light client on an EVM chain, which is gated by the header format
+rather than by cost. One item --- \Cref{op:liveness} --- is not achievable at all without a consensus
+change. A third is not classified here at all: the autonomous replacement for the 3-of-4 quorum has
+no construction in the corpus, so it is neither engineering nor Research until R1--R5 of
+\Cref{sec:bridging-assumption} have a candidate answer. \Cref{sec:chain-evolution} carries the header
+question and \Cref{sec:attested-execution} carries the attester-key question; this section carries
+the rest.
+
+%% Drain this section's float queue before the next begins.
+\FloatBarrier

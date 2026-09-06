@@ -1,0 +1,998 @@
+\section{End-to-end: how \Flux works, today and at target}
+\label{sec:end-to-end}
+
+Every preceding section has described one layer in isolation, at the depth that layer deserves. This
+section does the opposite: it takes a single application through its whole life --- constructed,
+paid for, validated, placed, attested, made reachable, run, renewed, possibly reported, and
+ultimately the reason somebody gets paid --- and follows it across every layer at once. It does that
+twice. The first pass is the network as deployed on 2026-09-03, written in the present tense
+and tagged \shipped throughout. The second pass is the target architecture specified in Parts~II
+through~IV, written in the conditional and tagged \planned throughout, with the same twelve steps in
+the same order so that the two can be read side by side and differenced step by step. The two passes
+never mix within a paragraph, and where the deployed answer is thin --- there is no fee pool, there
+is no attestation a tenant can check, there is no grace period, there is no quorum --- this section
+says so at the step, not in a footnote at the end.
+
+Nothing here is derived. Every constant, mechanism and measurement is cited to the section that
+established it, and where two sections disagree about a constant this section says which two and
+marks the disagreement rather than picking one.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  font=\tiny, x=1mm, y=1mm,
+  cell/.style={draw, rounded corners=1.5pt, text width=48mm, align=left, inner sep=2pt,
+               minimum height=8mm, anchor=west},
+  tcell/.style={cell, fill=black!5},
+  dead/.style={cell, draw=black!45, dashed, text=black!55, align=center},
+  stepno/.style={font=\tiny\bfseries, anchor=east},
+  stepname/.style={font=\scriptsize, anchor=east, text width=22mm, align=right},
+  hdr/.style={font=\scriptsize\bfseries, anchor=west},
+]
+  \node[hdr] at (5,9)  {deployed today};
+  \node[hdr] at (62,9) {at target};
+  \draw[black!30] (-32,4.5) -- (112,4.5);
+
+  \node[stepno] at (-30,0) {1};
+  \node[stepname] at (-26,0) {construct};
+  \node[cell] (d1) at (5,0) {\specv{8} spec via \texttt{/\allowbreak{}apps/\allowbreak{}appregister}};
+  \node[tcell] (t1) at (62,0) {\specv{9} spec; all applications migrated forward};
+  \node[stepno] at (-30,-11) {2};
+  \node[stepname] at (-26,-11) {pay};
+  \node[cell] (d2) at (5,-11) {one transparent tx to \texttt{t3Nryf\ldots}, \texttt{OP\_RETURN} message hash};
+  \node[tcell] (t2) at (62,-11) {one output, full price, to $\mathsf{sink}$ + \texttt{OP\_RETURN} $H(m_\app)$};
+  \node[stepno] at (-30,-22) {3};
+  \node[stepname] at (-26,-22) {validate};
+  \node[cell] (d3) at (5,-22) {\texttt{processInsight}; underpayment silently dropped};
+  \node[tcell] (t3) at (62,-22) {PS1--PS4; \textbf{consensus} applies the 80/20};
+  \node[stepno] at (-30,-33) {4};
+  \node[stepname] at (-26,-33) {fee pool};
+  \node[dead] (d4) at (5,-33) {---};
+  \node[tcell] (t4) at (62,-33) {$\pool$ committed in the coinbase; drip $D_\hgt$};
+  \node[stepno] at (-30,-44) {5};
+  \node[stepname] at (-26,-44) {select payees};
+  \node[cell] (d5) at (5,-44) {\PoN{} rotation, one node per tier};
+  \node[tcell] (t5) at (62,-44) {\PoN{} rotation, unchanged};
+  \node[stepno] at (-30,-55) {6};
+  \node[stepname] at (-26,-55) {place};
+  \node[cell] (d6) at (5,-55) {broadcast, \SI{90}{\second} wait, earliest wins};
+  \node[tcell] (t6) at (62,-55) {\specv{9} reconciler and quorum plane};
+  \node[stepno] at (-30,-66) {7};
+  \node[stepname] at (-26,-66) {attest};
+  \node[dead] (d7) at (5,-66) {no tenant-reachable path};
+  \node[tcell] (t7) at (62,-66) {bonded $k$-of-$n$ committee, machine-bound key};
+  \node[stepno] at (-30,-77) {8};
+  \node[stepname] at (-26,-77) {make reachable};
+  \node[cell] (d8) at (5,-77) {\FDM{} / \PDNS{} / HAProxy};
+  \node[tcell] (t8) at (62,-77) {unchanged; \VPON{} for private deployments};
+  \node[stepno] at (-30,-88) {9};
+  \node[stepname] at (-26,-88) {run, monitor};
+  \node[cell] (d9) at (5,-88) {reconciler, crash backoff};
+  \node[tcell] (t9) at (62,-88) {unchanged};
+  \node[stepno] at (-30,-99) {10};
+  \node[stepname] at (-26,-99) {renew or lapse};
+  \node[cell] (d10) at (5,-99) {expiry is arithmetic};
+  \node[tcell] (t10) at (62,-99) {the payment \emph{is} the renewal};
+  \node[stepno] at (-30,-110) {11};
+  \node[stepname] at (-26,-110) {report, evict};
+  \node[cell] (d11) at (5,-110) {GitHub-file blocklist, $\kappa=1$};
+  \node[tcell] (t11) at (62,-110) {on-chain report, \SI{24}{\hour}, fee-less votes, ban memo};
+  \node[stepno] at (-30,-121) {12};
+  \node[stepname] at (-26,-121) {compensate};
+  \node[cell] (d12) at (5,-121) {issuance only};
+  \node[tcell] (t12) at (62,-121) {issuance $+$ drip $D_{\hgt,t}$};
+
+  % the one cross-track coupling
+  \draw[-{Latex[length=1.6mm]}, thick, black!70]
+    (t7.east) .. controls +(14mm,0) and +(14mm,0) ..
+    node[font=\tiny, right, align=left, pos=0.5, xshift=1mm]
+      {the eligibility gate\\is what compels hosting} (t12.east);
+
+  \node[font=\tiny, anchor=west, text width=52mm] at (-32,-137)
+    {Dashed cells mark steps with no deployed counterpart. Every other target-side cell is
+     \planned; only the shaded column changes.};
+\end{tikzpicture}
+\caption{The twelve-step application lifecycle, deployed and at target, on a shared step axis. Two steps have no deployed counterpart at all --- there is no fee pool, and no attestation a tenant can reach. The single cross-track edge is \Cref{prop:e2e-gate}: because \PNR{} pays every node regardless of what it hosts, the eligibility gate of step~7 is the only thing that makes step~12 compensate hosting rather than mere presence.}
+\label{fig:e2e-twelve-steps}
+\end{figure}
+
+% =====================================================================
+\subsection{Pass one: the deployed system}
+\label{sec:e2e:deployed}
+
+Everything in this subsection is \shipped and is written in the present tense.
+
+\paragraph{1. A tenant constructs a specification.}
+The document is a small owner-signed JSON object, and the version it may declare is fixed by chain
+height: \specv{8} is enforced from mainnet height \num{1932380}, and above that height a
+specification whose top-level keys are anything other than
+\texttt{version,\allowbreak{} name,\allowbreak{} description,\allowbreak{} owner,\allowbreak{} compose,\allowbreak{} instances,\allowbreak{} contacts,\allowbreak{} geolocation,\allowbreak{} expire,\allowbreak{} nodes,\allowbreak{}
+staticip,\allowbreak{} datacenter,\allowbreak{} enterprise} is rejected outright (\S10)
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{231--240}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{1063--1067}. Seven versions are simultaneously live on the
+network --- \specv{2} through \specv{8}, with \num{322} of \num{1195} deployed applications
+(\SI{26.9}{\percent}) below \specv{8} --- because the acceptance predicate has a ceiling and no floor
+(\S10) \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}. The tenant signs the
+envelope $\{\texttt{app\allowbreak{}Specification}, \texttt{timestamp}, \texttt{signature}, \texttt{type},
+\texttt{version}\}$, where \texttt{type} is \texttt{zelappregister}\slash\texttt{fluxappregister} and the
+envelope version --- distinct from the specification version --- is $1$, and \texttt{POST}s it to any
+node's \texttt{/\allowbreak{}apps/\allowbreak{}appregister} at \texttt{user} privilege, which is a \texttt{bitcoinMessage}
+signature over a login phrase no more than \SI{16}{\hour} old (\S9)
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appDatabase/\allowbreak{}registryManager.js}{1755--1764}. The receiving node
+refuses the request if it holds fewer than $8$ outbound or $4$ inbound peers, refuses a timestamp
+more than \SI{1}{\hour} old or more than \SI{5}{\minute} ahead, and refuses a \texttt{version: 9}
+specification outright unless \texttt{config.\allowbreak{}fluxapps.\allowbreak{}acceptV9} is set, which defaults to
+\texttt{false} with no caller anywhere that sets it (\S9, \S10). It then computes
+$\texttt{messageHASH} = \mathrm{SHA\text{-}256}(\texttt{type} \| \texttt{version} \|
+\mathrm{JSON}(\texttt{spec}) \| \texttt{timestamp} \| \texttt{signature})$, stores the message with a
+\SI{3600}{\second} TTL, broadcasts it, blocks through a fixed confirmation round trip of
+$2 \times \SI{1200}{\milli\second}$ plus up to $20 \times \SI{500}{\milli\second}$ of polling, and
+returns the hash and nothing else \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appDatabase/\allowbreak{}registryManager.js}{1827--1858}.
+The specification carries no \texttt{duration} field and no \texttt{paymentMemo} field; lifetime is
+expressed as \texttt{expire} in blocks, and there is no field anywhere in \specv{8} that binds a
+payment to a specification other than the hash the tenant is about to put in an
+\texttt{OP\_RETURN}.
+
+\paragraph{2. The tenant pays.}
+Price is a pure function of the specification and the height, evaluated against a height-scheduled
+table with six segments --- genesis plus five revisions --- whose current row takes effect from
+height \num{1597156} at $\pricevec = (0.03,\ 0.01,\ 0.004)\flux$ per unit of
+$(\mathrm{cpu}, \mathrm{ram}, \mathrm{hdd})$ with surcharges
+$(p_{\mathrm{port}}, p_{\mathrm{scope}}, p_{\mathrm{sip}}) = (0.4,\ 0.8,\ 0.4)\flux$ and
+$p_{\min} = 0.01\flux$ (\S16) \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03}.
+The base is $B(\app,\hgt) = 10\,p_{\mathrm{cpu}}\resvec^{\mathrm{cpu}} +
+\tfrac{1}{100}p_{\mathrm{ram}}\resvec^{\mathrm{ram}} + p_{\mathrm{hdd}}\resvec^{\mathrm{hdd}}$ plus
+the surcharge terms, quoted per three instances --- $\beta = \lceil B/3 \rceil_2$ per instance,
+scaled by the instance count from height \num{1890000} in the three-case form of \Cref{def:price}
+--- then scaled by $\dur/L^{\ast}(\hgt)$ with $L^{\ast} = 4\blockslasting = \num{88000}$ blocks at
+post-\PoN heights, ceiled to two decimals and only then floored at $p_{\min}$
+(\S16) \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}appUtilities.js}{89--134}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMessaging/\allowbreak{}messageVerifier.js}{736--745}. Duration is bounded to
+$\dur \in \{\num{1},\dots,\num{1056000}\}$ blocks --- the floor is height-gated by the validator at
+\num{5000}, then \num{100} from height \num{1630040}, then \num{1} from height \num{1964447}, while
+the published endpoint still reports \num{5000}
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appRequirements/\allowbreak{}appValidator.js}{852--862} --- and instance count to
+$\ninst \in \{\num{1},\dots,\num{100}\}$ for \specv{8} applications from height \num{2176519}
+(\S16). The tenant then broadcasts exactly one transparent transaction paying at least that amount to
+the sink address \texttt{t3Nryf\allowbreak{}AQLGe\allowbreak{}Fs9j\allowbreak{}Eoeqsxm\allowbreak{}BN2QLRa\allowbreak{}RKFLUX}, in force from height \num{1670000},
+carrying \texttt{messageHASH} in an \texttt{OP\_RETURN} (\S16)
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{241--245}. All application revenue on the network lands at
+that one transparent address, by policy and not by consensus (\S12, \S16).
+
+Both apparent disagreements here are resolved. The duration denominator carries a \PoN{} fork branch --- $22{,}000$ blocks before activation, $88{,}000$ from height $2{,}020{,}000$, the multiplier preserving wall-clock duration --- and \S7's definition now states it. The instance lower bound is $3$ in general and $1$ for \specv{8} applications from height $2{,}176{,}519$; the published endpoint reports $3$ regardless, which is a defect in the endpoint rather than a disagreement between sections \srcdoc{plan/conflicts.md C30, C33}.
+
+\paragraph{3. The payment is validated.}
+No consensus rule sees any of this. Each node's own chain-scan loop,
+\texttt{explorerService.\allowbreak{}processInsight}, runs per block, recognises the payment by its output
+address, sums \texttt{valueSat} across matching outputs, decodes the temporary-message hash from the
+\texttt{OP\_RETURN}, and queues \texttt{messageVerifier.\allowbreak{}checkAndRequestApp} (\S9, \S16)
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}explorerService.js}{309--345,444}. Promotion re-verifies update
+signatures against the current permanent owner as an explicit anti-race measure, recomputes the
+\PoN-fork-aware expiration height $e_\app$, and admits the specification to \texttt{globalzelapps}
+if and only if $v^{\mathrm{obs}} \ge \price \cdot 10^{8}\sat$. If the payment is short, the
+registration is \textbf{silently dropped}: a server-side log warning, no error surfaced to the payer,
+no retry, and no refund path anywhere in the repository (\S9, \S16)
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMessaging/\allowbreak{}messageVerifier.js}{735--763}. The funds are spent
+and the deployment does not exist. \S16 records this as the most important correctness gap on the
+path this paper otherwise recommends to autonomous software, and states the signed negative
+acknowledgement that would repair it as requirement R16.1.
+
+\paragraph{4. Value enters the fee pool.}
+\textbf{This step does not exist today.} There is no fee pool. There is no consensus object of any
+kind mediating between what a tenant pays and what an operator receives: the payment lands at a
+transparent address controlled by policy, and every satoshi any node operator earns is newly issued
+(\S7). The step is listed here, empty, so that the two passes stay aligned and so that the reader
+sees the gap in the same position in both.
+
+\paragraph{5. Consensus selects the payees.}
+Independently of everything above, and with no reference to it, \fluxd awards block production every
+\SI{30}{\second}. The \PoN slot is $\tslot(t) = \lfloor (t - t_0)/\spacingpon \rfloor$ with
+$\spacingpon = \SI{30}{\second}$, and a confirmed \FluxNode with collateral outpoint $c$ is eligible
+for slot $\tslot$ iff $H(c \| h_{\mathrm{prev}} \| \tslot) \le T_\tslot$ --- sortition over the
+confirmed-node set, not weighted by collateral amount beyond confirmation (\S4)
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon.cpp}{70--93}. Each block pays one node from each of the three tiers,
+selected from a per-tier queue ordered by \texttt{n\allowbreak{}Last\allowbreak{}Paid\allowbreak{}Height} ascending, which is a strict
+longest-time-since-paid FIFO (\S4) \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnode.h}{313--328}. The measured
+rotation lengths are $\rot{\tC} = \num{3247}$, $\rot{\tN} = \num{1615}$ and $\rot{\tS} = \num{1627}$
+blocks, i.e.\ \SI{27.06}{\hour}, \SI{13.46}{\hour} and \SI{13.56}{\hour}
+\srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}. The payee set of the block that
+confirms a tenant's payment has nothing to do with that tenant, that payment, or that application.
+
+\paragraph{6. The application is placed across nodes.}
+There is no scheduler. Every node runs the same loop against its own gossiped replica of
+\texttt{globalzelapps} and reaches its own conclusion (\S9). A node first clears a precondition gate
+--- enterprise identity resolved, daemon synced, local database ready, not DoS-flagged, node
+confirmed, \fluxbench not erroring, own external IP known, and fewer than
+$\texttt{maxAppsPerNode} = 200$ applications installed --- then draws a candidate from the set of
+non-expired, under-replicated applications, biased first to those naming its own IP and otherwise
+uniformly at random \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{78--336}. After
+targeting and geolocation filters and a set of soft-deferral branches, it verifies the image against
+the Docker Hub whitelist, pulls it, probes port availability through its peers, broadcasts a
+\texttt{fluxappinstalling} message carrying its own IP and a self-reported \texttt{broadcastedAt},
+and then waits $\texttt{install\allowbreak{}Collision\allowbreak{}Wait\allowbreak{}Ms} = \SI{90}{\second}$
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{321}. It re-reads the global installing and running lists,
+ranks all installing nodes by \texttt{broadcastedAt} ascending, and abandons the attempt if its rank
+does not fit the remaining slots. \textbf{Earliest-broadcast-wins is the entire conflict-resolution
+mechanism}: no leader election, no quorum, no on-chain arbitration
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{686--703}. Installation proceeds
+through \texttt{register\allowbreak{}App\allowbreak{}Locally} into Docker, and from that point every start and stop of the
+container goes through one component, the reconciler, described in its own source as the single
+level-based actuator, with a crash-backoff ladder of $[0,\ \num{30000},\ \num{300000},\
+\num{900000},\ \num{1800000}]\,\si{\milli\second}$ reset after \SI{600000}{\milli\second} of stable
+running (\S9) \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{130--131}. Sixty seconds after installing, the
+node re-ranks itself by \texttt{runningSince} and uninstalls immediately if it is now surplus.
+Convergence is not agreement; it is two opposing correction loops, and both of them correct
+over-installation while neither corrects under-installation faster than the next node's random draw
+(\S9).
+
+\paragraph{7. The host is attested.}
+Nothing a tenant can check. \fluxsas, the attestation service, serves a single listener on
+\texttt{127.0.0.1:\allowbreak{}16100} with mutual TLS mandatory and authorisation by client-certificate common
+name --- \fluxbench for every route, \texttt{fdm-nginx} for three --- so an external tenant has no
+network path to it at all (\S14) \srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{1042--1053,220--252}. Even with
+a path, the signature would not say what a tenant needs: the Ed25519 key used by \texttt{/v2/attest}
+for the default, \texttt{cdn}, \texttt{mesh} and \texttt{app} purposes is derived from static values
+compiled identically into every \fluxsas binary, so a valid attestation demonstrates possession of
+something every copy of the software contains rather than that a particular machine booted a
+particular image (\S14) \srccode{fluxsas/\allowbreak{}src/\allowbreak{}api\_server.h}{411--481}. One layer down, the eligibility
+gate that admits a node to the paid set at all is a benchmark signature produced by a process on the
+operator's own host and verified against \texttt{vec\allowbreak{}Benchmarking\allowbreak{}Public\allowbreak{}Keys}, five network-wide keys
+with timestamp validity windows --- collateral binds the tier, and the benchmark signature does not
+bind the hardware to it (\S4) \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{233--240}. What \emph{does} do real
+work is the boot chain: a Flux-controlled Secure Boot Platform Key pinned by hash inside \texttt{fes},
+fail-closed exit codes \num{50}--\num{57} that power the machine off rather than continue, a TPM2
+seal against PCR~7, and a dm-verity root filesystem (\S14). But the allow-list of known-good verity
+root hashes is served by two Flux-operated web endpoints that \textbf{fail open} --- if both are
+unreachable, the watchdog treats the node as secure and does nothing
+\srccode{fluxsas/\allowbreak{}src/\allowbreak{}watchdog.h}{566--596}. The honest summary of this step is that measured boot
+imposes real cost on a remote attacker, and that the assurance a node offers is a Flux-operated one
+rather than a hardware-rooted, tenant-verifiable one.
+
+\paragraph{8. \FDM and \PDNS make the application reachable.}
+The reverse path from a hostname to a container is Foundation-operated end to end (\S12). \FDM does
+not talk to \fluxd or to any peer-to-peer layer: it polls one Foundation-operated REST API,
+\texttt{api.\allowbreak{}runonflux.\allowbreak{}io}, for \texttt{apps/\allowbreak{}globalappsspecifications} every \SI{30}{\second} under an
+\texttt{ETag}, \texttt{apps/locations} every \SI{10}{\second} unconditionally, and permanent messages
+every \SI{120}{\second}, and no fallback source exists anywhere in the codebase
+\srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}flux/\allowbreak{}dataFetcher.js}{47--91}. Names are computed by string
+concatenation --- \texttt{$\app$\_$P$.app2.runonflux.io} per port and \texttt{$\app$.app2.runonflux.io}
+as the main alias --- and served either by Cloudflare in strict DNS-only mode or by the self-hosted
+\PDNS zone service. The \FDM host's own HAProxy terminates TLS against every \texttt{.pem} under
+\texttt{/\allowbreak{}etc/\allowbreak{}ssl/\allowbreak{}fluxapps/\allowbreak{}} and routes on the \texttt{Host} header to one of the application's
+container IPs, with per-server health checks of \texttt{inter 3s fall 2 rise 2 fastinter 500},
+i.e.\ an approximately \SI{6}{\second} detection floor
+\srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}haproxyTemplate.js}{260--319}. Sixteen Foundation-run
+\FDM/CDM hosts serve this path for the whole network; roughly two dozen game-server application types
+bypass HAProxy entirely through a single, unreplicated \texttt{flux-\allowbreak{}apps-\allowbreak{}dns-\allowbreak{}manager} instance
+(\S12). Inside the fleet, container-to-container names resolve through \fluxdnsd, which despite the
+name is a purely local file-tail resolver over a \texttt{membership.\allowbreak{}json} that \FluxOS writes, with a
+fixed \SI{5}{\second} answer TTL and \texttt{REFUSED} rather than \texttt{SERVFAIL} when it holds no
+snapshot (\S12).
+
+\paragraph{9. It runs and is monitored.}
+The reconciler holds the container to its desired state, resolved from four inputs in strict priority
+order with the operator's own lock winning over all (\S9). Around it run the periodic monitors: a
+node-status monitor every \SI{1.5}{\minute}, an application-availability check every
+\SI{3}{\minute}, a CPU-usage check every \SI{900000}{\milli\second}, an image-compliance sweep every
+\SI{3600000}{\milli\second}, and a storage check every \SI{20}{\minute} (\S9)
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}serviceManager.js}{433--563}. Location records carry a
+\SI{7500}{\second} TTL, and a departing node's \texttt{fluxnodesigterm} broadcast extends its
+applications' location TTL by $\texttt{SIGTERM\_EXPIRY\_MS} = \SI{420000}{\milli\second}$ rather than
+expiring them at once. Where the operator has opted an application in, \texttt{flux-\allowbreak{}telemetryd} ships
+per-container telemetry to a customer-chosen backend every \SI{15}{\second}. Crucially, none of this
+is metering: \Flux prices reservation, not consumption, so there is no usage counter to read, to
+attest, or to dispute (\S16). The only disputable fact is the binary one --- did the application run
+--- and that is observable by third parties from location records, \FDM health checks, and the
+tenant's own probes.
+
+\paragraph{10. It renews or lapses.}
+Expiry is arithmetic, not a decision. Entitlement is the predicate
+$\mathrm{Ent}(\app,\hgt) = \indic{\hgt \le e_\app}$, where $e_\app$ was fixed at promotion from
+$(\hgt_0, \dur)$ and is a function of the confirmed chain prefix alone (\S16). Every node evaluates
+it independently and reaches the same answer, and a periodic pass every
+$\texttt{expire\allowbreak{}Flux\allowbreak{}Apps\allowbreak{}Period} = 100$ blocks removes what has passed
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{298}. A renewal is an update, priced at
+$\max\{p_{\min},\ 0.9\,(\price - \varpi\price_{\mathrm{prev}})\}$ where $\varpi$ is the unused fraction
+of the previous term (\S16). \textbf{There is no grace window, no suspension state, and no
+data-retention guarantee}: when the paid-through height arrives the entitlement stops, and the
+removal path is the ordinary one. That is a consequence of the design rather than an omission ---
+Property ``No standing obligation'' in \S16 shows that any grace state would have to be a function of
+information not in the chain prefix --- but it is a real difference from what a tenant used to
+hyperscaler billing expects. The only automatic renewal that exists is
+\texttt{appsmonitor}, a Foundation-operated daemon that renews applications whose owner keys the
+Foundation itself holds, alongside a hardcoded single-address \texttt{usersToExtend} allow-list
+permitted to submit expire-only extensions on any owner's behalf (\S16).
+
+\paragraph{11. It may be reported and evicted.}
+There is no quorum. Moderation is a publisher: \FluxOS fetches
+\texttt{helpers/\allowbreak{}blockedrepositories.\allowbreak{}json} from \texttt{raw.\allowbreak{}githubusercontent.\allowbreak{}com/\allowbreak{}RunOnFlux/\allowbreak{}flux},
+caches it, and every \SI{1}{\hour} removes every locally installed application whose image, owner
+address or specification hash matches, spacing removals \SI{3}{\minute} apart (\S9, \S23)
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appSecurity/\allowbreak{}imageManager.js}{179--195,644--676}. The wider
+\texttt{fluxos-\allowbreak{}network-\allowbreak{}policy} channel carries the same shape for blocked and vetted repositories,
+the enterprise-node owner map, a node-tampering blocklist and a $\sim$2.0-million-row geolocation
+table, fetched every \SI{6}{\hour} or \SI{12}{\hour} and enforced fleet-wide with no canary and no
+staged rollout (\S12). The documents are unsigned; by the component's own account their authenticity
+rests on GitHub and on who can merge, and branch protection deliberately imposes no second-reviewer
+requirement. \S23 states the resulting measure exactly: the number of parties whose agreement removes
+an arbitrary application from every node is $\kappa_{\mathrm{deployed}} = 1$, the authentication on
+the decision is nothing, the record a node can verify is nothing, and the latency to fleet-wide
+effect is bounded by \SI{7}{\hour} (\SI{13}{\hour} for the tampering list).
+
+\paragraph{12. Operators are compensated.}
+From issuance alone. For $\hgt \ge \hpon = \num{2020000}$ the block subsidy is
+$\subsidypon(\hgt) = s_{r(\hgt)}$ with $s_0 = 14\flux$, $s_{k+1} = \lfloor s_k \cdot 9/10 \rfloor$,
+and $r(\hgt) = \min(\lfloor (\hgt - \hpon)/\redint \rfloor,\ \redmax)$ for
+$\redint = \num{1051200}$ blocks and $\redmax = 20$ (\S5)
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2799--2816}. Of that, the three tier payees receive
+$\lfloor \subsidypon(\hgt)\,\tbase{X}/14\flux \rfloor$ with
+$(\tbase{\tC},\tbase{\tN},\tbase{\tS}) = (1,\ 3.5,\ 9)\flux$, and the remainder
+$\devfund(\hgt) = 0.5\flux$ at $r = 0$ --- $1/28$, or \SI{3.57}{\percent}, of \PoN emission --- is a
+consensus-enforced payment to the hardcoded address \texttt{t3h\allowbreak{}Pu1YDe\allowbreak{}GUCp8m7BQCnn\allowbreak{}NUm\allowbreak{}RMJBa5Rady\allowbreak{}A}
+(\S5) \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2877--2895}. Emission does not stop: after twenty reductions the
+subsidy freezes at $\num{1.70207313}\flux$ per block, i.e.\ $\num{1789219.274256}\flux$ per year,
+indefinitely (\S5). \textbf{Nothing the tenant paid in step~2 reaches any of these payees.} The
+tenant's money is at one address and the operator's money is newly minted, and the only thing
+connecting them is that both happen on the same chain.
+
+% =====================================================================
+\subsection{Pass two: the target architecture}
+\label{sec:e2e:target}
+
+Everything in this subsection is \planned. Nothing in it is deployed, no part of it is scheduled to a
+height except where a height is explicitly named as proposed, and no sentence below should be read as
+a statement about the network as it runs. Where the target depends on something unbuilt or undecided
+that dependency is named at the step, in the same paragraph.
+
+\paragraph{1. A tenant would construct a specification.}
+The document would be a \specv{9} specification carrying \texttt{duration} as a first-class field, a
+\texttt{paymentMemo} of up to \num{512} characters in the draft schema, a \texttt{referralCode}, and
+a \texttt{machineType} drawn from $\{\texttt{standard}, \texttt{gpu}, \texttt{vps}\}$, with the four
+\specv{8} renames applied and \texttt{enterprise} removed (\S10). Applications already deployed would
+not be left behind on older versions and would not be offered the choice: the settled migration is
+\textbf{forced}, an application-update message carrying a special signature that rewrites every
+application forward onto \specv{9}, after which updates on older specification versions would be
+disabled and, once the fleet had moved, the legacy validation paths removed (\S10)
+\srcintent{evidence/design/08-answers-round-2.md}. That supersedes the version-floor-plus-deprecation
+design and is the better answer to the \num{322}-application, \SI{26.9}{\percent} legacy tail of
+step~1 of the first pass, because it would clear the tail at one moment rather than letting it trail
+off at each owner's own pace. It also creates a capability this paper names rather than lets a reader
+find: a key able to rewrite a tenant's signed specification without that tenant's signature, which
+\S10 places in the same class as the unsigned network policy, the release channel and the
+emergency-block keys, and which the team's decision bounds as single-use, migration-scoped and
+hardcoded --- with no opt-out for an owner who would rather remain on the document they signed
+(\S10, C40).
+
+Five things are undecided or unbuilt at this step and each is load-bearing. \specv{9} has no
+enforcement height in shipped configuration or on the live pricing endpoint --- the height itself is
+now settled at $\hstar = \num{3050000}$ (\S10) but is not yet shipped --- and \S10 states the
+ordering constraint that the height must \emph{follow} implementation of the three economic fields
+rather than precede it. \texttt{paymentMemo}, \texttt{referralCode} and \texttt{machineType} have
+\textbf{zero consumer code anywhere in \FluxOS} (\S10) --- they are exactly the fields \PNR,
+referrals and the VPS tier are each stated to depend on. The RFC-0 draft has no signature field at
+all and states its canonicalization rules as prose \texttt{MUST}s with no schema or code enforcement,
+which for a document meant to be compared byte-for-byte across roughly \num{6500} independent
+validators is the defect to name (\S10). The removal of \texttt{enterprise} arrives with no declared
+replacement, so \specv{9} as drafted cannot express a private deployment at all, against
+\SI{18.7}{\percent} of currently deployed applications that use it (\S10). And the migration key's
+scope --- whether \fluxd itself would reject a forced update touching anything beyond the version
+field and the four renames, or whether that restraint would live only in the tooling that constructs
+the message --- is open in \S10, as is whether the key is retired when the migration completes rather
+than left live in a binary. Where the submitter is autonomous software rather than a person, the
+specification would travel with a delegation certificate
+$\mathsf{cert} = (pk_\agent, \scopeset, \budget, [t_0,t_1], \mathsf{rev}, \nu)$ signed by the
+principal's full 2-of-2 ceremony, and a node would accept it by a predicate computable from the
+message, its own chain state at $\hgt$, and nothing else (\S17). The deployment half of that
+authority composes with machinery that already runs; the spending half does not, and \S17 classes it
+as not achievable on the \Flux L1 without either a new trusted party or new consensus state.
+
+\paragraph{2. The tenant would pay.}
+One transaction, one recipient, one memo. The settled shape is a single transparent output paying the
+full price $\price(\app,\hgt)$ to $\mathsf{sink}$ --- one application-payment address carried as a
+consensus constant from $\hpa$ onward --- together with one zero-value \texttt{OP\_RETURN} whose data
+field is the \num{32}-byte $H(m_\app)$; these are rules PS1 and PS2 of \S7
+\srcintent{evidence/design/08-answers-round-2.md} \srcdoc{plan/conflicts.md C36}. There would be no
+second output, no fee component and no new transaction type. The payer would construct one recipient
+and its own change and would perform no other arithmetic, so any wallet able to pay an address and
+attach a memo --- and any agent holding a bare wallet API --- could construct a valid payment without
+linking a \Flux-specific library or waiting for tooling to be rolled out. \S7 records the deployed
+\CumulusVPN entitlement path as the existence proof for exactly that shape, and records the two
+shapes not taken and why: a fee-carried share would make the amount a function of the sending
+wallet's change calculation, and a typed transaction would put a library dependency in front of every
+payer. Direct per-deployment settlement would remain the default and the recommended path for
+autonomous software, for the reason \S16 proves: entitlement is a function of the confirmed chain
+prefix alone, so no account, no stored credential and no relationship outliving the deployment would
+be involved. The alternative would be the custodial path \S16 documents as \shipped, in which a
+facilitator holds the user's keys and pays the chain for them, and over which \S16 recommended that a
+recurring charge be authorised by a \S17 certificate whose scope $\scopeset$ is restricted to
+\emph{renew this application at no more than this price} under budget $\budget$, because that is the
+only one of the three candidate authorities that removes the custodian rather than relocating it ---
+a recommendation the settlement has since overtaken, since the protocol is to offer no automatic
+renewal at all and recurrence stays in the service layer, by custody (\Cref{rem:no-protocol-renewal}).
+Two of this step's open decisions were closed by the settlement: O3, the
+memo's semantics, is $H(m_\app)$ in an \texttt{OP\_RETURN}, and O18, the serialisation and the
+enforcement boundary, is the single-output shape with the split applied by consensus. Two remain.
+O14, the identity of $\mathsf{sink}$, is unfixed --- keeping the address in use today preserves
+tooling and one continuous history but mixes pre-$\hpa$ spendable receipts into the counter of
+step~4, and a consensus-level address is a consensus-level commitment. O8, which payment channels
+must settle through $\mathsf{sink}$ at all, is the load-bearing one, because every channel outside it
+is revenue the consensus split never touches. Where a deposited balance would live --- on-chain,
+\FluxOS-held or wallet-held --- was the architectural choice \S16 could not make, alongside the
+authorisation object; both are now settled out of protocol scope, the balance held off-chain by a
+third-party operator and no authorisation object existing at the protocol level at all
+(\Cref{rem:balance-location}, \Cref{rem:no-protocol-renewal}).
+
+\paragraph{3. The payment would be validated.}
+Two consensus rules would run at $\hgt \ge \hpa$, and neither would involve the payer. PS3 makes any
+output paying $\mathsf{sink}$ unspendable, so a block containing such a spend would be invalid and
+the value would leave circulation at the moment of payment. PS4 divides what arrived:
+$A_\Phi = \lfloor r(\hgt)\,v/100 \rfloor$ with $r(\hgt) = 100\,\nodeshare(\hgt) \in \mathbb{Z}$ is
+credited to the fee pool, and $A_F = v - A_\Phi$ is credited to the Foundation, the single floor
+taken once per received output and favouring the Foundation by strictly less than $1\sat$ (\S7).
+\FluxOS would check three things and no others: that a payment exists, that it carries $H(m_\app)$,
+and that it covers $\price(\app,\hgt)$. \textbf{The payer splits nothing and can therefore get
+nothing wrong, and \FluxOS has no split to police.} That is the point \S7 makes about the decision
+rather than about the outcome: choosing the single-output shape for \emph{wallet compatibility} also
+removed the \emph{enforcement} ambiguity, and both properties came from one choice (C38). Three
+consequences follow and \S7 proves them together. A wallet could not mis-round or omit a share that
+it never computes. A \FluxOS release could not alter $\nodeshare(\hgt)$, the tier partition or the
+destination of either share, because those would be evaluated in \texttt{ConnectBlock} rather than in
+\FluxOS, and a node running a changed rule would be rejected by every other node. And the coinbase
+would gain no output, because both shares would be added to outputs that already exist. What consensus
+would \emph{not} fix is the amount: \FluxOS would still compute $\price$ from the height-scheduled
+table, and \S7's formulation is the honest one --- \emph{consensus would fix the distribution, policy
+would fix the base}, against a table revised five times with the CPU rate falling \num{100}-fold.
+O7 --- whether received value can be visible to consensus while the payer is shielded --- is moot:
+both shielded pools are to be retired (\S\ref{sec:shielded-retirement}), so all settlement is
+transparent. Whether the table's rebasing becomes rule-based or oracle-driven is O9, settled as rule-based in
+\S\ref{sec:pnr:recommended}, which leaves what the rule is open.
+The signed negative acknowledgement of requirement R16.1, which would make an underpaid registration
+observable to its payer, is specified in \S16 and is not built --- and it is the one repair this step
+still owes an autonomous payer.
+
+\paragraph{4. Value would enter the fee pool.}
+This is the step with no deployed counterpart, and it is the mechanism the whole target economy rests
+on. The fee pool would be a single consensus-state integer $\pool_\hgt \in \mathbb{Z}_{\ge 0}$ in
+$\sat$ with $\pool_{\hpa-1} = 0$, \emph{committed in the coinbase} of every block from $\hpa$ and
+recomputed by every validator from the parent value and the block body as
+\[
+  \pool_\hgt \;=\; \pool_{\hgt-1} \;-\; D_\hgt \;+\; \text{receipts}_\hgt ,
+\]
+with a block whose committed value differs from the recomputation being invalid (\S7, rule PC)
+\srcintent{evidence/design/08-answers-round-2.md} \srcdoc{plan/conflicts.md C37}. That closes O2, and
+the reasons \S7 gives for it are the ones that matter to a reimplementer rather than to a reader:
+reorg-exactness would come free, because the pool would be a pure function of the chain, so a reorg
+would recompute it with no rollback journal and no way for the pool to diverge from the UTXO set; no
+new database would be introduced, because the coinbase parsing and enforcement path the commitment
+needs is the one \fluxd runs every block for the dev-fund minimum and the three tier payouts
+\shipped; and a divergent implementation would be rejected at the block where it first arises rather
+than one block later. \S7 rejects a separate store on this network's own
+precedent --- the \FluxNode registry needed a crash-recovery marker and a repair RPC precisely
+because a side database can diverge from the coins database --- and rejects a header field as the
+widest-blast-radius fork available.
+
+Nothing would be added to the coinbase at any point in the mechanism. The Foundation's
+\SI{80}{\percent} would flow through the \emph{existing} dev-fund output, the operator drip would be
+added to the \emph{existing} three tier outputs, and the pool commitment itself would occupy the
+coinbase's data-bearing field rather than a value-bearing one (\S7, I4). Supply would be conserved by
+construction and not by bookkeeping: PS3 removes what is paid to $\mathsf{sink}$ from circulation and
+the coinbase re-issues it, so circulating supply would differ from \S5's issuance schedule by exactly
+the pool balance in flight, $\supply'(\hgt) = \supply(\hgt) - \pool_\hgt$, which at steady state is
+\SI{30}{\day} of the operator share. The same rule turns the sink's balance into a
+\emph{public cumulative-revenue counter}: the gross application revenue settled through this path
+since $\hpa$ would be the balance of one address, queryable by anyone, publishable by no party in
+particular and withholdable by none --- which is what would let \S\ref{sec:evaluation} replace an assumed $100\flux$
+per application per month with a measurement, and what would make O17 closable by observation rather
+than by disclosure. One qualification travels with the counter and must not be dropped: it would
+measure only what settles through this path, so every channel left outside it by O8 is revenue the
+counter would not see and the split would not touch.
+
+Four things about the pool were undecided, all four are now settled (three at
+\Cref{tab:pnr-recommended}, O21 at \Cref{rem:pnr:o21}), and two hard security requirements stand
+regardless. O11, whether the pool is seeded at activation,
+decided whether the mechanism ramps over roughly ninety days or switches on --- it is settled at no
+seed, because a seed would be a one-off Foundation transfer to operators and would have to be
+labelled one. O5 and O6, the destinations of a tier share with no payee and of the $\le 2\sat$
+partition residue, are worth almost nothing per block and are nonetheless fixed explicitly --- both
+stay in $\pool$ --- because an implementation difference in either is a chain split. O21, created by
+the settlement itself, is settled on the same-block option (\Cref{rem:pnr:o21}): the division is
+applied on arrival, at the $\nodeshare$ in force at the receipt height, and the Foundation share is
+paid through the dev-fund output of the block that receives it, which needs no second accumulator
+and imposes no lag but makes that output depend on the block body rather than on the parent state
+alone --- a property the one-block deferral would have restored, and which is given up because it
+serves a verifier \S\ref{sec:bridge} establishes cannot exist for \Flux. The requirements are S1 and
+S2. An emergency block, produced through the hardcoded 2-of-4 key path with no time or stall gating,
+must not drip, or the holders of two of four keys could accelerate the release of accumulated fees
+--- $\pool_{\hgt-1}/\drip$ per block, paid to whichever nodes head the queue, including any they
+operate --- on every block they produce; they could not redirect it, because an emergency block
+still fills the deterministic tier payout (\S7). And forfeitures from the moderation mechanism of
+step~11 must never enter $\pool$ (\S7).
+
+\paragraph{5. Consensus would select the payees, and the pool would drip to them.}
+The rotation would be unchanged: \PNR would consume \PoN's payee set and add no selection mechanism
+of its own (\S7). Each block would drip $D_\hgt = \lfloor \pool_{\hgt-1}/\drip \rfloor$ from the
+\emph{parent} state, partitioned by tier as
+$D_{\hgt,t} = \lfloor 2\tbase{t}D_\hgt/27 \rfloor$ over the integers $2\tbase{t} \in \{2,7,18\}$,
+giving $(\tierratio{\tC}, \tierratio{\tN}, \tierratio{\tS}) = (2/27,\ 7/27,\ 18/27) =
+(\SI{7.41}{\percent},\ \SI{25.93}{\percent},\ \SI{66.67}{\percent})$, and the existing tier output
+would carry $\subsidy_t(\hgt) + D_{\hgt,t}$ rather than a new output. The pool would update as
+$\pool_\hgt = \pool_{\hgt-1} - D_\hgt + \epsilon_\hgt + U_\hgt + F_\hgt$. Two properties follow and
+both matter for how a reader should read this step. At steady state the drip equals the inflow, so
+the pool is a delay line with time constant $\drip$ blocks and not a treasury that anyone could
+choose how to spend (\S7). And because the drip is taken from the parent state and is linear in it,
+an operator who is also a tenant and times a payment to land the block before its own node is paid
+recaptures exactly $\tierratio{t}/\drip$ of its contribution --- $7.72 \times 10^{-6}$ for a Stratus
+node at the settled $\drip$, three orders of magnitude inside the design's own requirement (\S7). The
+drip constant is settled at $\drip = \num{86400}$ blocks, exactly \SI{30}{\day} at \SI{30}{\second}
+spacing, which closes O1 \srcintent{evidence/design/08-answers-round-2.md}. The trade-off it resolves
+does not disappear with the decision, and \S7 restates it so that a later revision starts from it:
+within-tier spread $\approx \rot{\tC}/\drip$ and targeted recapture $\approx \tierratio{t}/\drip$
+both fall with $\drip$, while lag, activation ramp and steady-state pool size $F\drip$ all rise with
+it, over the domain $[10^{4},\ 2\times10^{5}]$ blocks in which the constant was chosen. Because
+$\drip$ would be a consensus constant, revisiting it would be a network upgrade rather than a
+configuration change --- so what accompanies the value is O12, settled as a documented review
+trigger at $2\times$ the current Cumulus count rather than an automatic rule, since at $4\times$ the
+decay-side spread reaches \SI{16}{\percent}.
+
+\paragraph{6. The application would be placed across nodes.}
+Placement would run under the \specv{9} reconciler: roughly \num{25} focused service packages
+including \texttt{appLifecycle}, \texttt{appMesh} and \texttt{appPlacement}, a drain server exposing
+\texttt{drain\_app}\slash\texttt{stop\_app} over a UNIX-socket JSON-RPC endpoint, and per-application-CA
+backend TLS under which a node generates a local Ed25519 keypair and obtains a \SI{30}{\day} host
+certificate signed by the application's own certificate authority through \fluxbench, renewed
+automatically (\S10). That substrate is built and tested --- \num{289} unit-test files with
+\num{7763} test cases run on every push --- and it lives on an individual contributor's fork rather
+than in the organisation repository, which \S10 and \S23 both record as a fact about where
+development authority sits (\S10). Two things are inert. \texttt{quorum\allowbreak{}Grant\allowbreak{}Activation\allowbreak{}Height}, the
+height gate for the fork's mastership and active-standby quorum plane, is read by production code but
+set only in integration-test fixtures and is absent from shipped configuration (\S10). And the
+conflict-resolution rule itself would be unchanged: nothing in any drafted section replaces
+earliest-broadcast-wins, so the target inherits both the \SI{90}{\second} wait and the honesty
+assumption on \texttt{broadcastedAt} that \S9 states.
+
+\proposednote{Earliest-broadcast-wins is retained at target. No section of this paper specifies a
+replacement, and on reflection none is needed for the reason \Cref{rem:pnr:framing} gives: because
+\PNR{} pays no marginal reward for hosting, winning a placement race carries no direct income, so the
+race has no financial stakes and the incentive to game it is weak. A deterministic scheduler would be
+preferable on other grounds --- predictability, capacity balancing --- but it is a \FluxOS{} design
+question, not a consensus one, and replacing a mechanism that is not currently being gamed is not a
+prerequisite for anything else in this paper. \srcinferred.}
+
+\paragraph{7. The host would be attested.}
+The proposed answer is not a better key but a design that stops depending on a key and depends on
+collateral instead (\S14). A node would opt into the attested tier by posting a bond $\beta_i$
+\emph{separate from} its \FluxNode collateral, which would remain self-custodied and untouched by any
+slashing path. A claim would be a tuple
+$\mathsf{cl} = (\mathsf{subject}, \mathsf{predicate}, \mathsf{value}, \hgt, \mathsf{nonce})$ signed under
+the node's key; a committee of $n$ bonded nodes would be sampled deterministically as
+$\mathcal{C}(\mathsf{cl}) = \mathrm{Top}_n(i \mapsto H(\mathsf{subject} \| \mathsf{prevHash}(\hgt) \| i))$,
+reusing the sortition \fluxd already implements for \PoN slot eligibility; a claim would be accepted
+at $k$ of $n$ identical signatures, challengeable for a window $\Delta_{\mathrm{chal}}$ by any party
+posting $\beta_{\mathrm{chal}}$, and a resolved challenge would slash each original signer by a
+fraction $s$ (\S14). Requirement~0 gates the entire construction: the attestation signing key would
+have to be derived from or sealed to a per-machine hardware root, which
+Property~``Attestation is not machine-bound'' in \S14 says it is not, and a tenant-reachable
+verification path would have to exist where today there is none. Absent the first condition a bond
+would secure a signature anyone holding the software can produce, making it forfeitable for
+statements the bonded party never made. The four committee parameters are recommended by \S14 at
+$n = 9$, $k = 6$, $\Delta_{\mathrm{chal}} = \num{2880}$ blocks and $s = 1$, and the bond-sizing
+function at a floor $\beta_{\min}$ or a fixed fraction of the value secured, whichever is larger,
+with both coefficients still to calibrate: $\beta_i$ must scale with the value secured by the claims
+a node is sampled to sign, not with its \FluxNode tier, because a fixed bond cannot secure an
+unbounded reserve (\S14). Admissible claim classes are likewise recommended as the objectively
+re-checkable class only at launch, \S14 explicitly declining to invent a resolution procedure for
+general computation-integrity claims.
+
+\paragraph{8. \FDM and \PDNS would make the application reachable.}
+This is the step where the target is least specified, and the paper should not pretend otherwise. The
+requirement is legible from \S12's centralization inventory: \texttt{api.\allowbreak{}runonflux.\allowbreak{}io} is the sole
+application-discovery source with no on-chain or peer-to-peer fallback coded anywhere, so any
+decentralization of reachability starts with a discovery fallback that does not exist. Two further
+interfaces would be needed and neither is designed. First, \S23 records as open whether \FDM and
+\PDNS honour a ban by dropping routes at $\hgt_b + \Delta_{\mathrm{exec}}$, where $\hgt_b$ is the
+height of the coinbase carrying the ban memo of step~11 --- without which a banned application would
+remain reachable at its name until the last node had removed it, and with which the
+Foundation-operated reachability plane acquires a new dependency on moderation state. Second, private overlay deployments (\VPON s) are a roadmap item with no wire
+protocol, key-management scheme or placement-isolation mechanism specified anywhere; \S12 states the
+two requirements a \VPON would have to meet --- membership gated by possession of a private key
+rather than by resolvability, and a reachability plane not positioned to learn which nodes host a
+private deployment or on whose behalf --- and states that the construction is open. The shipped
+\CumulusVPN transports (AmneziaWG obfuscation, WireGuard-over-TLS, client-side multi-hop) are cited
+by \S12 as building blocks a future design would not have to invent, not as a design.
+
+\paragraph{9. It would run and be monitored.}
+The target changes less here than anywhere else, and deliberately. Reservation pricing would remain,
+so there would still be no metering on the application path, no counter to attest and no counter to
+dispute; \S16 notes that this is the same choice \S7 makes one layer down when it removes any
+metering or attestation dependency between payment and placement. What \specv{9} would add is
+drain-aware shutdown: marking a component draining would trigger an immediate presence rebroadcast,
+so the signal a routing layer consumes rides the gossip path \FluxOS already uses (\S10). The
+companion \texttt{flux-shutdownd} pipeline is \inprogress --- its signal-and-cleanup stages are wired
+to production events, while drain-broadcast and \texttt{preStop} execution are modelled and
+unit-tested but not yet reachable (\S9). Whether the target architecture should acquire an
+availability remedy at all is settled by \S16 as no, at the protocol layer (\Cref{rem:no-sla}): the
+minimum viable input would be a third-party-observable availability record, which does not exist, and the
+cost would be reintroducing the metering dependency the design removed.
+
+\paragraph{10. It would renew or lapse.}
+Two paths, and conflating them is the error this step exists to prevent. On the default path there
+would be nothing to renew, because \textbf{the payment is the renewal}: a tenant wanting another term
+would send another payment of the shape of step~2, and entitlement would remain what \S16 proves it
+to be --- a function of the confirmed chain prefix alone. There would be no standing obligation, no
+balance to track, no charge to authorise, and \emph{no lifecycle state machine at all}, so there
+would be nothing for a policy to decide and no state a policy could get wrong. That is a consequence
+of the design and not a gap in it: \S16's corollary is that a grace or suspension state would have to
+be a function of information absent from the chain prefix, so the direct path cannot carry one
+without surrendering the property that makes it the recommended path for autonomous software. Expiry
+would stay arithmetic.
+
+The second path would remain custodial, and \S16 documents what it is as \shipped rather than
+projecting what it might become: a \emph{prepay-and-forward facilitator} that holds both of a user's
+private keys --- the identity key whose address is written into the specification's \texttt{owner}
+field, and the payment key --- charges a card, and pays the chain on the user's behalf, keeping no
+user balance and no withdrawal path (C42). The four-state machine
+$\mathrm{st}(\app,\hgt) \in \{\textsf{funded}, \textsf{grace}, \textsf{suspended}, \textsf{evicted}\}$
+belongs to something else: a deposited-balance credits layer that \S16 specifies in full and marks
+explicitly as unimplemented. Were it built, a renewal would fire at
+$\hgt = e_\app - \Delta_{\mathrm{pre}}$ if the balance covers $\price^{\mathrm{ren}}$; a lapse would
+move the application to \textsf{grace}, where it would keep running and keep its data; after
+$G_{\mathrm{g}}$ blocks it would move to \textsf{suspended}, containers stopped but not removed and
+volumes retained; and only after a further $G_{\mathrm{s}}$ blocks would it be \textsf{evicted} and
+its data destroyed. The separation of stopping from deleting is that layer's design commitment and it
+has a price \S16 bounds exactly: revenue forgone over the whole window is at most
+$\ninst_\app\,p_{\mathrm{hdd}}(\hgt)\,\resvec^{\mathrm{hdd}}(\app)\,(G_{\mathrm{s}} +
+G_{\mathrm{g}})/L^{\ast}(\hgt)$, linear in the declared disk footprint and independent of the CPU and
+RAM reservation. Its four parameters are settled at \Cref{tab:credit-params} --- $G_{\mathrm{g}} =
+\num{2880}$ blocks from the domain $[240, 2880]$, $G_{\mathrm{s}} = \num{20160}$ from
+$[2880, 43200]$, $\Delta_{\mathrm{pre}} = \num{120}$ from $[20,\infty)$, bounded below by
+confirmation depth plus propagation, and the resumption charge $\price^{\mathrm{res}}$ at one renewal
+period from $[0,\infty)\flux$ --- and all four are service-layer values, because the two
+architectural choices they were downstream of are settled out of protocol scope: a deposited balance
+lives off-chain with a third-party operator, and nothing in the protocol authorises a recurring
+charge (\Cref{rem:balance-location}, \Cref{rem:no-protocol-renewal}). One requirement crosses from
+\S7 and constrains any answer: after $\hpa$ every
+application-hosting charge, whatever the payment channel, must settle as exactly one L1 payment to
+$\mathsf{sink}$, or the consensus split is void and the revenue counter of step~4 under-reports ---
+which is why a credit balance may not become an off-chain ledger of hosting charges. And whichever
+path a tenant took, the invariant that makes the custodial one optional rather than structural would
+hold: for every deployment reachable through a custodian or through credits, the same deployment is
+reachable at the same height through an explicit transaction the tenant signs and broadcasts itself
+(\S16).
+
+\paragraph{11. It could be reported and evicted.}
+Every step of the decision would be a chain fact, and that is the whole difference from step~11 of
+the first pass. A report would be a \fluxd transaction of a new \FluxNode-family type carrying the
+application hash to be banned, shaped after the deployed start and confirm transactions and
+\emph{indexed}, so that any node could enumerate the open reports on an application from its own
+chain state; it would carry no fee and no bond, and its confirmation height $\hgt_0$ would fix the
+canonical clock and \emph{freeze the electorate} (\S23)
+\srcintent{evidence/design/08-answers-round-2.md}. A window of
+$\Delta_{\mathrm{vote}} = \num{2880}$ blocks --- \SI{24}{\hour} at \SI{30}{\second} spacing, chosen
+short on the team's reasoning that removal often needs to be fast --- would open on that
+confirmation. Each vote would be a second special transaction, signed with a node \emph{owner} key
+and \textbf{fee-less}, which is what removes the disenfranchisement objection: no operator would need
+spendable \flux at the key that carries its collateral in order to vote. \fluxd would count the
+quorum internally from those transactions, so there would be \textbf{no off-chain tallier}, no
+certificate for anyone to assemble and no gossiped object anywhere in the decision path --- the
+property \S23 proves as public verifiability, under which two honest nodes holding the same canonical
+chain hold the same enforcement set exactly rather than up to gossip delay. Weight would be
+collateral-weighted at one unit per $\num{1000}\flux$, so per node $\tC \mapsto 1$,
+$\tN \mapsto 12.5$, $\tS \mapsto 40$ against a measured total $\vtotal = \num{88514.5}$ units, and
+the rule would be $Y_r(\hgt_c) \ge \vthresh \cdot \vtotal^{\!\star}(\hgt_0)$ with $\vthresh = 0.25$
+as an \emph{absolute} fraction of total weight and abstention counting as ``no''.
+
+On the threshold being crossed the block template would change: the \PoN producer would carry a
+\emph{ban memo} in the coinbase, \textbf{at most one per block}, so bans would serialise at one per
+\SI{30}{\second} slot and the coinbase would grow by at most one fixed-size memo however many reports
+were open --- the same constraint \S7 respects when it routes the revenue split through outputs that
+already exist. \FluxOS would observe the memo and purge, reusing the removal path the deployed
+blocklist sweep already exercises, after a confirmation delay $\Delta_{\mathrm{exec}}$ that exists
+because a purge is not locally reversible. A report that did not reach threshold inside its window
+would simply expire: nothing removed, nobody penalised, the reporter's capacity released, and the
+same application immediately re-reportable with no cooldown --- which \S23 argues is the mechanism
+working rather than failing, because abstention counts against removal and most reports are expected
+to end this way. Anti-spam would be priced in the resource that already prices voting: an identity
+could hold at most as many concurrently open reports as it operates confirmed nodes, which is
+Sybil-neutral because re-keying moves nodes between owner keys without changing the sum, caps the
+network at $\lvert N(\hgt)\rvert = \num{6489}$ concurrent reports, and prices sustained nuisance at
+$\num{1000}\flux$ of locked, recoverable collateral per slot --- with no bond, no custody script and
+no forfeiture destination to argue about.
+
+Two properties are worth carrying into this composition. Turnout is a liveness parameter and never a
+safety parameter, because the threshold depends on the electorate and not on who votes, so low
+turnout makes eviction strictly harder (\S23). And the safety property is exactly a collusion bound,
+which at the measured distribution is $\kappa(0.25) = 4$ by owner identity --- the operative figure,
+since votes are signed with owner keys --- falling to $3$ once addresses linked by a shared node key
+or a shared collateral funding transaction are merged: safety against wrongful eviction would not be
+a property of the mechanism but the assumption that three or four specific parties do not agree
+(\S23). The category taxonomy was the single open parameter on which the mechanism's consistency with
+the roadmap's own published ``behaviour, not content'' principle depended; its scope is now ruled on
+--- the quorum is a network-level content veto, superseding that principle (\Cref{rem:content-veto})
+--- and only its enumeration remains open. The rest of what this composition first carried as
+undecided is settled at the values of \Cref{tab:23-recommended}: the banned hash is over
+$(\mathsf{app\_name}, \mathsf{owner})$, which is also the enforcement scope; inclusion of the ban
+memo is consensus-required at every height at which a carried report remains unbanned, over the
+first such report in the order least crossing height, then least $H(r)$, and a report on a hash
+already in the ban set is invalid \srcintent{08-answers-round-2.md, round 18};
+$\Delta_{\mathrm{exec}} = \num{120}$ and $\Delta_W = \num{20160}$ blocks;
+the relay policy for fee-less transactions is a per-identity mempool quota; the graduated
+\SI{10}{\percent} and \SI{15}{\percent} tiers, each of which one or two identities can reach alone,
+are removed; and $(m, T) = (21, \num{86400})$ for the recommended second chamber, which \S23 is
+careful to say raises the cost of \emph{surprise} rather than the cost of \emph{capture}.
+Reinstatement has no path at all, and \S23 states that as an open problem with requirements rather
+than inventing one. Two questions could not be settled by choosing a parameter and had to be
+verified in \fluxd, because the mechanism rests on them: whether the emergency-block path is subject
+to the coinbase rules the ban memo would rely on --- if it were not, two of four hardcoded keys could
+ban an application with no report, no votes and no threshold; it is, checked against source
+(\Cref{rem:emergency-coinbase}) --- and whether re-addressing a node resets its recorded age, which
+decides whether the tenure gate does any work and remains unverified. And one requirement crosses
+back to \S7: forfeited tenant balances must never enter $\pool$, or
+evicting an application would pay the fleet that voted to evict it.
+
+The notation collision this composition exposed has been resolved: $\kappa$ now denotes \S23's collusion-set size and nothing else. \S14's claim object is written $\mathsf{cl}$ and the bridge's per-chain cap is $\overline{M}_c$ \srcdoc{plan/conflicts.md C43}.
+
+\paragraph{12. Operators would be compensated.}
+From issuance \emph{and} revenue. At the proposed activation height $\hpa = \num{3466630}$ the
+subsidy would be cut to $6.3\flux$ per block and the operator share would begin at
+$\nodeshare = 0.20$, rising by $\rampstep = 0.05$ at each subsequent reduction to the cap
+$\nodesharecap = 0.50$ at height \num{9378400} (\S7). At activation, operator issuance would be
+$\num{6386040}\flux$ per year on the operator-only basis --- excluding the dev-fund remainder, which
+is why \S7 corrects the design intake's own parity table downward by \SI{3.7}{\percent} --- and \PNR
+income at the intake's activation-scale revenue assumption $V_0 = \num{1431600}\flux$ per year would
+be $\num{286320}\flux$ per year, i.e.\ \SI{4.29}{\percent} of operator income. Parity revenue would
+be $\num{31930200}\flux$ per year, $22.3\times V_0$. \S7 states the conclusion without softening:
+\textbf{with flat demand there is no crossover, ever}, because the perpetual tail of
+$\num{862659}\flux$ per year to operators exceeds $\nodesharecap V_0 = \num{715800}\flux$ per year
+and the tail is perpetual by \S5. Two things were open at this step and both would have changed the
+arithmetic; both are now settled. The sequencing of \PNR activation against the parallel-asset
+emission cut, contested between the design intake and the public roadmap, is settled below, and O20
+--- whether the PA-Depletion halving applies uniformly to the three tier bases and to the dev-fund
+remainder --- is settled as uniform (\Cref{tab:pnr-recommended}), which is the basis every parity
+figure above assumes. And the property that reorders the rest of this paper belongs here:
+under the specified rule, a node's \PNR income would be a function of its tier and its queue position
+and of nothing else, so its derivative with respect to applications hosted would be identically zero
+(\S7).
+
+Sequencing conflict C1a, which the transition table below depends on, is settled: \PNR{} activation
+and the parallel-asset emission cut are \textbf{simultaneous} at $\hpa = \num{3466630}$
+\srcintent{08-answers-round-2.md, round 5} (\planned), superseding the roadmap's strictly-after
+ordering (\Cref{rem:c1a-settled}). The accepted cost is stated with the decision rather than beneath
+it: simultaneity means no external observer can confirm that \PNR{} pays operators before
+parallel-asset mining rewards are retired, because there is no interval in which one has happened and
+the other has not.
+
+A numeric disagreement this composition exposed has been resolved in favour of \S7's basis: operator issuance at \PNR{} activation is $\num{6386040}\flux$ per year on the operator-only basis, and \S23's launch-deterrent proposition now uses it. The derived per-node deterrent of about $\num{0.10}\flux$ per Stratus node per application per year is unaffected at the precision stated \srcdoc{plan/conflicts.md C43}.
+
+\begin{remark}[The two retrieval heights are not a disagreement]
+The measured chain tip appears as \num{2917115} in \S4, \S7's rotation remark, \S20 and \S23, and as
+\num{2912015} in \S5's supply figure and \S7's activation-table baseline, both dated 2026-09-03.
+C30 resolves this: the live API snapshot was taken at the first height and the emission model
+evaluated at the second, roughly \num{5100} blocks earlier on the same date, so neither is wrong.
+The convention this section follows, and which \S3's methodology paragraph states, is that every
+figure names its own height rather than the paper fixing one.
+\end{remark}
+
+% =====================================================================
+\subsection{What changes, and what does not}
+\label{sec:e2e:diff}
+
+%% longtable rather than table[H]: the twelve rows plus caption exceed one text page (162pt
+%% overfull vbox, caption pushed off the page). Same header pattern as Appendix B. Round 18, G30.
+\begingroup
+\scriptsize
+\renewcommand{\arraystretch}{1.2}
+\begin{longtable}{@{}p{0.055\linewidth}p{0.265\linewidth}p{0.29\linewidth}p{0.30\linewidth}@{}}
+\caption{The twelve steps, deployed against target, with the transition condition for each. The last
+column is the one to read: since rounds 11--18 most rows terminate in a settled value awaiting code
+or a network upgrade, and the rows that still end in a decision nobody has taken are 1 (the
+migration key's scope and the envelope replacing \texttt{enterprise}), 2 (O14 and O8), 3 (R16.1,
+specified and unbuilt, and the rebasing rule left open under O9) and 8 (a discovery fallback and a
+\VPON{} construction).}
+\label{tab:e2e-diff}\\
+\toprule
+step & deployed (\shipped) & target (\planned) & what has to be true for the transition \\
+\midrule
+\endfirsthead
+\multicolumn{4}{l}{\small\itshape (Table~\ref{tab:e2e-diff} continued)}\\
+\toprule
+step & deployed (\shipped) & target (\planned) & what has to be true for the transition \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+1 & \specv{8} enforced from height \num{1932380}; seven versions live; no \texttt{duration}, no
+\texttt{paymentMemo} & \specv{9} with \texttt{duration}, \texttt{paymentMemo},
+\texttt{referralCode}, \texttt{machineType}; \texttt{enterprise} removed; every application rewritten
+forward by a one-off forced migration; agent submission under a \S17 certificate &
+consumers written for the three economic fields; an enforcement height set \emph{after} them; an
+encryption envelope replacing \texttt{enterprise}; the migration key's scope enforced in \fluxd
+rather than by convention, and its retirement stated; a signature field and enforced canonicalization
+in the schema \\
+\addlinespace
+2 & one transparent transaction to \texttt{t3Nryf\ldots}; hash in \texttt{OP\_RETURN}; price from a
+six-segment table & \emph{same shape, moved into consensus}: one output of the full price to
+$\mathsf{sink}$ plus one \texttt{OP\_RETURN} carrying $H(m_\app)$ (PS1--PS2); no second output, no new
+transaction type & O14 ($\mathsf{sink}$'s identity) fixed; O8 (which channels must settle there)
+fixed; O7 (shielded payers) moot after retirement; balance location and recurring-charge
+authority settled as out of protocol scope \\
+\addlinespace
+3 & \FluxOS-only validation; underpayment silently dropped & PS3 makes $\mathsf{sink}$ unspendable
+and PS4 applies the \SI{80}{\percent}/\SI{20}{\percent} split; \FluxOS checks only existence, memo and
+coverage & a network upgrade; requirement R16.1 (signed \textsf{nack}) implemented; O9 (price-table
+rebasing) decided \\
+\addlinespace
+4 & \textbf{does not exist} & $\pool_\hgt$ committed in the coinbase and recomputed by every
+validator as $\pool_{\hgt-1} - D_\hgt + \text{receipts}_\hgt$; no new coinbase output; the sink
+balance is a public revenue counter & O11 (no seed) and O5/O6 (both stay in $\pool$) settled; O21
+(division on arrival, Foundation share paid in the same block) settled; S1 --- emergency blocks must
+not drip; S2 --- forfeitures must not enter $\pool$ \\
+\addlinespace
+5 & \PoN sortition; one payee per tier per block; FIFO by last-paid height & unchanged rotation, plus
+$D_\hgt = \lfloor\pool_{\hgt-1}/\drip\rfloor$ split by
+$(\tierratio{\tC},\tierratio{\tN},\tierratio{\tS})$ & $\drip = \num{86400}$ is settled (O1 closed),
+with O12 a documented review trigger at $2\times$ the Cumulus count and O10 drip ordering from the
+parent state, both settled \\
+\addlinespace
+6 & opportunistic self-selection; broadcast, \SI{90}{\second}, earliest wins; Docker; reconciler &
+\specv{9} reconciler, $\sim$\num{25} service packages, drain server, per-app-CA TLS &
+\texttt{quorum\allowbreak{}Grant\allowbreak{}Activation\allowbreak{}Height} set in shipped configuration; earliest-broadcast-wins
+retained (recommended above) \\
+\addlinespace
+7 & loopback mTLS only; key not machine-bound; benchmark not operator-bound; hash allow-list fails
+open & bonded attestation network: bond $\beta_i$, committee $k$-of-$n$, challenge window
+$\Delta_{\mathrm{chal}}$, slash $s$ & \textbf{Requirement 0}: hardware-sealed per-machine key and a
+tenant-reachable verifier; $(n, k, \Delta_{\mathrm{chal}}, s) = (9, 6, \num{2880}, 1)$, $\beta_i$
+scaling with value secured and re-checkable claims only are recommended, the bond coefficients still to
+calibrate \\
+\addlinespace
+8 & \texttt{api.\allowbreak{}runonflux.\allowbreak{}io} sole source; 16-host \FDM fleet; HAProxy; Cloudflare or \PDNS &
+requirements only: a discovery fallback; ban-honouring routes; \VPON membership by key &
+a non-Foundation discovery source; a decision on \FDM/\PDNS honouring bans; a
+\VPON construction, which is open \\
+\addlinespace
+9 & reconciler plus periodic monitors; reservation pricing; no metering & unchanged in kind; drain
+signal over the existing presence path & \texttt{flux-shutdownd} drain-broadcast and
+\texttt{preStop} reachable; no protocol availability remedy (settled, \S16) \\
+\addlinespace
+10 & expiry is arithmetic; no grace, no suspension, no data retention & \emph{unchanged on the
+default path} --- the payment is the renewal, so no standing obligation and no state machine; funded
+$\to$ grace $\to$ suspended $\to$ evicted specified for a credits layer and not deployed & for the
+default path, nothing beyond step~2; for a credits layer, both architectural choices settled out of
+protocol scope (balance off-chain with a third-party operator; no protocol renewal) and
+$G_{\mathrm{g}}, G_{\mathrm{s}}, \Delta_{\mathrm{pre}}, \price^{\mathrm{res}}$ settled at
+\Cref{tab:credit-params}; R16.2 honoured \\
+\addlinespace
+11 & unsigned GitHub file; $\kappa_{\mathrm{deployed}} = 1$; no record; \SIrange{7}{13}{\hour} to
+fleet-wide effect & indexed report transaction; \SI{24}{\hour} window; fee-less votes; \fluxd counts
+the quorum internally; ban memo in the coinbase, one per block; \FluxOS purges. $\vthresh = 0.25$
+absolute, $\kappa(0.25) = 4$ & category enumeration fixed (its scope is settled as a network-level
+content veto); the remaining parameters settled at \Cref{tab:23-recommended}; one \fluxd
+verification outstanding --- whether re-addressing resets a node's age (the emergency-path coinbase
+rules are verified) \\
+\addlinespace
+12 & issuance only; $\subsidypon$, tier bases $1{:}3.5{:}9$, dev fund $0.5\flux$ & issuance plus
+revenue; $\nodeshare$ from $0.20$ to $\nodesharecap = 0.50$; \SI{4.29}{\percent} of operator income
+at activation & demand growth, not price (parity at $22.3\times V_0$); C1a sequencing and O20
+(uniform PA cut) both settled; and step~7 hardened first \\
+\end{longtable}
+\endgroup
+
+\paragraph{The dependency that reorders everything.}
+Read the table down the ``target'' column and the mechanisms look independent; read it down the last
+column and one edge dominates all the others. \PNR would pay every confirmed node through the \PoN
+rotation regardless of what that node hosts, so the marginal income from hosting would be exactly
+zero and the private stake any single node has in aggregate network demand would be between
+$0.001\flux$ and $0.018\flux$ per year at activation scale (\S7). Free-riding would therefore
+dominate at every parameter value in range, and this is structural to the settled decision to pay all
+nodes rather than a tuning error. What actually compels hosting is not the payment but the
+\emph{eligibility gate}: a node is a \PoN payee, and hence a \PNR payee, only if it is confirmed with
+a \fluxbench-signed transaction and, at target, attested. \S4 establishes that the benchmark
+signature is verified against five network-wide shared keys and is produced by a process on the
+operator's own host, so it is not operator-bound; \S14 establishes that the attestation signature is
+derived from constants compiled identically into every binary, so it is not machine-bound. The two
+compose badly, and the composition is the reason this section exists.
+
+\begin{property}[Attestation hardening precedes revenue-funded compensation]
+\label{prop:e2e-gate}
+\planned. Under the settled \PNR constraints --- beneficiaries are all confirmed nodes, and there is
+no metering or attestation dependency between payment and placement --- activating \PNR before
+hardening the eligibility gate strictly increases the expected payoff to occupying the paid set
+without providing capacity, by exactly the amount \PNR pays: \SI{4.29}{\percent} of operator income
+at activation and more as $\nodeshare$ ramps toward $\nodesharecap$. Hardening the gate afterwards
+does not undo the interval.
+\end{property}
+
+\begin{proof}[Proof sketch]
+By \S7's zero-marginal-hosting property, a node's \PNR income is a function of its tier and its queue
+position only, so the payoff to membership rises by the full drip while the payoff to hosting rises
+by nothing. By \S4 and \S14 the predicate admitting a node to that queue is a benchmark signature the
+operator's own host can produce under network-wide keys, together with an attestation that
+demonstrates possession of a value every copy of the software contains. Hence the cost of satisfying
+the predicate without providing the underlying capacity is unchanged by \PNR while the reward for
+satisfying it rises, and the difference is the increase in expected payoff. The final clause is not a
+mechanism claim but an ordering one: capacity that was never provided during the interval cannot be
+retroactively required, and \S\ref{sec:feasibility} classes the attestation work as a prerequisite rather than an
+increment for exactly this reason. The step is a sketch and not a proof because it does not quantify
+the cost side --- what it takes to occupy the paid set without providing capacity is not measured
+anywhere in this paper, and \S7's Open Problem on hosting-conditioned eligibility is the construction
+that would close it.
+\end{proof}
+
+The sequencing consequence is therefore not a preference. \S\ref{sec:migration} must place the attestation fix before
+or with \PNR activation, never after it; the alternative deploys an incentive to fake eligibility
+before the mechanism that would detect faking exists.
+
+\paragraph{What the reader should notice about the two passes.}
+Read as one document, the two passes make a single claim, and it is the thesis this paper has been
+earning for twenty-three sections. \Flux today is a working decentralized cloud --- several thousand
+independently operated machines, in dozens of countries, running \num{1195} tenants' containers, paid
+for on-chain, with a consensus layer that produces a block every thirty seconds without a miner ---
+whose \emph{trust}, as opposed to whose compute, is concentrated in operated infrastructure and
+shared keys: one discovery API with no fallback, sixteen Foundation-run reachability hosts, one
+Foundation-private network segment, one GitHub file as the moderation root, five network-wide
+benchmarking keys, one release-signing key inside one HSM, a hardcoded 2-of-4 key set that can
+produce blocks with no gating, and one transparent address that receives every tenant payment on the
+network. The target architecture does not add capacity, features or throughput to that picture in any
+material way; what it does, step by step, is move each of those trust concentrations into one of
+three things the protocol can enforce --- \emph{collateral} (the quorum's weight, the report-capacity
+bound, the attestation bond), \emph{attestation} (a machine-bound key and a verifier a tenant can
+reach), and \emph{consensus rules} (the split as a rule instead of a promise, the pool as consensus
+state committed in the coinbase, the eviction as a tally every validator recomputes from block data
+and a memo in a coinbase rather than a document somebody publishes). That is the whole architectural
+bet, stated once: not that the cloud gets bigger, but that the trust moves from parties into rules.
+Every open parameter in the last column of Table~\ref{tab:e2e-diff} is a place where that move is
+specified but not yet made.
+
+\paragraph{The sequence the second pass can state and the first cannot.}
+\planned. One consequence of the settlement decision is concrete enough to write as a sequence, and
+it is the agent-native argument of \S18 reduced to three steps with nothing left implicit. A tenant
+holding \emph{any} wallet and \emph{no account} would complete steps~1 to~3 unaided: construct a
+\specv{9} specification and sign it with a key it generated itself; broadcast one ordinary
+transparent transaction paying one address, with one \texttt{OP\_RETURN} attached; and have consensus
+divide the proceeds, at which point every node independently agrees the deployment is funded to a
+particular height. No second recipient to compute, no split to get right, no Flux-specific library to
+link, no credential to be issued, no custodian, no relationship that outlives the deployment. Each
+step's dependency is named where it falls rather than accumulated here --- step~1 needs consumers for
+the three economic fields and an enforcement height after them, step~2 needs $\mathsf{sink}$ fixed by
+O14, and step~3 needs R16.1 so that a short payment produces a signed answer rather than silence,
+which for software with nobody to escalate to is the difference between a retry and an unrecoverable
+loss. The first pass cannot state the same sequence, and the reason is recorded at its own step~3.
+
+\paragraph{What would falsify it.}
+A thesis that cannot fail is not research, so the specific, datable observations that would show the
+transition is not working are named here rather than left implicit. \emph{First}, \PNR remaining a
+rounding error: application revenue staying near the intake's $V_0 = \num{1431600}\flux$ per year, so
+that \PNR stays close to \SI{4.29}{\percent} of operator income and the $g = \SI{0}{\percent}$ row of
+\S7's crossover table holds --- under which there is no crossover ever, and revenue-funded
+compensation remains a supplement rather than the mechanism. The settlement decision is what makes
+this the cheapest item on the list to check: after activation the quantity is the balance of one
+consensus-known, consensus-unspendable address, read from any block explorer, rather than a figure
+anyone has to publish. \emph{Second}, the attestation key staying non-machine-bound:
+\texttt{/v2/attest} continuing to derive its signing key from values compiled identically into every
+binary at the point where bonds are first posted, which would mean Requirement~0 was declared met
+without being met and that a bond secures a signature anyone with the software can produce
+(\S14). \emph{Third}, \specv{9} never receiving an enforcement height: the public pricing endpoint
+continuing to return no key for version~9 while \texttt{paymentMemo}, \texttt{referralCode} and
+\texttt{machineType} keep zero consumers, and no forced-migration message appearing on any owner's
+application --- which would strand \PNR, credits, referrals, the VPS tier and the provisioning API
+together, since \S\ref{sec:feasibility} places all five on the same critical path. \emph{Fourth}, the shielded pools not
+being retired: \texttt{Contextual\allowbreak{}Check\allowbreak{}Transaction} still rejecting transparent-to-shielded
+transactions with \texttt{bad-\allowbreak{}txns-\allowbreak{}fluxrebrand-\allowbreak{}vprivacy-\allowbreak{}not-\allowbreak{}empty}, pool totals still at or near the
+measured $\num{96479.94}\flux$, and no sunset height announced, at any date past
+$\hshield$ (\S\ref{sec:shielded-retirement}). Note that this test was inverted by the
+retirement decision: an earlier draft made \emph{failure to reopen} the falsifying observation, and
+the observable that would have confirmed the old commitment --- a transparent-to-shielded transaction
+confirming on mainnet --- would now falsify the new one. The paper records the inversion rather than
+quietly re-aiming the test, because a prediction that changes direction is exactly where a reader
+should check that the paper is tracking decisions rather than rationalising them.
+\emph{Fifth}, a moderation capture event: a ban
+memo in a coinbase whose crossing tally is carried by owner identities that are a subset of the four
+largest --- three under the strongest linkage computable from public data --- or, equally decisive
+and easier to observe, an application disappearing from the fleet with no report transaction, no
+votes and no ban memo behind it, at any date after the quorum is said to be live. Each of these is
+checkable from public data by a third party, on a stated date,
+without access to any repository. That is the standard this section holds itself to, and it is the
+standard by which the rest of the paper should be judged.
+
+%% Drain this section's float queue before the next begins.
+\FloatBarrier

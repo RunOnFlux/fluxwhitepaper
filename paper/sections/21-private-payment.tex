@@ -1,0 +1,1438 @@
+\section{Private payment with public obligation}
+\label{sec:private-payment}\label{sec:private-renewal}
+
+Every node on the network must be able to decide, on its own and without asking anyone, whether the
+workload it is about to run has been paid for. That decision has to be reproducible by thousands of
+mutually distrusting machines from public data alone, which is precisely why the payment that answers
+it is, today, a transparent transaction whose inputs name its sender. The tension this section
+addresses is one sentence long: \emph{the network must be convinced that a deployment is funded while
+learning neither who paid nor which payer belongs to which workload.} The workload itself is public
+and must stay public --- a node cannot run a container whose image it is not told --- so the object to
+hide is not the obligation but the payer, and the edge between the payer and the obligation. What
+follows states that requirement formally, shows which parts of it the deployed Sapling toolkit already
+satisfies, shows which part is unsatisfiable by construction and says so rather than omitting it,
+measures the anonymity set that actually exists rather than assuming one, and names the single
+consensus rule that gates the whole thing. The most important result in this section is a
+\emph{negative scope} result: the general problem is smaller than it looks, and the part that remains
+genuinely open is confined to one optional path.
+
+\begin{remark}[Status of this section after the retirement decision]
+\label{rem:pp-status}
+\textbf{Flux is retiring both shielded pools} (\Cref{sec:shielded-retirement},
+\srcintent{08-answers-round-2.md, round 10}). Every \emph{construction} in this section is therefore
+inapplicable to the target architecture: there will be no pool to pay into, no Sapling output to
+build a payment from, no anonymity set to grow, and no proving system to select. The section is
+retained, unmodified in its technical content, for three reasons, and a reader should hold all three
+in mind while reading it.
+
+\begin{enumerate}
+  \item \textbf{The requirement survives the decision.} \Cref{def:pp-pi} and \Cref{def:pp-ru} state what private
+  payment for a public obligation must satisfy. That statement is independent of any construction and
+  independent of whether Flux carries a shielded pool. If Flux ever revisits privacy --- via
+  Orchard/Halo2 or otherwise --- this is the specification the work must meet, and it is written
+  down here rather than needing to be rediscovered.
+  \item \textbf{Two of its results are why retirement is defensible.}
+  \S\ref{sec:pp-amount} proves amount hiding is unsatisfiable under \PNR{}, and
+  \S\ref{sec:pp-scope} shows the residual problem is confined to one optional path. Together they
+  establish that a shielded pool was buying considerably less than it appears to --- which is a load-
+  bearing input to the decision, not a consolation after it.
+  \item \textbf{The measurement is a permanent record.} \S\ref{sec:pp-anonymity} measures the
+  anonymity set that actually existed on Flux. After retirement that measurement cannot be repeated,
+  and it is the honest empirical answer to how much privacy the deployed pool ever provided.
+\end{enumerate}
+
+Read the constructions below as \emph{what would have been required}, not as what is planned. Where
+the text says \planned{} of a shielded construction, that tag is now superseded by the retirement
+decision and should be read as conditional on a pool existing.
+\end{remark}
+
+\begin{remark}[Symbols introduced here]
+This section uses, in addition to \texttt{notation.tex}: $m_\app$ for the registration or update
+message of application $\app$; $H_\app \defeq \mathsf{SHA256}(m_\app)$ for its hash, the value FluxOS
+places in \texttt{OP\_RETURN}; $e_\app$ for the paid-through height; $A_{\mathrm{sink}}$ for the
+payment sink, \S7's $\mathsf{sink}$; $v$ for a paid amount in \sat; $v_{\mathrm{bal}}$ for a Sapling \texttt{valueBalance};
+$u$ for an individual FluxOS node; $\mathsf{AS}$ for an anonymity set; $\epsilon_{\mathrm{sc}}$ for a
+side-channel advantage; $\tree_{\mathrm{ent}}$ and $\mathsf{rt}$ for an entitlement tree and its root;
+$s$ for a credential secret; $j$ for an epoch index and $T_{\mathrm{ep}}$ for an epoch length; and
+$\mathsf{xsk}$ for a ZIP-32 child spending key. These are proposed additions to the notation index
+(Appendix~D) and are used nowhere else in the paper.
+\end{remark}
+
+\subsection{The verifier, and the requirement pair}
+\label{sec:pp-requirements}
+
+\subsubsection{What is public by construction}
+
+Three things are public because the system cannot function otherwise, and it is worth separating them
+before any privacy claim is made.
+
+\begin{enumerate}
+  \item \textbf{The workload.} An application's public part
+    $\mathsf{spec}_{\mathrm{pub}}(\app) = (\mathsf{name}, H_\app, \mathsf{owner}, \ninst, \dur,
+    \hgt_0, \mathsf{enterprise?})$ is stored by every node, because placement is opportunistic
+    self-selection and any node may be the one that runs $\app$ (\shipped, \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appDatabase/\allowbreak{}registryManager.js}{1714}).
+    Content is a separate matter: of the \num{1195} deployed applications, \num{972} publish their
+    \texttt{compose} block in the clear and \num{223} (\qty{18.7}{\percent}) are enterprise records
+    whose \texttt{compose} and \texttt{contacts} are stored zeroed
+    \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}.
+  \item \textbf{The paid-through height.} $e_\app$ must be a public function of the chain, or nodes
+    disagree about whether to keep running a container.
+  \item \textbf{The amount, under \PNR.} This is derived rather than chosen, and
+    \S\ref{sec:pp-amount} proves it.
+\end{enumerate}
+
+What is \emph{not} required to be public is the identity of the party that moved the value, and the
+association between that party and the application. That is the whole of the privacy goal here, and
+stating it this narrowly is what makes the rest of the section tractable.
+
+\subsubsection{The verifier}
+
+\begin{definition}[Funding scheme and verifier]
+\label{def:pp-scheme}
+Let $\mathsf{Apps}$ be the set of application identifiers, $\mathcal{C}$ the set of chain prefixes,
+$\mathsf{Tx}$ the set of transactions and $\mathsf{Msg}$ the set of FluxOS messages. A \emph{funding
+scheme} is a pair $(\mathsf{Fund}, \mathsf{Verify})$ with
+\[
+  \mathsf{Fund} : \principal \times \mathsf{Apps} \longrightarrow \mathsf{Tx} \times (\mathsf{Msg} \cup \{\varepsilon\}),
+  \qquad
+  \mathsf{Verify}_u : \mathsf{Apps} \times \mathbb{N} \times \mathcal{C} \longrightarrow \mathbb{N} \cup \{\bot\},
+\]
+where $\mathsf{Fund}$ is run by a principal and $\mathsf{Verify}_u$ is run by FluxOS node $u$ on its
+local chain prefix $C_{\le\hgt}$ and its local message store, returning a paid-through height $e_\app$
+or $\bot$. Funded status is $\mathsf{Funded}(\app,\hgt) \defeq \indic{\hgt \le e_\app}$.
+\end{definition}
+
+\begin{assumption}[Verifier model, from \S2]
+\label{ass:pp-verifier}
+Node $u$ holds $C_{\le\hgt}$, the FluxOS temporary and permanent message sets, and \emph{no secret}:
+no shared key, no issuer key, and no viewing key it did not derive from public data. Node $u$ needs no
+message from any other verifier to evaluate $\mathsf{Verify}_u$. This is a description of the deployed
+system, not a design preference: \texttt{explorerService.\allowbreak{}processInsight} recognises a payment by output
+address and \texttt{OP\_RETURN} and \texttt{messageVerifier.\allowbreak{}checkAndRequestApp} promotes the
+registration message, on every node, from chain data alone (\shipped,
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}explorerService.js}{309--345},
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMessaging/\allowbreak{}messageVerifier.js}{619--897}); CumulusVPN states the same property
+of its gateways --- ``every gateway runs the same deterministic scan and therefore reaches the same
+\texttt{paid\_until} map [\ldots] with no server-to-server coordination'' (\shipped, \srccode{cumulusvpn/\allowbreak{}gateway/\allowbreak{}internal/\allowbreak{}entitle/\allowbreak{}entitle.go}{1--5}).
+\end{assumption}
+
+\begin{assumption}[Adversary, from \S2]
+\label{ass:pp-adversary}
+The adversary $\adv$ is a node operator. It sees the whole chain, the public specification of every
+application, all FluxOS gossip, and the client traffic arriving at the nodes it runs; it may run any
+number of nodes (the measured maximum under one signing key is \num{237}, \qty{3.7}{\percent} of the
+fleet \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}); it may be the \emph{owner} of
+the application whose payer it wants to identify; and it may hold shielded funds. It is bounded by
+$\advbudget$ for anything requiring capital and is otherwise probabilistic polynomial time.
+\end{assumption}
+
+\subsubsection{The hard requirements}
+
+\begin{definition}[Public obligation]
+\label{def:pp-obligation}
+A funding scheme satisfies \emph{public obligation} if:
+\begin{description}
+  \item[V0 (no secret).] $\mathsf{Verify}_u$ is a deterministic function of $C_{\le\hgt}$ and public
+    messages, for every $u$.
+  \item[S (soundness).] For every PPT payer $\adv$,
+    \[
+      \Pr\!\left[\mathsf{Verify}_u(\app,\hgt,C_{\le\hgt}) = e > \hgt
+      \ \wedge\ \textstyle\sum \text{value confirmed to } A_{\mathrm{sink}} \text{ bound to } H_\app \text{ by } \hgt < \price(\app)\right]
+      \le \mathrm{negl}.
+    \]
+  \item[C (consistency).] Honest $u, u'$ with the same chain prefix return the same $e_\app$.
+  \item[L (liveness under partition).] $\mathsf{Verify}_u$ requires no message from any other party; a
+    partitioned node evaluates on its local prefix and converges when the prefix does.
+  \item[D (no double-funding).] One confirmed transfer contributes to at most one pair
+    $(\app,\text{period})$.
+\end{description}
+\end{definition}
+
+\begin{definition}[Payer indistinguishability, PI]
+\label{def:pp-pi}
+$\adv$ names two principals $\principal_0,\principal_1$, each able to fund, and an application $\app$;
+$\adv$ may own $\app$ and any set of nodes. The challenger draws $b \in \{0,1\}$ uniformly and runs
+$\mathsf{Fund}(\principal_b,\app)$; $\adv$ observes the resulting chain and network state and outputs
+$b'$. Define
+\[
+  \mathrm{Adv}^{\mathrm{PI}}(\adv) \defeq \left|\Pr[b'=b] - \tfrac12\right| \in [0,\tfrac12].
+\]
+The scheme has \emph{cryptographic} PI if $\mathrm{Adv}^{\mathrm{PI}}(\adv) \le \mathrm{negl}$ whenever
+$\principal_0$ and $\principal_1$ fund from the same pool, at the same time, with the same amount. Its
+\emph{effective} advantage is $\mathrm{negl} + \epsilon_{\mathrm{sc}}$, where $\epsilon_{\mathrm{sc}}$
+collects timing, amount and network-metadata leakage. \S\ref{sec:pp-anonymity} measures
+$\epsilon_{\mathrm{sc}}$'s inputs rather than assuming them away.
+\end{definition}
+
+\begin{definition}[Renewal unlinkability, RU]
+\label{def:pp-ru}
+\emph{Payer-side:} for two funding events of the same $\app$ at periods $i \ne j$, $\adv$ cannot
+distinguish whether one principal produced both. \emph{Cross-application:} for $\app \ne \app'$,
+$\adv$ cannot distinguish whether one principal funded both. Two renewals of the same $\app$ are
+linked by $H_\app$ by construction --- that is the obligation being public --- so RU never denotes
+hiding \emph{that} $\app$ was renewed.
+\end{definition}
+
+\begin{definition}[Amount hiding, AH]
+\label{def:pp-ah}
+$\adv$ learns nothing about $v$ beyond $v \ge \price(\app)$.
+\end{definition}
+
+\begin{definition}[Forward secrecy, FS]
+\label{def:pp-fs}
+Compromise at period $i$ of all key material used to produce funding events of periods $\ge i$ does
+not increase $\mathrm{Adv}^{\mathrm{PI}}$ and does not break RU for periods $< i$.
+\end{definition}
+
+Definitions~\ref{def:pp-obligation} and~\ref{def:pp-pi} are the \emph{hard} requirements;
+Definitions~\ref{def:pp-ru}--\ref{def:pp-fs} are desirable, and \S\ref{sec:pp-shapes} states which are
+achievable in which shape. Content privacy --- the hiding of $\mathsf{spec}_{\mathrm{priv}}(\app)$
+from non-selected nodes by enterprise encryption --- is owned by \S10 and constrained here only in
+that a funding scheme must not reduce it beyond what $\price(\app)$ already reveals. AH is the sole
+point at which the two interact, which brings us to the first result.
+
+\subsection{Amount hiding is unsatisfiable under PNR}\label{sec:pp-amounthiding}
+\label{sec:pp-amount}
+
+This is stated early because it is a genuine conflict between two of this paper's own mechanisms, and
+because a reader who expects Zcash-style amount privacy on hosting payments should be disabused before
+reading a construction that does not deliver it.
+
+\begin{property}[Amount recovery from the fee pool]
+\label{prop:pp-amount}
+Let $\nodeshare(\hgt) \in (0,1]$ be the operator share at height $\hgt$ and write
+$r(\hgt) = 100\,\nodeshare(\hgt) \in \{1,\dots,100\}$. Under \PNR{} (\S7, PT1--PT5), a hosting payment
+of price $\price \in \mathbb{N}$ \sat{} credits
+$A_\Phi = \left\lfloor r(\hgt)\,\price / 100 \right\rfloor$ \sat{} to the consensus fee pool $\pool$,
+and the per-block drip $D_\hgt = \floorfrac{\pool_{\hgt-1}}{\drip}$ appears in the coinbase. Then
+$A_\Phi$ is a public function of the chain, and consequently
+\[
+  \price \in \left[\ \frac{100\,A_\Phi}{r(\hgt)},\ \frac{100\,(A_\Phi+1)}{r(\hgt)} \right),
+  \qquad \text{an interval of width } \frac{100}{r(\hgt)} \sat.
+\]
+At $\nodeshare = 0.20$ the price is recoverable to within \num{5}\sat; at the $\nodesharecap = 0.50$
+ceiling, to within \num{2}\sat. Therefore \textbf{no funding scheme that settles through \PNR{}
+satisfies AH} (Definition~\ref{def:pp-ah}).
+\end{property}
+
+\begin{proof}
+Every node must compute $\pool_\hgt$ exactly in order to validate the coinbase, since $D_\hgt$ is a
+consensus-checked function of $\pool_{\hgt-1}$ and a node that cannot compute the pool cannot decide
+block validity. Hence $\pool_\hgt$ is a deterministic public function of $C_{\le\hgt}$, and so is each receipt's
+$A_\Phi$: under PS4 of \S7 it is computed from the value of a transparent output paying
+$A_{\mathrm{sink}}$, and the block's inflow $F_\hgt$ is the sum of these. Inverting the floor gives the stated
+interval, whose width is $100/r$. Any scheme achieving AH would have to hide $A_\Phi$ from at least
+one honest verifier, contradicting checkability of the coinbase; a hidden pool cannot drip a checkable
+coinbase.
+\end{proof}
+
+\begin{remark}[\S7 and \S21 cannot both have what they want]
+\label{rem:pp-conflict}
+The resolution recorded in this paper is that amount privacy is \textbf{out of scope for
+\PNR-typed payments, by construction rather than by omission}. The cost is asymmetric: for the
+\num{972} public-content applications it is nil, because $\price$ is already a public function of a
+public specification; for the \num{223} enterprise applications the price reveals
+$\langle \pricevec, \resvec \rangle$, a coarse size fingerprint of encrypted content. The only escape
+--- exempting a payment class from \PNR{} --- contradicts \S7's requirement that all hosting revenue
+settle through the split, and is left as an open decision (Q5, Table~\ref{tab:pp-open}).
+\end{remark}
+
+\subsection{Three shapes, kept apart}
+\label{sec:pp-shapes}
+
+Most of the difficulty attributed to ``private payment on Flux'' comes from conflating three problems
+whose hardness differs sharply. Table~\ref{tab:pp-shapes} separates them, and every later claim in
+this section is scoped to one of the three.
+
+\begin{table}[H]
+\centering
+\small
+\caption{The three shapes of the private-payment problem. Only shapes B and C carry a standing object
+that must be re-proved; shape A does not, which is the content of
+Proposition~\ref{prop:pp-scope}.}
+\label{tab:pp-shapes}
+\begin{tabular}{@{}p{0.06\linewidth}p{0.20\linewidth}p{0.24\linewidth}p{0.20\linewidth}p{0.18\linewidth}@{}}
+\toprule
+& \textbf{The obligation names} & \textbf{Example} & \textbf{What must be hidden} & \textbf{Maturity} \\
+\midrule
+\textbf{A} & a public workload $H_\app$, which every node must know in order to run it &
+application registration and renewal; the direct path of \S16 &
+the payer &
+\planned; deployed circuits, gated on \S\ref{sec:pp-blocker} \\
+\addlinespace
+\textbf{B} & a private user: a pseudonym whose only public attribute is ``paid until $e$'' &
+CumulusVPN, memo $=\mathsf{base58}(\mathsf{SHA256}(pk_t)[0{:}20])$ &
+the link pseudonym\,$\leftrightarrow$\,payment, \emph{and} pseudonym\,$\leftrightarrow$\,payer &
+\vision; needs a circuit Flux does not have \\
+\addlinespace
+\textbf{C} & a standing balance debited over time &
+deposited credits with auto-renewal, the credit path of \S16 &
+the payer, and the link between successive debits &
+\planned; reduces to A when the renewer is the payer's own agent \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:pp-props} then states, per shape, which requirement is hard, which is desirable, and
+which cannot be had. It is the map for the rest of the section.
+
+\begin{table}[H]
+\centering
+\small
+\caption{Requirements per shape. ``hard'' = a mechanism is not acceptable without it; ``desirable'' =
+wanted, and its absence is stated rather than hidden.}
+\label{tab:pp-props}
+\begin{tabular}{@{}lllll@{}}
+\toprule
+\textbf{Property} & \textbf{A, direct} & \textbf{C, own agent} & \textbf{C, third-party renewer} & \textbf{B, CumulusVPN-class} \\
+\midrule
+V0, S, C, L & hard & hard & hard & hard \\
+D & hard & hard & hard & vacuous (time-based) \\
+PI vs.\ the network & hard & hard & hard & hard, vs.\ the gateway \\
+PI vs.\ the renewer & n/a & n/a & desirable; \textbf{open} (R2) & n/a \\
+PI, transparent payer & impossible & --- & --- & desirable; needs A \\
+RU payer-side & from PI per event & hard & hard & hard, across epochs \\
+RU cross-application & desirable & desirable & desirable & --- \\
+AH & \textbf{unsatisfiable} (Prop.~\ref{prop:pp-amount}) & unsatisfiable & unsatisfiable & n/a, fixed price \\
+FS & desirable & desirable & desirable & desirable \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{The scope result}
+\label{sec:pp-scope}
+
+The proposition below is the most consequential finding in this section, because it decides how much
+of the paper's agent-native argument depends on an unsolved problem. It says: not much.
+
+\begin{proposition}[No new relation is required for shape A]
+\label{prop:pp-scope}
+Let $\mathsf{Verify}_u$ be the deployed FluxOS funding rule of \S\ref{sec:pp-deployed}. Then:
+\begin{enumerate}
+  \item[(i)] $\mathsf{Verify}_u(\app,\hgt,C_{\le\hgt})$ depends on $C_{\le\hgt}$ only through the set
+    of confirmed \emph{funding events}, where a funding event is a confirmed transaction carrying a
+    transparent output $(A_{\mathrm{sink}}, v)$ together with $\mathsf{OP\_RETURN} = H_\app$. Between
+    funding events, no predicate over hidden state is evaluated.
+  \item[(ii)] There exists a funding scheme satisfying V0, S, C, L, D and cryptographic PI
+    (Definitions~\ref{def:pp-obligation}, \ref{def:pp-pi}) whose only zero-knowledge component is the
+    Sapling spend statement and the Sapling output statement, both already verified by every
+    \fluxd{} node at consensus (\shipped,
+    \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{1447--1482}, \srccode{fluxd/\allowbreak{}src/\allowbreak{}primitives/\allowbreak{}transaction.h}{155--242}).
+  \item[(iii)] Consequently no relation outside the deployed circuits is required for shape A, and in
+    particular ``a statement proving that a note was spent to a known application address without
+    revealing the sender'' is not a new circuit: it is the Sapling spend statement with a transparent
+    recipient.
+\end{enumerate}
+\end{proposition}
+
+\begin{proof}[Proof sketch]
+\emph{(i)} By inspection of the deployed rule (\S\ref{sec:pp-deployed}): $e_\app$ is assigned once per
+funding event from $(v, \hgt', \dur(m_\app))$ and is never re-derived; $\mathsf{Verify}_u$ thereafter
+compares two integers. There is therefore no standing obligation and nothing to prove repeatedly.
+\emph{(ii)} Take Construction~\ref{con:pp-a} below. Its verifier is unchanged from the deployed one
+because the FluxOS scanner keys on outputs and \texttt{OP\_RETURN} and never on inputs; V0, S, C, L, D
+hold by the same argument as for the transparent path, since the value transfer is still a confirmed
+transparent output to $A_{\mathrm{sink}}$. Cryptographic PI reduces to Sapling spend
+indistinguishability: two funding transactions produced by $\principal_0$ and $\principal_1$ spending
+notes of sufficient value differ only in $\nf$, $\mathsf{cv}$, $\mathsf{rk}$, $\zkproof$ and the
+change-note ciphertext, each of which is hiding under Sapling's stated assumptions
+\citep{zcashprotocol}; the number of spend and output descriptions, the anchor and the fee are not
+hidden, so the builder must hold them equal across payers or they fall under $\epsilon_{\mathrm{sc}}$.
+\emph{(iii)} Immediate from (i) and (ii): the verifier needs $v \ge \price$,
+the binding of the transfer to $H_\app$, and that $v$ actually moved. The first two are transparent
+fields; the third is exactly what the binding signature and the spend statement establish. No
+statement \emph{about the application} is proved in zero knowledge, because the application is public.
+\end{proof}
+
+\begin{corollary}[Agent-native direct payment]
+\label{cor:pp-agent}
+When the renewing party is the tenant's own agent, shape C reduces to shape A composed with ZIP-32
+child-key derivation (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}zip32.h}{53--136}): the ``balance'' is the
+value of the notes held under a derived child key, it exists nowhere as protocol state, and each
+renewal is an independent shape-A funding event. \textbf{Agent-native direct payment therefore
+collapses to a plain Sapling spend plus ZIP-32.}
+\end{corollary}
+
+\begin{corollary}[Blast radius]
+\label{cor:pp-blast}
+The hard version of the problem --- repeated unlinkable proofs against a hidden standing object ---
+arises only when something hidden must be \emph{reused} by a party that must not learn the link. That
+is (a) shape C with a \emph{third-party} renewer, and (b) shape B for payers who cannot or will not
+use the shielded pool. The agent-native argument of \S18 survives with the general problem still open,
+and the exposure is limited to the optional credit path of \S16.
+\end{corollary}
+
+\begin{remark}[Constructible is not private]
+\label{rem:pp-constructible}
+Proposition~\ref{prop:pp-scope} is a statement about the \emph{relation to be proved}, not about
+deployability or about realised privacy. Construction~\ref{con:pp-a} is constructible over deployed
+circuits; whether it is private in practice depends on the size of the payer's anonymity set
+(\S\ref{sec:pp-anonymity}) and on a consensus rule that currently forbids entering the pool at all
+(\S\ref{sec:pp-blocker}). The paper claims only the first until the measurement M1 is taken. The
+limitation is a result, not a consolation: knowing that three-quarters of the problem needs no new
+cryptography is worth more than a construction for all of it that nobody has.
+\end{remark}
+
+\subsection{The blocker: the shielded pool cannot be entered}
+\label{sec:pp-blocker}
+
+\begin{assumption}[The pool is closed --- \shipped, and it gates everything below]
+\label{ass:pp-closed}
+Since \texttt{UPGRADE\_FLUX} at mainnet height \num{835554},
+\texttt{Contextual\allowbreak{}Check\allowbreak{}Transaction} rejects any transaction that carries transparent inputs
+($\mathtt{tx.vin.size()} > 0$) together with any new shielded output --- any non-empty
+\texttt{vJoinSplit} or \texttt{v\allowbreak{}Shielded\allowbreak{}Output} --- with reject reason
+\texttt{bad-\allowbreak{}txns-\allowbreak{}fluxrebrand-\allowbreak{}vprivacy-\allowbreak{}not-\allowbreak{}empty}
+(\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{1398--1408}). The in-source comment states the intent: ``we no
+longer want to allow coins to go into the privacy pool''. The rule does not inspect
+\texttt{tx.\allowbreak{}v\allowbreak{}Shielded\allowbreak{}Spend}, so $\zaddr \to \zaddr$ and $\zaddr \to \taddr$ transactions remain valid.
+\textbf{Shielded value can move and can leave; it cannot enter.} This is a Flux-original consensus
+policy, not an inherited Zcash ZIP --- a distinction \S20 must preserve.
+\end{assumption}
+
+\begin{corollary}[Who can use construction A today]
+\label{cor:pp-who}
+Construction~\ref{con:pp-a} would be available only to holders of value shielded before
+Assumption~\ref{ass:pp-closed} took effect in April 2021: \num{77188.75921324}\flux{} in the Sapling
+pool and \num{19291.17735041}\flux{} in the Sprout pool at chain tip \num{2917115}, totalling
+\num{96479.93656365}\flux{}
+\srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}getblockchaininfo (valuePools)}{2026-09-03}. Against issued
+supply of \num{429466823.97}\flux{} (\S5) that is \qty{0.0225}{\percent}. The pool has been closed for
+\num{2081561} blocks, approximately \num{5.4} years of wall clock, and its value is
+monotonically non-increasing: every $\zaddr \to \taddr$ hosting payment removes a participant's value
+from it and can never be replaced.
+\end{corollary}
+
+Two consequences deserve to be stated plainly rather than buried. First, the roadmap's privacy items
+--- ``we are bringing private transactions back'', ``shielded by default in the wallets we make'' ---
+were \textbf{never wallet-integration tasks}: re-opening $\taddr \to \zaddr$ is a consensus change.
+That distinction outlives the decision that followed it, because it is what made the roadmap's
+sequencing wrong rather than merely optimistic. \textbf{Reopening is now cancelled}: both pools are
+to be retired instead \srcintent{08-answers-round-2.md, round 10} (\planned,
+\S\ref{sec:shielded-retirement}). Second, capacity was never the constraint and membership was: at
+the list-price revenue of the entire measured population --- \num{3817.62}\flux{} per
+\num{30.56}-day period under \Cref{def:price} as corrected, of which \num{1784.97}\flux{}
+(\SI{46.8}{\percent}, over \num{247} applications) is deployed by the Foundation's own identities and
+\num{2032.65}\flux{} (\SI{53.2}{\percent}, over \num{948}) is third-party
+\srcdoc{scripts/21-private-renewal.py} --- the Sapling pool alone would have funded the whole
+network's hosting for \num{1.69} years, or \num{3.18} years of third-party hosting alone.
+
+The split is taken on the specification's \texttt{owner} field --- the ZelID --- and not on the
+address that paid, and the distinction is load-bearing rather than pedantic. Under the custodial path
+of \S\ref{sec:paying-for-capacity} the service holds both the user's ZelID key and their payment key
+and signs on their behalf (C42), so a card-paid customer deployment settles \emph{from a
+Foundation-held address while belonging to the customer's ZelID}. Attributing by payer would count
+every such deployment as the Foundation's own and understate third-party demand by however much of it
+arrives that way. \settlednote{attribution is by \texttt{owner} ZelID. Of the four
+Foundation-configured identities, three own nothing or nearly nothing --- \texttt{usersToExtend}
+(current) and \texttt{fluxTeamFluxID} own no applications and \texttt{fluxSupportTeamFluxID} owns one
+--- which is what the configuration implies, since \texttt{usersToExtend} confers permission to
+extend an application \emph{on behalf of its owner} rather than ownership
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{229}. The entire
+Foundation share therefore rests on one address, \texttt{196GJWyLxzAw\ldots}, holding 246 of the
+\num{1195} applications. Its composition supports the attribution --- \texttt{FluxWhitepaper},
+\texttt{FluxWordPress} and \texttt{FluxRosettaServer} alongside \texttt{BitcoinWhitepaper},
+\texttt{Aave}, \texttt{Electrum}, \texttt{EthereumNodeLight}, \texttt{Firod} and the 26 folding
+deployments --- and the author confirms it as the team ZelID
+\srcintent{08-answers-round-2.md, round 21}. The configuration itself names that address only as a
+former extension-permission holder, so the identification rests on that confirmation rather than on
+any declaration in code.} A pool
+used for hosting by a handful of pre-2021 holders identifies them as the only possible payers, which
+is a smaller anonymity set than the transparent path offers.
+
+That second point is what survives retirement, and it deserves emphasis because it bears directly on
+how much was given up. \Cref{cor:pp-who} shows the anonymity set of the deployed pool was bounded by
+who held shielded value before 2021 --- a set that could not grow while $\taddr \to \zaddr$ stayed
+closed, and that reopening would have grown only slowly and only for new entrants. The practical
+privacy on offer at the moment the decision was taken was therefore thin: not zero, but a set small
+enough that using it to pay for hosting would in many cases have been self-identifying. A reader
+weighing this decision should weigh it against that measured set, not against the privacy a mature
+shielded pool would provide.
+
+\begin{remark}[Q1 and Q2 --- both resolved by retirement, in opposite directions]
+\label{rem:q1q2-resolved}
+Q1 asked \emph{when} $\taddr \to \zaddr$ would reopen, having been narrowed from \emph{whether}. Q2
+asked whether ZIP-209 turnstile enforcement --- compiled in but dormant against unmodified
+upstream-Zcash checkpoint constants --- should be activated, and in what order relative to Q1.
+
+\textbf{Q1 is withdrawn.} There is no activation height to choose, because there is no reopening.
+
+\textbf{Q2 is answered yes, and becomes more urgent rather than less.}
+\S\ref{sec:shielded-retirement} recommends activating turnstile enforcement with Flux-correct
+constants for the duration of the drain-only window. In that window the turnstile's check is exactly
+the invariant that must hold --- the pool balance may only decrease --- so it is both cheap and
+precisely correct, and it is the only period in which the pools shrink under a published deadline
+with no offsetting inflow. Leaving enforcement dormant through the one window in which it is
+trivially correct would be the worst of the available choices.
+\end{remark}
+
+\proposednote{Live for the drain-only window and moot after it (\Cref{rem:pp-status}, \Cref{rem:q1q2-resolved}). Q2. ZIP-209 turnstile enforcement, compiled in and dormant with unmodified upstream-Zcash
+checkpoint constants (\srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{322--327}, \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.h}{200}).
+Domain: \{on with Flux-computed checkpoints; off\}. Recommended: on, for the duration of the window;
+round 11 confirmed the window's heights, not this switch \srcintent{08-answers-round-2.md, round 18}.
+Trade-off --- on: a soundness failure in the
+inherited 2018 parameters is bounded to the pool's declared value, and \S5's supply-verifiability
+claim becomes true; off: a hosting payment could be printed from a forged proof undetectably. \S20
+makes the same recommendation.}
+
+\subsection{Why the naive construction fails: CumulusVPN, worked through}
+\label{sec:pp-naive}
+
+CumulusVPN is the shipped instance of the problem in this corpus, and it fails in the exact way the
+abstract statement predicts. Its flow is (all \shipped):
+
+\begin{enumerate}
+  \item The client generates a WireGuard keypair $(sk_t, pk_t)$ on-device.
+  \item \texttt{POST /v1/enroll \{pubkey, pow\_nonce\}} returns
+    \texttt{\{payment\_address,\allowbreak{} payment\_memo,\allowbreak{} price\_flux,\allowbreak{} \dots\}}
+    (\srccode{cumulusvpn/\allowbreak{}gateway/\allowbreak{}internal/\allowbreak{}api/\allowbreak{}api.go}{177,185--198}). \emph{The gateway now holds
+    $pk_t$ and the client's IP address.}
+  \item The client pays \texttt{price\_flux} --- \num{20}\flux{} per month as documented --- to
+    \texttt{payment\_address} with \texttt{OP\_RETURN} memo \texttt{CVPN1:code}, where
+    $\mathsf{code} = \mathsf{base58}(\mathsf{SHA256}(pk_t)[0{:}20])$, computed byte-identically in
+    gateway and client (\srccode{cumulusvpn/\allowbreak{}gateway/\allowbreak{}internal/\allowbreak{}entitle/\allowbreak{}entitle.go}{99--108},
+    \srccode{cumulusvpn/\allowbreak{}clients/\allowbreak{}core-ts/\allowbreak{}src/\allowbreak{}paymentCode.ts}{17--23}).
+  \item Every gateway scans the chain independently; \texttt{ValidPayment} requires
+    $30(v + 10^{-9}) \ge \mathsf{price}$ and exactly one \texttt{CVPN1:} memo, and grants
+    $\lfloor 30 v / \mathsf{price}\rfloor$ days, capping \texttt{paid\_until[code]} at \num{720} days
+    (\srccode{cumulusvpn/\allowbreak{}gateway/\allowbreak{}internal/\allowbreak{}entitle/\allowbreak{}entitle.go}{218--287}).
+\end{enumerate}
+
+As a public-obligation scheme this is correct and complete: V0 holds (chain only), S holds (value to
+the address with the memo), C holds (identical derived maps), L holds (local scan), and D holds (the
+memo resolves to one code; stacking is additive). It is the privacy half that fails, and it fails
+totally.
+
+\begin{property}[Enrolment collapses the payer anonymity set to one]
+\label{prop:pp-cvpn}
+Let $\adv$ be a gateway with which the client has enrolled, and let $\principal_0,\principal_1$ pay
+from distinguishable transparent input sets. Then $\mathrm{Adv}^{\mathrm{PI}}(\adv) = \tfrac12$; that
+is, $\adv$ wins the game of Definition~\ref{def:pp-pi} with probability $1$.
+\end{property}
+
+\begin{proof}
+$\mathsf{code}$ is a deterministic function of $pk_t$ evaluated by the same code path in the client
+and in the gateway's scanner. $\adv$ received $pk_t$ at step~2, so it computes $\mathsf{code}$; the
+chain index is public and \texttt{ValidPayment} requires exactly one \texttt{CVPN1:} memo per
+transaction, so the lookup returns a unique confirmed transaction; that transaction's transparent
+inputs are public and identify the payer's wallet cluster under the ordinary common-input-ownership
+and change-detection heuristics. $\adv$ therefore recovers $b$ with certainty.
+\end{proof}
+
+The one-way hash protects exactly the parties who never see its preimage. In a service whose verifier
+must see the preimage in order to serve, it protects nobody who matters. What the gateway holds per
+enrolled user is, concretely: $pk_t$; the client IP; last-handshake times, persisted to disk at
+\texttt{/\allowbreak{}data/\allowbreak{}peers.\allowbreak{}cache} (\srccode{cumulusvpn/\allowbreak{}gateway/\allowbreak{}internal/\allowbreak{}wg/\allowbreak{}peercache.go}{47--51});
+destination IPs and traffic timing; the code; and the paying address. Multi-hop does not help in v1,
+because the same key is used on both hops, so the entry node computes the same code.
+
+\begin{property}[Generalisation: it is the co-location, not the hash]
+\label{prop:pp-general}
+Every naive construction publishes one object with two sides: an \emph{identifying input side}
+(transparent spends, which name a wallet cluster) and an \emph{identifying obligation side} (an
+address or memo that names the workload or the user). The link between them is the transaction itself,
+and it is public because the obligation must be checkable by parties holding no secret (V0). The leak
+is therefore not the hash function, not the address format and not the memo encoding; it is the
+co-location of the two sides in one public object. Exactly one of the two sides must be made
+non-identifying, and the obligation side cannot be omitted.
+\end{property}
+
+Flux's own deployment path is the same object with different labels: transparent inputs, an output to
+$A_{\mathrm{sink}}$ = \texttt{t3Nryf\allowbreak{}AQLGe\allowbreak{}Fs9j\allowbreak{}Eoeqsxm\allowbreak{}BN2QLRa\allowbreak{}RKFLUX}
+\srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}deploymentinformation}{2026-09-03}, an \texttt{OP\_RETURN} carrying
+$H_\app$, and a registration message signed by the owner key. Payer cluster, owner identity and
+workload are all public and all linked.
+
+\begin{property}[Payment-key indirection alone does not remove the leak]
+\label{prop:pp-v15}
+CumulusVPN's planned v1.5 separates a payment key $pk_p$ from the tunnel key $pk_t$
+(\planned, no code found, \srcdoc{cumulusvpn/docs/04-payments.md:81--83}). This defeats an adversary
+that sees only $pk_t$ --- a multi-hop entry node, a passive network observer --- because it cannot
+compute $\mathsf{H}(pk_p)$. But the gateway must still decide whether $pk_t$ is entitled, and the only
+way for the client to demonstrate that is to present $pk_p$ or a signature under it, which returns the
+preimage to the gateway. Indirection therefore moves the linkage from enrolment to the entitlement
+check; it does not remove it. It removes it only when the entitlement check is \emph{itself}
+non-identifying, which requires either Construction~\ref{con:pp-b} or an issuer-signed voucher.
+\end{property}
+
+The paper states this so that ``v1.5 closes the gap'' is not printed anywhere. The two remedies
+Property~\ref{prop:pp-general} permits are developed in \S\ref{sec:pp-consta} (blind the input side)
+and \S\ref{sec:pp-constb} (blind the obligation side).
+
+\subsection{The deployed rule, and construction A}
+\label{sec:pp-deployed}
+
+\subsubsection{What is deployed}
+
+Per node, FluxOS holds the chain $C_{\le\hgt}$, a message store with temporary messages (1\,h TTL) and
+permanent messages, and, per application name, a stored specification and $e_\app$. On observing a
+funding event at height $\hgt'$, node $u$ runs \texttt{check\allowbreak{}And\allowbreak{}Request\allowbreak{}App}: it fetches $m_\app$ from
+local temporary storage or from peers (up to three attempts), re-verifies the owner signature,
+recomputes $\price(m_\app,\hgt')$ from the height-scheduled price table, and sets
+\[
+  e_\app \leftarrow
+  \begin{cases}
+    \hgt' + \dur(m_\app), & v \ge \price(m_\app,\hgt'), \\[2pt]
+    \text{unchanged, warning logged}, & \text{otherwise,}
+  \end{cases}
+  \qquad
+  \mathsf{Verify}_u(\app,\hgt,C_{\le\hgt}) = \indic{\hgt \le e_\app}.
+\]
+The second branch is the silent-underpayment defect of \S16: an underpaying transaction is consumed,
+not refunded, and no signed rejection reaches the payer (\shipped,
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMessaging/\allowbreak{}messageVerifier.js}{619--897}). A shielded payer has no return
+address, so the negative acknowledgement \S16 requires must be published on the FluxOS message layer
+keyed by $H_\app$ for the payer to poll --- an interface requirement (I4 below), not a new mechanism.
+
+From a transparent funding event a node learns everything: the inputs and hence the payer's address
+cluster; $v$; $H_\app$; $m_\app$ in full; and, if it is the API node through which the registration
+was submitted, the client's IP.
+
+\subsubsection{Construction A}
+\label{sec:pp-consta}
+
+\begin{construction}[Shielded direct payment over the deployed toolkit --- \planned]
+\label{con:pp-a}
+A funding transaction for $\app$ would be a Sapling v4 transaction
+(\texttt{SAPLING\_TX\_VERSION}~$=4$, \texttt{SAPLING\_VERSION\_GROUP\_ID}~$= \mathtt{0x892F2085}$)
+with:
+\begin{itemize}
+  \item $\mathsf{vin} = \varnothing$;
+  \item one or more \texttt{Spend\allowbreak{}Description}s spending the payer's notes;
+  \item one \texttt{Output\allowbreak{}Description} returning change to a payer-controlled \zaddr;
+  \item transparent outputs $(A_{\mathrm{sink}}, v)$ and $(\mathsf{OP\_RETURN}\ H_\app, 0)$;
+  \item $v_{\mathrm{bal}} = v + \mathsf{fee}$, and a \texttt{bindingSig} over the value commitments.
+\end{itemize}
+Under \PNR{} ($\hgt \ge \hpa$) the same transaction would be unchanged in shape: its single sink
+output $(A_{\mathrm{sink}}, v)$ is divided by consensus under PS4 of \S7, and $H_\app$ stays in the
+\texttt{OP\_RETURN} (PS2). Computed serialized size:
+\qty{1500}{\byte} for one spend and one change output, against approximately \qty{286}{\byte} for the
+transparent equivalent.
+\end{construction}
+
+\paragraph{Statement proved, public inputs, witness.} Nothing beyond Sapling's own two statements
+\citep{zcashprotocol}, which \fluxd{} already verifies for every shielded transaction (\shipped,
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}primitives/\allowbreak{}transaction.h}{155--242}, \srccode{fluxd/\allowbreak{}depends/\allowbreak{}packages/\allowbreak{}librustzcash.mk}{2--8}).
+
+\begin{description}
+  \item[Spend statement.] Public inputs $(\mathsf{rt}, \mathsf{cv}, \nf, \mathsf{rk})$; witness the
+    Merkle path and position in $\tree$ (the Sapling note commitment tree, depth \num{32}) together
+    with $(g_d, pk_d, v_{\note}, \mathsf{rcv}, \cm, \mathsf{rcm}, \alpha, \mathsf{ak}, \mathsf{nsk})$.
+    It proves: the note commitment opens to $(g_d, pk_d, v_{\note}, \mathsf{rcm})$; $\cm$ lies in
+    $\tree$ under root $\mathsf{rt}$; $\mathsf{cv}$ commits to $v_{\note}$; $\nf$ is the nullifier of
+    $(\cm,\mathrm{pos})$ under $\mathsf{nk}$; $\mathsf{rk}$ re-randomises the spend authority
+    $\mathsf{ak}$; and the address is diversified from $\viewkey$. Groth16 proof
+    \citep{groth2016size}, \qty{192}{\byte}.
+  \item[Output statement.] Public inputs $(\mathsf{cv}, \cm, \mathsf{epk})$; witness
+    $(g_d, pk_d, v_{\note}, \mathsf{rcv}, \mathsf{rcm}, \mathsf{esk})$. It proves commitment and
+    value-commitment integrity and $\mathsf{epk} = [\mathsf{esk}]\,g_d$. Groth16 proof,
+    \qty{192}{\byte}.
+  \item[Binding signature.] Under
+    $\sum \mathsf{cv}_{\mathrm{spend}} - \sum \mathsf{cv}_{\mathrm{out}} -
+    \mathsf{ValueCommit}(v_{\mathrm{bal}},0)$, it proves
+    $\sum v_{\mathrm{spent}} - \sum v_{\mathrm{out}} = v_{\mathrm{bal}}$ exactly, with
+    $v_{\mathrm{bal}}$ public.
+\end{description}
+
+\paragraph{Roles.} \emph{Prover:} the payer, or its agent. \emph{Verifiers:} every \fluxd{} node at
+consensus, checking the two proofs, the binding signature and nullifier non-membership; and every
+FluxOS node at the application layer, running $\mathsf{Verify}_u$ unchanged.
+
+\paragraph{What a verifier learns.} $H_\app$ and everything $m_\app$ contains, as before; $v$ and
+$v_{\mathrm{bal}}$; one nullifier per spent note, unlinkable to any commitment without $\mathsf{nk}$;
+the anchor, which is a recent tree root and therefore a coarse ``this wallet had synced past height
+$h$'' signal; and the change note's ciphertext. \textbf{What it does not learn:} which note was spent,
+that note's value, the change value, or any key.
+
+\begin{palgorithm}[H]
+\caption{$\mathsf{Fund}_A(\principal, \app)$ --- payer side. \planned.}
+\label{alg:pp-fund}
+\DontPrintSemicolon
+\KwIn{spending key $\mathsf{xsk}_\app$ (ZIP-32 child); registration or renewal message $m_\app$; current height $\hgt$; price table; sink address $A_{\mathrm{sink}}$}.
+\KwOut{a transaction $\mathrm{tx}$ that, once confirmed, sets $e_\app \ge \hgt + \dur(m_\app)$}.
+\medskip\noindent \textbf{Invariant.} $\mathrm{tx}$ has $\mathsf{vin} = \varnothing$ at all times, so Assumption~\ref{ass:pp-closed} never applies to it, and $\sum v_{\mathrm{spent}} - \sum v_{\mathrm{out}} = v_{\mathrm{bal}} = v + \mathsf{fee}$ holds by the binding signature.\medskip
+$H_\app \gets \mathsf{SHA256}(m_\app)$\;
+$\price \gets$ price of $m_\app$ at $\hgt$ under the height-scheduled table (\S16)\;
+$v \gets \price$, or $\lceil \price/g\rceil\, g$ if a denomination grid $g$ is in force (Q6)\;
+select notes under $\mathsf{xsk}_\app$ with total value $\ge v + \mathsf{fee}$\;
+build \texttt{Spend\allowbreak{}Description}s; build one \texttt{Output\allowbreak{}Description} for change to a \zaddr{} derived from $\mathsf{xsk}_\app$ \tcp*{or from the next period's child (Q13)}\;
+append transparent outputs $(A_{\mathrm{sink}}, v)$ and $(\mathsf{OP\_RETURN}\ H_\app, 0)$\;
+set $v_{\mathrm{bal}} \gets v + \mathsf{fee}$; sign \texttt{bindingSig}\;
+broadcast $\mathrm{tx}$; broadcast $m_\app$ to a FluxOS API node\;
+\medskip\noindent \textbf{Failure modes.} (a) Insufficient shielded value: abort before broadcast; there is no partial-payment state. (b) $v < \price$ because the price table changed between steps 2 and 8: the payment is consumed and $e_\app$ is not advanced (the silent-underpayment defect); recovery depends on interface I4. (c) $m_\app$ does not reach a node before the funding event is scanned: the node retries the fetch up to three times, then drops the event. (d) A wallet that cannot emit an \texttt{OP\_RETURN} output alongside a Sapling spend cannot execute step 6 at all: interface I2.\medskip
+\end{palgorithm}
+
+\begin{palgorithm}[H]
+\caption{$\mathsf{Verify}_u(\app, \hgt, C_{\le\hgt})$ --- node side. \shipped{} for transparent
+funding events; the shielded case is covered by the same scan (interface I1, M5 resolved).}
+\label{alg:pp-verify}
+\DontPrintSemicolon
+\KwIn{local chain prefix $C_{\le\hgt}$; local message store; the price table}.
+\KwOut{$e_\app \in \mathbb{N}\cup\{\bot\}$, identical across all honest nodes with the same prefix}.
+\medskip\noindent \textbf{Invariant.} No secret is read (V0); no message from another verifier is awaited (L).\medskip
+\For{each confirmed $\mathrm{tx}$ at height $\hgt' \le \hgt$ with an output to $A_{\mathrm{sink}}$}{
+$H \gets \mathsf{OP\_RETURN}(\mathrm{tx})$; \textbf{if} $H$ is absent \textbf{then continue}\;
+fetch $m$ with $\mathsf{SHA256}(m) = H$ from local or peer message store\;
+verify the owner signature on $m$; \textbf{if} invalid \textbf{then continue}\;
+\textbf{if} $\mathrm{value}(\mathrm{tx}, A_{\mathrm{sink}}) \ge \price(m, \hgt')$ \textbf{then} $e_\app \gets \hgt' + \dur(m)$ \textbf{else} log a warning\;
+}
+\Return{} $e_\app$\;
+\medskip\noindent \textbf{Failure modes.} (a) \emph{Resolved, and favourably.} The concern was that a shielded funding event would be invisible to an address-index scanner because it has an empty \texttt{vin}. It is not: \texttt{ConnectBlock}'s \texttt{vout} indexing loop runs unconditioned by \texttt{tx.vin} or coinbase status, so a z$\to$t transaction's transparent output is written to the address index regardless, and \texttt{getaddressdeltas}\slash\texttt{getaddresstxids} read it back without re-filtering \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{4072-4090}, \srccode{fluxd/\allowbreak{}src/\allowbreak{}rpc/\allowbreak{}misc.cpp}{812,1010}. A node with \texttt{-addressindex} scanning the sink address sees the payment, so Construction~\ref{con:pp-a} is not gated here --- it is gated only on reopening t$\to$z. (b) Message-store miss on all three fetch attempts: the event is dropped and the payer must re-broadcast $m_\app$. (c) A reorg past $\hgt'$: $e_\app$ is recomputed on the new prefix, which is exactly the consistency property C.\medskip
+\end{palgorithm}
+
+\paragraph{Preconditions and interface requirements.} None of these is a new cryptographic primitive.
+
+\begin{description}
+  \item[P1.] Assumption~\ref{ass:pp-closed} would have to be lifted. It will not be: the pools are
+    to be retired instead (\S\ref{sec:shielded-retirement}, \Cref{rem:q1q2-resolved}), so
+    Construction~\ref{con:pp-a} remains usable only by holders of pre-2021 shielded value
+    (Corollary~\ref{cor:pp-who}) and only until the sunset height. \textbf{This precondition is
+    unsatisfiable in the target architecture}, which is why \Cref{rem:pp-status} classes the
+    constructions here as inapplicable rather than pending.
+  \item[P2.] ZIP-209 turnstile enforcement, recommended on with Flux-computed checkpoints (Q2).
+  \item[I1.] \texttt{processInsight} must index transactions with empty \texttt{vin} and a Sapling
+    spend paying $A_{\mathrm{sink}}$ exactly as it indexes transparent ones. By construction it keys
+    on \texttt{vout}; the daemon-proxy address index does return such transactions, verified in
+    the indexing code \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{4072-4090} (M5, resolved).
+  \item[I2.] No wallet in the corpus constructs a Sapling spend carrying an \texttt{OP\_RETURN}
+    output: \SSP{} has no shielded code path, and \texttt{z\_sendmany} attaches memos only to
+    \zaddr{} recipients (\shipped, \srccode{fluxd/\allowbreak{}src/\allowbreak{}wallet/\allowbreak{}rpcwallet.cpp}{3939}). Consensus
+    would accept the transaction; the \texttt{Transaction\allowbreak{}Builder} needs an \texttt{OP\_RETURN} output
+    path. This is small, and it is the difference between ``possible'' and ``usable''.
+  \item[I3.] Under \S7's settlement nothing further is needed: PS4 divides the value of the sink
+    output, which is transparent in Construction~\ref{con:pp-a}, and O7 is moot (\Cref{rem:o7-moot}).
+  \item[I4.] The negative acknowledgement of \S16 is published on the FluxOS message layer keyed by
+    $H_\app$. Payment disclosure (\texttt{z\_getpaymentdisclosure}, \inprogress, gated behind
+    \texttt{-\allowbreak{}experimentalfeatures} plus \texttt{-\allowbreak{}paymentdisclosure},
+    \srccode{fluxd/\allowbreak{}src/\allowbreak{}wallet/\allowbreak{}rpcdisclosure.cpp}{42,149}) is the right tool for the \emph{dispute}
+    that follows, letting a payer prove to a chosen party what it paid. It is a disclosure tool, not a
+    privacy tool, and \S20's characterisation should be read that way.
+\end{description}
+
+\subsubsection{Construction C: a shielded balance with delegated renewal}
+
+\begin{construction}[Shielded credit balance --- \planned]
+\label{con:pp-c}
+The principal $\principal$ would derive a ZIP-32 child $\mathsf{xsk}_{\app}$, or
+$\mathsf{xsk}_{\app,i}$ per period, and fund notes to its address --- $\zaddr \to \zaddr$ from
+existing shielded value today, $\taddr \to \zaddr$ only once P1 is lifted. The ``balance'' is the
+value of those notes and exists nowhere as protocol state. The renewer $\agent$ holds
+$\mathsf{xsk}_{\app}$ and, at $e_\app - \Delta_{\mathrm{pre}}$, produces a
+Construction~\ref{con:pp-a} transaction. The delegated budget $\budget$ is exactly the notes' value,
+with scope $\scopeset = \{\text{renew }\app\text{ at no more than }\price\}$ enforced by which notes
+the child key controls rather than by a protocol rule. Revocation: $\principal$ re-derives the child
+and sweeps its notes, racing $\agent$ in the same way \S17 describes. Monitoring without spending:
+$\principal$ retains the child's full viewing key.
+\end{construction}
+
+What holds: V0, S, C, L, D, PI against the network, RU (each renewal is an unlinkable spend; the
+balance never appears on chain), and FS with per-period children. What does not hold is PI against
+$\agent$, which holds the key and therefore the link. When $\agent$ is the tenant's own agent this is
+not a loss and Corollary~\ref{cor:pp-agent} applies. When $\agent$ is a third-party renewer acting for
+human users, it is a privacy trust point exactly as a custodial balance is, though with bounded
+exposure of funds. Whether a renewer can act \emph{without} learning the link is open problem R2
+(\S\ref{sec:pp-open}); this paper does not claim an answer.
+
+\settlednote{Conditional --- inapplicable unless a shielded pool exists, and both pools are being retired (\Cref{rem:pp-status}). Q12. Renewer model for the credit path. Domain: \{own agent; third-party renewer holding
+per-period child keys; custodial balance\}. Trade-off --- own agent: PI complete, but requires the
+tenant to run an always-on agent; child keys: PI against the network only, with funds bounded by the
+notes the child controls; custodial: neither PI nor bounded funds. Mirrors \S16's open decision on
+the credit path.}
+
+\subsection{Shape B: what a real construction would need}
+\label{sec:pp-constb}
+
+Shape B is the one place in this section where a construction outside the deployed circuits is
+genuinely required, and it is stated as a \vision-maturity proposal with every parameter open. It is
+given because the alternative on the table --- blind vouchers --- moves soundness off the chain, and
+that trade deserves to be named rather than absorbed.
+
+\begin{construction}[Issuer-free chain-derived entitlement --- proposed, \vision]
+\label{con:pp-b}
+\emph{Payment.} \texttt{OP\_RETURN} would carry \texttt{CVPN2:}~$\|~\cm$ with
+$\cm = \mathsf{H}(s \| r)$ for $s, r \in \{0,1\}^{256}$ generated on-device; the amount is unchanged.
+Gateways would compute \texttt{paid\_until}$[\cm]$ exactly as they compute \texttt{paid\_until}[code]
+today, keyed by $\cm$ instead of by a hash of the tunnel key. Composed with
+Construction~\ref{con:pp-a}, the payer is hidden on the chain as well.
+
+\emph{Entitlement tree.} Each gateway would maintain $\tree_{\mathrm{ent}}$, a sparse Merkle tree of
+depth $d_{\mathrm{ent}}$ keyed by $\cm$ with leaf
+$\ell = \mathsf{H}(\cm \,\|\, \texttt{paid\_until}[\cm])$, updated in chain order. Its root
+$\mathsf{rt}_\hgt$ is a deterministic function of $C_{\le\hgt}$ and the gateway's
+$(\text{address},\text{price})$ configuration, hence identical on every gateway with the same chain
+--- V0 and C are preserved, and L is preserved with a root-history window. The root would be published
+at \texttt{/v1/info}.
+
+\emph{Enrolment.} The client would send $(pk_t, j, \nf, \mathsf{rt}, \zkproof)$ with epoch
+$j = \lfloor t / T_{\mathrm{ep}} \rfloor$ and $\nf = \mathsf{PRF}_s(j)$, where $\zkproof$ is a proof
+for the relation
+\begin{multline*}
+  \mathcal{R}_{\mathrm{ent}} = \Big\{\,
+    \big((\mathsf{rt}, j, \nf, \eta);\ (s, r, w, \mathrm{path})\big) \ :\
+    \mathsf{Leaf}(\mathsf{H}(s\|r), w) \in \tree_{\mathrm{ent}} \text{ under } \mathsf{rt} \\
+    {}\ \wedge\ w \ge j\,T_{\mathrm{ep}}
+    \ \wedge\ \nf = \mathsf{PRF}_s(j)
+  \,\Big\}
+\end{multline*}
+with public inputs $(\mathsf{rt}, j, \nf, \eta)$ where $\eta = \mathsf{H}(pk_t)$, witness
+$s, r \in \{0,1\}^{256}$, $w \in \mathbb{N}$ (the paid-through time), and
+$\mathrm{path} \in (\{0,1\}^{256})^{d_{\mathrm{ent}}}$. The public input $\eta$ is bound into the
+proof to prevent proof theft --- the Semaphore ``signal'' pattern.
+
+\emph{Gateway.} Accept if $\mathsf{rt}$ is among the gateway's last $N_{\mathsf{rt}}$ published roots
+and the proof verifies; set \texttt{tier}$[pk_t] \gets$ premium; key the rate limiter by $\nf$, so
+that all tunnel keys presenting the same $\nf$ within epoch $j$ share one limiter --- \emph{the same
+sharing bound the per-\texttt{pubkey} limiter enforces today}
+(\shipped, \srccode{cumulusvpn/\allowbreak{}gateway/\allowbreak{}internal/\allowbreak{}limiter/\allowbreak{}limiter.go}{105--123}). D therefore needs no
+global spent set: entitlement is time-based rather than consumable, and sharing across gateways is
+already permitted in the shipped model.
+
+\emph{Epoch rotation.} A fresh $pk_t$ and a fresh $\nf$ per epoch make sessions unlinkable across
+epochs and linkable within one.
+\end{construction}
+
+\paragraph{What the gateway learns.} $(pk_t, \nf, j, \mathrm{IP}, \text{traffic})$ and the fact that
+some active subscriber is present. Not $\cm$, not the payment, not the payer; linking $\nf$ to $\cm$
+requires $s$. The anonymity set is the set of leaves with $w \ge j\,T_{\mathrm{ep}}$ --- every active
+subscriber --- refined downward by first-use timing correlation between a new leaf appearing on chain
+and a new enrolment arriving (\S\ref{sec:pp-attacks}), whose magnitude is CumulusVPN's payment rate
+and is unmeasured (M3).
+
+\paragraph{What it requires that Flux does not have.} Four things, and the interfaces are stated so
+the construction can be evaluated even though it is not built.
+
+\begin{enumerate}
+  \item \textbf{The circuit.} Approximately $d_{\mathrm{ent}}$ hash evaluations for the Merkle path,
+    two for the leaf, one PRF evaluation and one range check --- of order $10^4$ constraints with a
+    SNARK-friendly hash, which is small next to Sapling's spend circuit.
+  \item \textbf{A proving key.} Under Groth16 this means a circuit-specific ceremony
+    \citep{groth2016size,bowe2017mpc}, which would be the first ceremony this project has ever run:
+    \S20 documents that \fluxd{} re-hosts the 2018 Zcash Sapling parameters verbatim and performs no
+    ceremony of its own (\shipped, \srccode{fluxd/\allowbreak{}zcutil/\allowbreak{}fetch-params.sh}{220--222},
+    \srccode{fluxd/\allowbreak{}src/\allowbreak{}init.cpp}{754--806}).
+  \item \textbf{Or a move to a ceremony-free system.} Halo-class recursive arguments remove the
+    trusted setup \citep{bowe2019halo}. \textbf{Two properties must be kept strictly apart here:}
+    no-trusted-setup is not post-quantum. Halo2 rests on discrete-log hardness on a pairing-friendly
+    or Pasta-style curve and is no more post-quantum than Groth16 over BLS12-381. Removing the
+    inherited ceremony serves the decentralization requirement of \S20; it does not serve the
+    post-quantum requirement of \S8, which by settled scope excludes the shielded layer entirely.
+  \item \textbf{Client and gateway code.} A WASM prover in the TypeScript and React Native clients,
+    and a BLS12-381 verifier in the Go gateway.
+\end{enumerate}
+
+\unsupported{Proving time for $\mathcal{R}_{\mathrm{ent}}$ in a browser or mobile client is asserted
+nowhere measurable; the ``sub-second'' figure in the mechanism design is an order-of-magnitude
+inference from circuit size, not a measurement. Either measure it on target client hardware or drop
+the claim.}
+
+\settlednote{Conditional --- inapplicable unless a shielded pool exists, and both pools are being retired (\Cref{rem:pp-status}). Q8. Proving system for any new Flux circuit. Domain: \{Groth16 with a Flux-run ceremony;
+a Halo2/PLONK-class system with universal or no setup, undated; defer shape B\}. Trade-off: every new
+Groth16 statement needs its own ceremony and this project has never run one; a ceremony-free system
+removes that political cost and adds a proving-system migration that is scheduled nowhere.}
+
+\settlednote{Conditional --- inapplicable unless a shielded pool exists, and both pools are being retired (\Cref{rem:pp-status}). Q10 and Q11, construction B parameters. Epoch length $T_{\mathrm{ep}} \in [\qty{1}{\hour},
+\qty{30}{\day}]$: shorter gives less intra-epoch linkability at the cost of more re-enrolment and
+proving; longer lets the nullifier $\nf$ decay into a stable pseudonym. Root-history window
+$N_{\mathsf{rt}} \in [10, 10^4]$ roots: larger tolerates staler clients at the cost of gateway state.
+Tree depth $d_{\mathrm{ent}}$ is fixed by the target subscriber population, which is unmeasured (M3).}
+
+\begin{remark}[The voucher alternative, and what it costs]
+\label{rem:pp-voucher}
+CumulusVPN's stated v2 is blind-signature vouchers with quorum signing (\vision,
+\srcdoc{cumulusvpn/docs/04-payments.md:84--87}). Blind signatures give unlinkability by construction
+and, for the Chaum--RSA variant, information-theoretically. But they require an \emph{issuer} holding
+a secret key, and nothing on the chain binds tokens issued to payments received: \textbf{soundness
+moves from the chain to the issuer.} Definition~\ref{def:pp-obligation}'s V0 forbids a secret in
+\emph{verification} only, so an issuer is admissible --- but it becomes the party whose honesty S
+depends on. Threshold or quorum issuance bounds the availability risk and does not restore
+chain-anchored soundness. That is the real trade, and both options should be presented with it:
+Construction~\ref{con:pp-b} keeps soundness on the chain and pays for it with a circuit and a
+ceremony; vouchers avoid the circuit and pay for it with an issuer.
+\end{remark}
+
+\subsection{The anonymity set, measured}
+\label{sec:pp-anonymity}
+
+No construction manufactures an anonymity set. This subsection measures the one that exists, and the
+numbers are the section's most load-bearing empirical content.
+
+\subsubsection{The population is not the payer's anonymity set}
+
+For shape A the payment names $H_\app$, so the \emph{workload-side} anonymity set is $1$ by
+construction and the \num{1195} deployed applications are not the anonymity set of anything. The
+question that matters is whether the (amount, time) pair leaks more than the name already does. For
+public-content applications it does not, because $\price$ is a deterministic function of the public
+specification. Table~\ref{tab:pp-classes} gives the partition structure.
+
+\begin{table}[H]
+\centering
+\small
+\caption{Price-class structure over the \num{1195} deployed applications
+\srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}. The tuple partition
+$(\mathrm{cpu},\mathrm{ram},\mathrm{hdd},\ninst,\dur,\mathsf{enterprise},\mathsf{staticip},
+\mathsf{nodes})$ is a lower bound on class size under \emph{any} deterministic price function; the
+period-price partitions are upper bounds up to rare collisions.}
+\label{tab:pp-classes}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+\textbf{Partition} & \textbf{Classes} & \textbf{Singletons} & \textbf{Median class} & \textbf{Largest} \\
+\midrule
+resource tuple (lower bound)        & 778 & 698 (\qty{58.4}{\percent}) & 1 & 57 \\
+period price, base only (lower bound) & 349 & 201 (\qty{16.8}{\percent}) & 7 & 63 \\
+period price, $\ninst/3$ variant (upper bound) & 381 & 229 (\qty{19.2}{\percent}) & 6 & 62 \\
+\textbf{period price, \Cref{def:price} as corrected} & \textbf{370} & \textbf{222} (\qty{18.6}{\percent}) & \textbf{8} & \textbf{61} \\
+monthly price only, ignoring $\dur$ & 170 & \phantom{0}86 (\qty{7.2}{\percent})  & 66 & 210 \\
+\addlinespace
+price \emph{and} same block         & 1{,}195 & 1{,}195 (\qty{100}{\percent}) & 1 & 1 \\
+price and same hour                 & --- & 976 (\qty{81.7}{\percent}) & 1 & 11 \\
+price and same day                  & --- & 669 (\qty{56.0}{\percent}) & 1 & 18 \\
+price and same week                 & --- & 439 (\qty{36.7}{\percent}) & 2 & 35 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+If every application renews on schedule, renewal volume is \num{0.0123} per block, \num{1.48} per
+hour, \textbf{\num{35.4} per day} and \num{248} per week; the next 30 days carry a median of \num{24}
+and a maximum of \num{98} expiries per day. That figure is an upper bound, because churn is unmeasured
+(M2). The median period price is \num{1.13}\flux, the range \numrange{0.02}{79.85}\flux;
+\num{459} applications (\qty{38.4}{\percent}) sit at the default \num{88000}-block period and
+\num{107} (\qty{9.0}{\percent}) at the \num{1056000}-block maximum.
+
+The reading is this. \textbf{At \num{35.4} renewals per day a renewal is a singleton within its block
+\qty{100}{\percent} of the time and within its day \qty{56.0}{\percent} of the time.} A payment ``of a
+distinctive size just before a distinctive deployment'' is not an attack scenario, it is the normal
+case. For shape A that identifies the application, which the \texttt{OP\_RETURN} already does, and
+says nothing about the payer. For any coupon-style or Construction~\ref{con:pp-b} scheme paying exact
+amounts, it identifies the entitlement and defeats the scheme --- which is why such schemes require
+\emph{denominated} amounts, at a measurable cost.
+
+\begin{table}[H]
+\centering
+\small
+\caption{Denomination trade-off, computed on Flux's own application population. Overpayment is
+expressed as a share of list revenue; under \PNR{} it would flow to the Foundation and the fee pool
+by the standard split, i.e.\ a privacy fee paid to the network.}
+\label{tab:pp-denom}
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+\textbf{Grid $g$} & \textbf{Classes} & \textbf{Singletons} & \textbf{Median class} & \textbf{Largest} & \textbf{Overpayment} \\
+\midrule
+none (exact)      & 349 & 201 (\qty{16.8}{\percent}) & 7 & 63 & \qty{0}{\percent} \\
+\num{0.5}\flux    & 43 & 15 (\qty{1.3}{\percent}) & 118 & 291 & \qty{9.0}{\percent} \\
+\num{1}\flux      & 30 & 13 (\qty{1.1}{\percent}) & 227 & 559 & \qty{17.3}{\percent} \\
+\num{2}\flux      & 21 & \phantom{0}7 (\qty{0.6}{\percent}) & 786 & 786 & \qty{39.0}{\percent} \\
+powers of two     & 13 & \phantom{0}0 & 227 & 268 & \qty{51.4}{\percent} \\
+\num{5}\flux      & 12 & \phantom{0}4 (\qty{0.3}{\percent}) & 1{,}037 & 1{,}037 & \qty{119.7}{\percent} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.80\linewidth, height=6.2cm,
+  xlabel={denomination grid $g$ (FLUX); $g=0$ denotes exact pricing},
+  ylabel={median price-class size},
+  ymode=log, log basis y={10},
+  xmin=-0.3, xmax=5.3, ymin=4, ymax=3000,
+  xtick={0,0.5,1,2,5},
+  xticklabels={exact,0.5,1,2,5},
+  axis y line*=left, axis x line*=bottom,
+  grid=major, major grid style={draw=gray!20},
+  mark size=2pt,
+]
+\addplot[thick, mark=*] table[x index=0, y index=1] {../data/private_renewal_denom.dat};
+\end{axis}
+\begin{axis}[
+  width=0.80\linewidth, height=6.2cm,
+  axis y line*=right, axis x line=none,
+  ylabel={overpayment (\% of list revenue)},
+  xmin=-0.3, xmax=5.3, ymin=0, ymax=130,
+  mark size=2pt,
+]
+\addplot[thick, dashed, mark=square] table[x index=0, y index=2] {../data/private_renewal_denom.dat};
+\end{axis}
+\end{tikzpicture}
+\caption{The denomination trade-off measured on the \num{1195}-application population. Solid, left
+axis, logarithmic: median price-class size. Dashed, right axis, linear: overpayment as a share of
+list revenue. A \num{1}\flux{} grid buys a median class of \num{227} at \qty{17.3}{\percent}
+overpayment; a \num{0.5}\flux{} grid buys \num{118} at \qty{9.0}{\percent}. This is the classical
+fixed-denomination trade-off, evaluated on Flux's own demand rather than assumed.}
+\label{fig:pp-denom}
+\end{figure}
+
+\settlednote{Conditional --- inapplicable unless a shielded pool exists, and both pools are being retired (\Cref{rem:pp-status}). Q6. Denomination grid $g \in \{\text{none}, 0.5, 1, 2, 5\}$\flux{} or powers of two, plus
+the destination of the overpayment (\PNR{} split, or credited forward to the next period). Trade-off
+is Table~\ref{tab:pp-denom} exactly: median class $7 \to 118 \to 227 \to 786$ against overpayment
+$0 \to \qty{9.0}{\percent} \to \qty{17.3}{\percent} \to \qty{39.0}{\percent}$. Note that denomination
+buys nothing for shape A, where the workload is named anyway; it is a shape-B and coupon-scheme
+parameter.}
+
+\subsubsection{The payer's anonymity set is a closed pool of unknown membership}
+
+\textbf{This is the number the section must print.} The payer-side anonymity set for
+Construction~\ref{con:pp-a} is not the application population; it is the holder set of the Sapling
+pool: \num{77188.75921324}\flux{} of value (plus \num{19291.17735041}\flux{} in Sprout), closed since
+height \num{835554}, with \emph{note count and holder count unmeasured}. The
+\texttt{commitments} field of \texttt{getblockchaininfo} (\num{815736} at tip) is, in the zcashd-2.x
+lineage, the \emph{Sprout} tree size and does not answer the question.
+
+\begin{openproblem}[M1: the effective size of a closed pool]
+\label{op:pp-m1}
+Determine the number of unspent Sapling notes at the tip --- tree size minus nullifier-set size ---
+and any defensible holder-count estimate that chain analysis permits. Until this is measured, the
+paper claims the \emph{mechanism} of Construction~\ref{con:pp-a} and does not claim realised privacy
+for it. Interpreting the measurement (which notes are plausibly spendable, how holders cluster) is
+chain-analysis research with no standard answer, and is listed separately as R3.
+\end{openproblem}
+
+\subsection{Cost, and the binding limit on shielded throughput}
+\label{sec:pp-cost}
+
+\begin{table}[H]
+\centering
+\small
+\caption{Serialized sizes, derived from the deployed constants (\shipped,
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}Zelcash.h}{8--24}, \srccode{fluxd/\allowbreak{}src/\allowbreak{}flux/\allowbreak{}JoinSplit.hpp}{22--26},
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}primitives/\allowbreak{}transaction.h}{155--242}).}
+\label{tab:pp-sizes}
+\begin{tabular}{@{}lrl@{}}
+\toprule
+\textbf{Object} & \textbf{Bytes} & \textbf{Derivation} \\
+\midrule
+Sapling note plaintext / \texttt{encCiphertext} & 564 / 580 & $1+11+8+32+512$, then $+16$ \\
+\texttt{outCiphertext} & 80 & $32+32+16$ \\
+\texttt{Spend\allowbreak{}Description} & 384 & $4\times 32 + 192 + 64$ \\
+\texttt{Output\allowbreak{}Description} & 948 & $3\times 32 + 580 + 80 + 192$ \\
+Construction~\ref{con:pp-a} renewal & \textbf{1{,}500} & header, counts, two vouts, one spend, one output, \texttt{bindingSig} \\
+transparent renewal (1 P2PKH input) & $\approx 286$ & --- \\
+Construction~\ref{con:pp-b} proof (off-chain) & 192 & Groth16 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+A shielded renewal is \qty{1500}{\byte} against approximately \qty{286}{\byte} transparent, a factor
+of \num{5.24}. With \texttt{MAX\_BLOCK\_SIZE} $=$ \qty{2000000}{\byte}, block capacity is
+$\lfloor 2{,}000{,}000/1{,}500 \rfloor = \num{1333}$ such transactions per block, \num{44.4} per
+second, implying \num{2666} Groth16 verifications per block.
+
+\begin{property}[Block space is not the constraint]
+\label{prop:pp-space}
+At measured demand of \num{0.0123} renewals per block, Construction~\ref{con:pp-a} would consume
+\qty{0.0009}{\percent} of \texttt{MAX\_BLOCK\_SIZE}. At \numlist{10;100;1000} times measured demand
+the figures are \qty{0.01}{\percent}, \qty{0.09}{\percent} and \qty{0.92}{\percent}. Even if all
+\num{7486} requested instances were re-registered as separate applications \emph{daily}, the load
+would be \num{2.6} transactions per block.
+\end{property}
+
+\begin{property}[Verification is the constraint]
+\label{prop:pp-verify}
+Let $t_{G16}$ be single-core Groth16 verification time and $N_{\mathrm{proofs}}$ the proof count in a
+block; verification cost is $T_{\mathrm{verify}} = N_{\mathrm{proofs}}\cdot t_{G16}$ on one core. A
+block filled with Construction~\ref{con:pp-a} transactions carries $N_{\mathrm{proofs}} = \num{2666}$;
+a pathological all-\texttt{Spend\allowbreak{}Description} block carries
+$\lfloor 2{,}000{,}000/384\rfloor = \num{5208}$. Against the \qty{30}{\second} \PoN{} interval:
+\[
+  \num{2666}\cdot t_{G16} > \qty{30}{\second} \iff t_{G16} > \qty{11.3}{\milli\second},
+  \qquad
+  \num{5208}\cdot t_{G16} > \qty{30}{\second} \iff t_{G16} > \qty{5.8}{\milli\second}.
+\]
+Concretely, at \qtylist{2;5;10}{\milli\second} the pathological block takes
+\qtylist{10.4;26.0;52.1}{\second} to verify. \textbf{\texttt{MAX\_BLOCK\_SIZE} was sized for
+transparent transactions; for shielded traffic the binding limit on throughput is single-core proof
+verification, not block space.} At ordinary demand the point is moot --- at $1000\times$ demand,
+\num{24.6} proofs per block, or \qty{0.25}{\second} at \qty{10}{\milli\second} --- but the
+adversarially-full block would become reachable once shielded traffic was encouraged, which is what a
+reopening of $\taddr \to \zaddr$ would have done. With reopening cancelled (\S\ref{sec:pp-blocker}),
+no such activation height arrives and the bound remains a ceiling on a pool that can only drain.
+\end{property}
+
+\unsupported{$t_{G16}$ on Cumulus, Nimbus and Stratus hardware is a parameter here, not a
+measurement (M4). It must be measured with \texttt{zcbenchmark}, whose \texttt{verifysaplingspend}
+and \texttt{verifysaplingoutput} types the fork retains
+(\srccode{fluxd/\allowbreak{}src/\allowbreak{}wallet/\allowbreak{}rpcwallet.cpp}{2972--2979}). Likewise, the claim that the 2018-era \texttt{librustzcash} pin
+\texttt{06da3b9a} predates batch verification is an inference from the pin date, not from reading the
+crate.}
+
+\settlednote{Conditional --- inapplicable unless a shielded pool exists, and both pools are being retired (\Cref{rem:pp-status}). Q17. Response to Property~\ref{prop:pp-verify}. Domain: \{no change; a consensus cap
+$N_{\mathrm{proofs}}$ per block; a \texttt{librustzcash} upgrade enabling batch verification\}.
+Trade-off: a cap is a one-constant consensus change that bounds worst-case validation time and
+also caps legitimate shielded throughput; an upgrade removes the cap's need but moves the fork's
+pinned cryptography forward by several years of upstream changes, which is a much larger review
+surface. Only a reopening of $\taddr \to \zaddr$ would have let shielded volume grow past today's
+zero, and reopening is cancelled (\S\ref{sec:pp-blocker}).}
+
+Two further cost notes. Verifying keys are already present on every node --- \texttt{ZC\_LoadParams}
+refuses to start without all three parameter files (\shipped,
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}init.cpp}{754--806}) --- so \num{6489} nodes verify Sapling proofs today at zero
+marginal deployment cost. And Sprout value, the \num{19291.18}\flux{} half of the pool, requires the
+\qty{725}{\mega\byte} \texttt{sprout-groth16.\allowbreak{}params} and gigabyte-class proving memory; the paper
+treats it as legacy.
+
+\subsection{Invariants}
+\label{sec:pp-invariants}
+
+Table~\ref{tab:pp-invariants} states which invariants hold under which construction. Each is stated so
+that a violation is observable.
+
+\begin{table}[H]
+\centering
+\small
+\caption{Invariants by construction. A: shielded direct payment; C$_{\mathrm{own}}$: credit balance
+renewed by the payer's own agent; C$_{3\mathrm{p}}$: credit balance renewed by a third party;
+B: issuer-free entitlement.}
+\label{tab:pp-invariants}
+\begin{tabular}{@{}llcccc@{}}
+\toprule
+& \textbf{Invariant} & \textbf{A} & \textbf{C}$_{\mathrm{own}}$ & \textbf{C}$_{3\mathrm{p}}$ & \textbf{B} \\
+\midrule
+I1 & Conservation: $\sum v_{\mathrm{spent}} - \sum v_{\mathrm{out}} = v_{\mathrm{bal}}$, pool value falls by exactly $v_{\mathrm{bal}}$ & yes & yes & yes & n/a \\
+I2 & Non-negativity of $\pool$, $e_\app$ and note values & yes & yes & yes & yes \\
+I3 & No double-funding from one payment (D) & yes & yes & yes & vacuous \\
+I4 & No forgery of funded status (S) & yes$^\dagger$ & yes$^\dagger$ & yes$^\dagger$ & yes \\
+I5 & No linkage across renewals of one deployment (RU) & yes$^\ddagger$ & yes$^\ddagger$ & \emph{no} & yes \\
+I6 & Forward secrecy of the payer across periods (FS) & partial & partial & \emph{no} & yes \\
+I7 & Liveness under partition (L) & yes & yes & yes & yes$^\S$ \\
+I8 & No double-claim across an instance migration & yes & yes & yes & n/a \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{description}
+  \item[I1, conservation.] Construction~\ref{con:pp-a} moves value through the existing Sapling
+    turnstile arithmetic: the binding signature forces
+    $\sum v_{\mathrm{spent}} - \sum v_{\mathrm{out}} = v_{\mathrm{bal}}$, and the pool's
+    \texttt{chainValue} falls by exactly $v_{\mathrm{bal}}$. The coinbase is untouched, so \S7's
+    bounded-coinbase requirement is trivially preserved: this mechanism adds no coinbase output.
+  \item[I2, non-negativity.] A $\zaddr \to \taddr$ transaction with $v_{\mathrm{bal}}$ exceeding the
+    pool's value is rejected \emph{only when turnstile enforcement is on}; today it is monitored and
+    not enforced (Q2). The invariant is conditional on that decision and the paper states the
+    dependency rather than the invariant alone.
+  \item[I3, no double-funding.] $H_\app$ is resolved once --- \texttt{check\allowbreak{}And\allowbreak{}Request\allowbreak{}App} returns
+    early when the permanent message already exists --- so a second payment carrying an
+    already-resolved hash is \emph{ignored}, that is, lost. This joins the silent-underpayment defect
+    as a failure mode that interface I4 must report. Under Construction~\ref{con:pp-c} each renewal
+    is a distinct $m_\app$ with a distinct hash. Under Construction~\ref{con:pp-b} the nullifier keys
+    the limiter and D is vacuous, because entitlement is time-based rather than consumable.
+  \item[I4, no forgery of funded status.] Requires a confirmed transfer bound to $H_\app$; forging one
+    requires forging a Sapling proof or the binding signature. $\dagger$: under Groth16 with the
+    \emph{inherited 2018 parameters}, this is exactly the counterfeiting scenario \S20 documents, and
+    it is bounded to the pool's declared value only if turnstile enforcement is on.
+  \item[I5, no linkage across renewals.] Consecutive Construction~\ref{con:pp-a} transactions share
+    the name (via each period's $H_\app$), the amount (same price) and the periodicity --- all public
+    by design --- and nothing else: fresh $\nf$, $\mathsf{cv}$, $\mathsf{rk}$ and ciphertext.
+    $\ddagger$ marks the residual: if period $i$'s change note is spent in period $i+1$ and the
+    period-$(i{+}1)$ child key is compromised, the adversary decrypts that note and learns it was
+    created by period $i$'s renewal --- linking two renewals that $H_\app$ already links, and
+    revealing how many periods the sub-wallet has funded. No payer identity is exposed. Forwarding
+    change to the next period's child confines the residual to one step (Q13).
+  \item[I6, forward secrecy.] With per-period ZIP-32 children and parents discarded on the agent,
+    compromise at period $i$ yields keys for periods $\ge i$ only. ``Partial'' because the chain
+    retains every ciphertext forever, so compromise of the principal's \emph{master} seed reveals all
+    periods --- inherent to hierarchical-deterministic shielded wallets and shared with Zcash.
+  \item[I7, liveness under partition.] $\mathsf{Verify}_u$ depends only on the local prefix; a
+    partitioned node evaluates on its own view and reconciles by the same disconnect logic reorgs use
+    today. $\S$: for Construction~\ref{con:pp-b}, a gateway with a stale root rejects proofs against
+    newer roots and the client re-proves against the published root, one extra round trip, with
+    $N_{\mathsf{rt}}$ bounding staleness tolerance.
+  \item[I8, no double-claim across migration.] Funded status is chain-derived and node-independent, so
+    when FluxOS redeploys instances to other nodes there is no per-node claim to duplicate. Across the
+    dead Sprout$\to$Sapling migration path, Sprout value remains spendable by a joinsplit with
+    \texttt{vpub\_new} and empty \texttt{vin} --- therefore not caught by
+    Assumption~\ref{ass:pp-closed} --- at higher proving cost; nothing is claimed twice.
+\end{description}
+
+\subsection{Attack analysis}
+\label{sec:pp-attacks}
+
+\paragraph{Timing and amount correlation.} Renewal heights are public and periodic,
+$\hgt_0 + i\,\dur$. An adversary with a network vantage watches for a shielded transaction entering
+the mempool in the window before each renewal height of $\app$ and records the first-seen peer. Over
+$i$ renewals the intersection of first-seen peer sets converges on the payer's broadcast point.
+The mitigation is behavioural, not cryptographic: prepay, which the deployed
+\texttt{max\allowbreak{}Blocks\allowbreak{}Allowance} of \num{1056000} blocks (\num{366.7} days) already permits and which
+reduces events from \num{11.95} to \num{1.00} per year; randomise the submission lead within
+$[\Delta_{\mathrm{pre}}, \dur]$; and broadcast through a node the tenant does not otherwise use --- or
+through the VPN the network itself sells. \fluxd{} has no Dandelion-style relay and inherits
+Bitcoin-era transaction propagation, so this attack is not addressed at the P2P layer.
+
+\paragraph{The intersection attack across renewals.} On chain, Construction~\ref{con:pp-a} gives the
+adversary nothing to intersect: each renewal exposes a fresh nullifier and no persistent identifier.
+The attack lives entirely at the network layer, as above. Against a payer broadcasting from a fixed
+vantage it converges in a handful of periods; against one who prepays a year it has a single sample.
+The interaction with \S23 should be stated: a tenant who prepays a year privately --- the cheapest
+mitigation --- carries a larger forfeitable remainder if the application is later removed by the
+moderation quorum. At the median period price that is \num{13.5}\flux{} for a year; at the maximum
+measured period price of \num{79.85}\flux{} it is \num{955}\flux.
+
+\paragraph{A node operator who is also the payer.} On chain, no advantage: its own transactions look
+like anyone's. At the FluxOS layer it can submit its own registrations through its own node and
+broadcast its own transactions from it, eliminating the metadata trust point \emph{for itself};
+conversely, as an adversary it observes the metadata of every tenant that uses its nodes, and with
+\num{237} nodes under one identity that is \qty{3.7}{\percent} of API entry points. Self-dealing gains
+nothing economically --- \S7's timing recapture is structural and independent of whether the fee's
+origin is visible --- but privacy removes the \emph{audit trail} that would let anyone notice a
+wash-deployment pattern. The defence against wash deployment is \PNR's economics, not observability,
+and \S7 should be read as carrying that weight.
+
+\paragraph{What the transparent layer leaks even when the payment is shielded.} Measured on the
+specification set itself, which no payment scheme touches
+\srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}:
+
+\begin{itemize}
+  \item \textbf{Owner pseudonyms.} \num{659} distinct \texttt{owner} identifiers; \num{588} own
+    exactly one application; the largest owns \num{246} (\qty{20.6}{\percent}) and is a
+    Foundation-operated address. Excluding it, \num{949} applications across \num{658} owners, of whom
+    \num{15} hold five or more (\num{223} applications in total). Owner-key reuse links applications
+    across renewals and across deployments \emph{regardless of payment privacy}. The agent-native
+    default should be one owner key per application (Q15).
+  \item \textbf{Contacts.} \num{688} applications (\qty{57.6}{\percent}) publish at least one
+    non-blank contact string in the public specification. Any such string is a direct identity leak
+    that dominates payment privacy for the application carrying it (Q14).
+  \item \textbf{The registration message} carries the owner's signature and reaches the network
+    through one API node, which sees the client's IP address and is identifiable to peers as the
+    broadcast origin. This is a metadata trust point independent of the chain (Q7).
+  \item \textbf{Amount and timing}, per \S\ref{sec:pp-anonymity}; the \textbf{anchor}, a coarse wallet
+    sync height; the \textbf{fee}; and \textbf{\texttt{valueBalance}}, which equals $v + \mathsf{fee}$
+    and is public anyway.
+\end{itemize}
+
+\paragraph{Griefing and denial of service.} Invalid Sapling proofs cost the submitter nothing --- they
+are rejected before any fee --- and cost each verifying node one Groth16 verification; this is bounded
+by P2P DoS scoring as in Zcash. Block-filling is Property~\ref{prop:pp-verify}. For
+Construction~\ref{con:pp-b}, a gateway that publishes a root it will not accept denies service to
+anonymous clients only, leaves free-tier clients unaffected, and is detectable by clients but not by
+the network.
+
+\paragraph{Byzantine and colluding node sets.} A byzantine minority cannot forge funded status
+(I4: every node verifies independently) and cannot deny it (L); it can withhold or delay a tenant's
+registration message, as it can today, with the client retrying against another node; it can log
+metadata at the nodes it runs. A colluding majority can rewrite the chain, at which point the
+funded-status question is moot. Short of that, a majority of \emph{API entry points} still cannot
+break PI cryptographically; it widens the metadata view above. A colluding majority of
+Construction~\ref{con:pp-b} gateways learns nothing more than one gateway does, because gateways hold
+no secret --- which is the point of making the construction issuer-free.
+
+\paragraph{Sustained low demand.} This is the operative failure mode and it is present now:
+\num{35.4} renewals per day, of which zero are shielded. Privacy degrades continuously with volume;
+there is no threshold below which it stops working, only a shrinking $\mathsf{AS}$. The paper does not
+claim privacy at current volume. It claims the mechanism and prints the population figures.
+
+\paragraph{Post-quantum scope.} Every construction here rests on BLS12-381 pairings and Jubjub
+discrete logarithms, and none is post-quantum --- by the settled scope decision of \S8, which places
+the shielded layer outside post-quantum migration. The one interaction worth stating: a quantum
+adversary breaks \emph{hiding retroactively}, since it can decrypt stored ciphertexts and recover
+keys, so PI for payments made today does not survive that adversary. This is Zcash's position as well,
+and \S20 states it.
+
+\subsection{Open problems, and open parameters}
+\label{sec:pp-open}
+
+The two categories are kept apart deliberately. A research problem has no known good answer, or no
+answer without a new trust assumption; an engineering item is a substantial build with no unsolved
+question. \S\ref{sec:feasibility} must class them separately and must not collapse them.
+
+\begin{openproblem}[R1: unlinkable exact-amount payment at low volume]
+\label{op:pp-r1}
+With \num{35.4} renewals per day and \num{349} price classes, the pair (amount, time) is identifying
+(Table~\ref{tab:pp-classes}). The only known remedies are denomination, which costs overpayment
+(Table~\ref{tab:pp-denom}), and batching or delay, which costs latency; both are policies, not
+constructions. Whether a mechanism exists that is simultaneously exact-amount, unlinkable and
+\PNR-compatible is open. Property~\ref{prop:pp-amount} shows that amount hiding is not that
+mechanism. \textbf{This is a property of the population, not of any construction} --- which is why no
+circuit fixes it.
+\end{openproblem}
+
+\begin{openproblem}[R2: third-party renewal without the renewer learning the link]
+\label{op:pp-r2}
+Construction~\ref{con:pp-c} hands the renewer the spending key and therefore the link. A renewer that
+spends value bound to $\app$ without learning which principal funded it is the
+delegatable-anonymous-credential / anonymous-e-cash-with-delegation setting. No issuer-free instance
+for \emph{this} setting --- many independent verifiers, no shared secret, soundness anchored on the
+chain --- is known to this author, and this paper does not invent one. For autonomous agents the
+problem is moot (Corollary~\ref{cor:pp-agent}); it binds only for human users delegating to a
+third-party renewal service.
+\end{openproblem}
+
+\begin{openproblem}[R3: the effective anonymity set of a closed pool]
+\label{op:pp-r3}
+M1 (Open Problem~\ref{op:pp-m1}) is a measurement. \emph{Interpreting} it --- which notes are
+plausibly still spendable, how holders cluster, what a realistic adversary can exclude --- is
+chain-analysis research with no standard answer, and it is made harder, not easier, by the pool being
+closed: a pool that can only lose value admits elimination arguments that a growing pool does not.
+\end{openproblem}
+
+Everything else is engineering: (E1) the P1 network upgrade and P2 turnstile activation with
+Flux-computed checkpoints; (E2) interfaces I1 and I3, the FluxOS scanner and \PNR{} validation for
+empty-\texttt{vin} payments; (E3) interface I2, a \texttt{Transaction\allowbreak{}Builder} \texttt{OP\_RETURN} path
+and a wallet or agent SDK that uses it; (E4) interface I4, the negative acknowledgement on the message
+layer with payment disclosure as the dispute tool; (E5) Construction~\ref{con:pp-c} as a ZIP-32
+child-key delegation object composed with \S17's delegation primitive; (E6) Construction~\ref{con:pp-b}
+--- circuit, ceremony or Halo2, client prover, gateway verifier; and (E7) the denominated-pricing
+option and the response to Property~\ref{prop:pp-verify}. \textbf{The feasibility assessment of \S\ref{sec:feasibility}
+should therefore read: shape A is Engineering; shape C with the payer's own agent is Engineering;
+shape B is Engineering plus a ceremony; and the Research content is R1--R3, of which R1 is a property
+of the population rather than of any construction.}
+
+\begin{table}[H]
+\centering
+\scriptsize
+\caption{Decisions, open unless marked. None is guessed anywhere in this section; each is mirrored in the
+decisions register. ``Affects'' names the construction.}
+\label{tab:pp-open}
+\begin{tabular}{@{}llp{0.26\linewidth}p{0.36\linewidth}@{}}
+\toprule
+\textbf{Id} & \textbf{Affects} & \textbf{Domain} & \textbf{Trade-off} \\
+\midrule
+Q1 & A, C & withdrawn: no reopening (\Cref{rem:q1q2-resolved}) & pool unreachable until activation versus turnstile-bound soundness at reopening \\
+Q2 & A, C & answered: on, for the drain window (\Cref{rem:q1q2-resolved}) & bounded soundness failure versus none \\
+Q3 & A & settled: $H(m_\app)$ in \texttt{OP\_RETURN} \srcintent{08-answers-round-2.md, round 2} & binding $H(m_\app)$ is what nodes must act on; blinding belongs to shape B \\
+Q4 & A & moot by retirement: transparent only (\S7, \Cref{rem:o7-moot}) & exclusion makes this section vacuous; hidden amount is impossible (Prop.~\ref{prop:pp-amount}) \\
+Q5 & A & amount hiding for non-\PNR{} classes: none / an exempt class & an exempt class restores AH for enterprise workloads at the cost of revenue outside \S7's split \\
+Q6 & A, B & denomination grid, Table~\ref{tab:pp-denom} & median class versus overpayment \\
+Q7 & A, C & submission path: any node / own node / VPN / no-logging rule & metadata trust point; a logging rule is policy and unenforceable \\
+Q8 & B & Groth16 with a ceremony / Halo2-class / defer & first-ever ceremony versus an undated proving-system move \\
+Q9 & B & Construction~\ref{con:pp-b} / single issuer / threshold issuer & soundness on chain versus soundness at an issuer \\
+Q10 & B & $T_{\mathrm{ep}} \in [\qty{1}{\hour}, \qty{30}{\day}]$ & intra-epoch linkability versus re-enrolment cost \\
+Q11 & B & $N_{\mathsf{rt}} \in [10, 10^4]$ & stale-client liveness versus gateway state \\
+Q12 & C & own agent / third-party renewer / custodial & PI complete / PI versus the network only / neither \\
+Q13 & C & change forwarding to per-period children: yes / no & free on chain; confines I5's residual to one step \\
+Q14 & all & contacts: keep / encrypt / strip from the hashed object & \num{688} applications leak an identifier today and no payment scheme fixes it \\
+Q15 & A & one owner key per application: policy / wallet UX & cross-application RU; \num{15} owners hold \num{223} applications \\
+Q16 & A, C & which wallet implements $\zaddr\to\taddr$ with \texttt{OP\_RETURN} & determines who can actually use Construction~\ref{con:pp-a} \\
+Q17 & A & proof-count cap / \texttt{librustzcash} upgrade / none & Property~\ref{prop:pp-verify} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{remark}[Every question in this section is conditional on the pool surviving]
+\label{rem:pp-conditional}
+Of Table~\ref{tab:pp-open}'s seventeen rows, Q1 is withdrawn and Q2 answered
+(\Cref{rem:q1q2-resolved}), Q3 is settled (\S7, O3) and Q4 is mooted by retirement; the rest remain
+open decisions in form, and Q6, Q8, Q12 and Q17 are called out separately above because they gate
+constructibility, cost or a security property. No
+value in this section was chosen by this drafter, and that remains deliberate --- but the reason has
+changed, and the change is worth stating rather than leaving implicit.
+
+\Cref{sec:shielded-retirement} records the option the team has since taken: retiring both shielded
+pools outright, which the measurements there favour \srcintent{08-answers-round-2.md, round 10}.
+\textbf{With that option taken, this entire section is moot} --- not deferred, but inapplicable,
+because there is no pool to pay into, no proving system to choose, no denomination grid to design
+and no turnstile question beyond the drain window. Q1's ``reopening is decided, only the height is
+open'' framing was recorded before that option was on the table and is now withdrawn.
+
+The paper therefore does not fill these parameters, and would not be improved by filling them: every
+value would be conditional on a pool that will not exist. What this section provides regardless is
+the requirement set --- what a
+private payment for a public obligation must satisfy --- and that is independent of whether Flux
+carries a shielded pool. The construction is what depends on the answer.
+\end{remark}
+
+Four measurements are also outstanding and are not decisions: \textbf{M1}, the Sapling pool in notes
+and holders (Open Problem~\ref{op:pp-m1}); \textbf{M2}, renewal churn, which converts
+\S\ref{sec:pp-anonymity}'s upper-bound rate into a rate; \textbf{M3}, CumulusVPN's payment rate, which
+is the anonymity set for Construction~\ref{con:pp-b}; and \textbf{M4}, $t_{G16}$ on tier hardware,
+which converts Property~\ref{prop:pp-verify} from a parameter to a number. \textbf{M5}, whether the
+daemon-proxy address index returns empty-\texttt{vin} Sapling transactions paying $A_{\mathrm{sink}}$,
+is resolved, favourably: it does (\S\ref{sec:pp-deployed}, interface I1), so it gates
+Construction~\ref{con:pp-a} only on reopening (P1) and no longer stands as an open test.
+
+\subsection{Comparison with prior art}
+\label{sec:pp-related}
+
+\begin{table}[H]
+\centering
+\scriptsize
+\caption{Prior art against the requirement pair of \S\ref{sec:pp-requirements}. The column that
+separates the field is \emph{where soundness is anchored}: on a chain, or at an issuer.}
+\label{tab:pp-related}
+\begin{tabular}{@{}lp{0.20\linewidth}p{0.22\linewidth}lp{0.22\linewidth}@{}}
+\toprule
+\textbf{System} & \textbf{What it hides} & \textbf{How the obligation is verified} & \textbf{Soundness} & \textbf{What Flux does differently} \\
+\midrule
+Zerocash / Zcash Sapling \citep{bensasson2014zerocash,zcashprotocol} &
+sender, receiver and amount for $\zaddr\to\zaddr$; sender for $\zaddr\to\taddr$ &
+no notion of an obligation beyond the transfer; no recurring-payment primitive &
+chain &
+attaches a \emph{public} obligation $H_\app$ to a $\zaddr\to\taddr$ and lets \num{6489} independent
+verifiers act on it; the shielded-subscription problem Zcash never solved is shape C, and the answer
+here is child-key delegation, not a protocol primitive \\
+\addlinespace
+Groth16 and its ceremony \citep{groth2016size,bowe2017mpc} &
+--- &
+--- &
+--- &
+Flux inherits the 2018 Zcash Sapling parameters verbatim and has run no ceremony of its own; every
+\emph{new} statement would need one (Q8) \\
+\addlinespace
+Halo, no trusted setup \citep{bowe2019halo} &
+--- &
+--- &
+--- &
+removes the inherited ceremony, which directly serves \S20's decentralization argument; it is
+\textbf{not} post-quantum and the two claims are kept separate \\
+\addlinespace
+Fixed-denomination mixers &
+the link deposit\,$\leftrightarrow$\,withdrawal within a denomination &
+on-chain nullifier set plus Merkle membership &
+chain &
+the identical trade-off, measured here on Flux's own demand (Table~\ref{tab:pp-denom}); shape A needs
+no separate pool because Sapling \emph{is} one \\
+\addlinespace
+Semaphore-style membership signalling &
+which member signalled &
+Merkle membership plus a per-external-nullifier nullifier &
+chain or verifier-side &
+Construction~\ref{con:pp-b} is this shape with the membership set derived from \emph{payments on
+chain}, so the set needs no admission authority \\
+\addlinespace
+Lightning \citep{poon2016lightning} &
+the payer from third parties (onion routing); the payment from non-participants &
+the recipient alone; the preimage is a receipt &
+channel counterparties &
+Lightning has no \emph{public} obligation: a receipt convinces one party. Flux needs \num{6489}
+independent verifiers holding no secret, which is precisely what point-to-point payment privacy
+cannot provide \\
+\addlinespace
+Chaumian blind signatures; Privacy-Pass-style tokens &
+the link issuance\,$\leftrightarrow$\,redemption &
+the issuer's public key, with a per-verifier or shared spent set &
+\textbf{issuer} &
+admissible under V0, which constrains \emph{verification} only --- but soundness leaves the chain
+(Remark~\ref{rem:pp-voucher}); Construction~\ref{con:pp-b} replaces the issuer with the chain and pays
+a circuit for it \\
+\addlinespace
+Anonymous credentials (CL-style; algebraic-MAC keyed-verification) &
+multi-show unlinkability with provable attributes such as \texttt{paid\_until} &
+the issuer's key; keyed-verification requires the \emph{verifier} to hold the issuer secret &
+issuer &
+keyed-verification violates V0 outright for \num{6489} independent verifiers --- fine for a
+single-gateway model, wrong for this node model \\
+\addlinespace
+Compact e-cash / rechargeable anonymous wallets &
+which coin, which recharge &
+bank-issued coins with double-spend detection &
+the bank &
+the closest prior art for shape C: the shielded notes are the coins and the chain is the bank, but
+delegation to a renewer (R2) is where the analogy stops \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The prior art named in the last four rows of Table~\ref{tab:pp-related} is
+\citet{chaum1982blind} for blind signatures, the Privacy Pass line of anonymous authorization tokens
+\citep{privacypass}, \citet{camenisch2001credentials} for anonymous credentials and the
+keyed-verification line that follows it, and \citet{camenisch2005ecash} for compact e-cash.
+
+The combination that is specific to Flux is worth stating in one sentence, because it is what makes
+this section a contribution rather than a survey: \textbf{a public obligation that must be checkable
+by thousands of independent verifiers holding no shared secret, paid out of a shielded pool that
+already exists but cannot be entered, at a demand level where the anonymity set rather than the
+cryptography is the binding constraint.} Two of the three difficulties are not cryptographic. The
+construction for the common case is short and uses circuits that have been running on this network
+since 2019; the honesty about the set, and about the consensus rule that closed the pool in 2021, is
+the part that took work.
+
+%% Drain this section's float queue before the next begins.
+\FloatBarrier
