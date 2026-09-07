@@ -67,6 +67,28 @@ Three scripts need one or both of those files and will not run until you fetch t
 The aggregate snapshots the other scripts need — network totals, the price table, the
 per-chain liability figures — are included under `evidence/measured/`.
 
+## Serving it
+
+A small container serves the PDFs as a static site. The root path is the combined document, and
+PDFs are served as `application/pdf` with an inline disposition, so they open in the browser rather
+than downloading.
+
+```
+docker build -t runonflux/fluxwhitepaper:latest .
+docker run --rm -p 8080:8080 runonflux/fluxwhitepaper:latest
+```
+
+| Path | Serves |
+|---|---|
+| `/` | the combined document: short paper first, full paper behind it |
+| `/short` | the 16-page short paper |
+| `/full` | the full paper |
+| `/health` | liveness, a few bytes, so a health check never pulls the 3.8 MB PDF |
+
+The image listens on **8080** and needs no LaTeX toolchain: the PDFs are committed, so a build is a
+copy. To update the deployment, rebuild, push the tag the application specification names, and
+redeploy.
+
 ## Licence
 
 The paper is © Tadeas Kmenta. The scripts are provided so that every measured figure in

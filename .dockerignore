@@ -1,0 +1,7 @@
+# Deny everything, then allow only what the image needs. Keeps the build
+# context to the three PDFs and the server config rather than the whole repo.
+*
+!FluxWhitepaper-Combined.pdf
+!FluxWhitepaper.pdf
+!FluxWhitepaper-Short.pdf
+!nginx.conf
