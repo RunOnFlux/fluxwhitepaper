@@ -17,6 +17,7 @@ __pycache__/
 # Internal-only tracking documents must never land here.
 SECURITY-INTERNAL.md
 ROADMAP-INTERNAL.md
+LAUNCH-INTERNAL.md
 
 # Short-paper build artefacts (short/main.tex); the root PDF is tracked deliberately.
 short/*.aux

@@ -16,11 +16,16 @@ is the reason this paper can describe half its subject in the past tense at all,
 claims about deployed behaviour are checkable against running code rather than argued from a design.
 
 That history has been written about before, and this paper does not restate it. The chain was
-specified in the \textbf{ZelCash whitepaper v2} of July 2018 \citep{zelcashwp2018}; the consensus
-mechanism now called Proof of Node was specified in the Proof-of-Useful-Work v2 whitepaper
-\citep{fluxpouw2}, still linked from \fluxd's own README; and the immediate predecessor to this
-document is \textbf{Flux Whitepaper 2.1} \citep{fluxwp21}, which this paper supersedes rather than
-amends. The author's own contemporaneous descriptions of node tiering \citep{kmentazelnode2020} and
+specified in the \textbf{ZelCash whitepaper v2} of July 2018 \citep{zelcashwp2018}. Two documents are
+this paper's direct predecessors, and it supersedes both rather than amending them. The
+\textbf{Proof-of-Useful-Work v2 whitepaper} \citep{fluxpouw2} --- still linked from \fluxd's own
+README --- specified the consensus mechanism now called Proof of Node, and is the one this document
+builds on most directly rather than departs from: \S\ref{sec:consensus} carries its construction
+forward as deployed code and measures it, and \S\ref{sec:parallel-assets} reconciles its supply
+model to within one block of accrual (\Cref{tab:pa-depletion-epochs}). Where the two differ, it is
+because something has since been built, measured or decided, and this document says so at the point
+of difference. \textbf{Flux Whitepaper 2.1} \citep{fluxwp21} is the ecosystem description it
+replaces. The author's own contemporaneous descriptions of node tiering \citep{kmentazelnode2020} and
 of the \FluxOS{} architecture \citep{kmentaflux2020} are prior art for parts of \S\ref{sec:consensus}
 and Part~III, and the per-tier benchmark thresholds \S\ref{sec:consensus} reads out of \fluxbench{}
 were published as an operator guide \citep{zelbenchguide}.
