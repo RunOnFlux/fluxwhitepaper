@@ -1,0 +1,62 @@
+%% Starts a fresh page: the table below is too tall to share one with a stranded heading.
+\clearpage
+\section{What does not work yet}
+\label{sec:short:limits}
+
+A document that only said the first five sections would be a pitch. This one is the reason to
+believe the rest. Each row is a finding from the full paper, stated once and without softening; the
+last column is what, if anything, is being done about it.
+
+\begin{center}\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.15cm}p{4.85cm}p{5.2cm}@{}}
+\toprule
+& The limit & Why it matters, and the response \\
+\midrule
+\textbf{Hosting pays nothing extra} &
+PNR pays every eligible node in a tier the same share, regardless of what it runs. The marginal
+reward for hosting an application is exactly zero. &
+Free-riding is individually rational; what compels hosting is the eligibility gate, and that gate is
+currently bound to neither the operator nor the machine. This is deliberate --- paying by placement
+would make the claim race a race for money --- and the answer is attested execution, which is why
+that work is a precondition rather than a follow-on. \\
+\textbf{Four parties reach the removal threshold} &
+At the measured collateral distribution, four owner identities together hold \SI{25}{\percent} of
+voting weight. The moderation quorum is not censorship-resistant today. &
+Accepted knowingly, with growth as the expected remedy. The paper notes the tension: the network's
+answer to weak demand is contraction, and contraction concentrates. Censorship resistance is, in
+effect, a function of demand for the cloud. \\
+\textbf{No chain-level privacy} &
+The shielded pool is being retired. Every payment will be publicly linkable. &
+A deliberate trade for a smaller, auditable chain. Payment privacy becomes an open problem, and the
+paper says so rather than claiming otherwise. \\
+\textbf{One discovery endpoint} &
+The service that tells the network which applications exist and where they run is a single
+Foundation-operated API, with no on-chain or peer-to-peer fallback. &
+If it goes down, nothing new propagates; the last-known configuration keeps serving. A real
+control-plane single point of failure, stated in the full paper's centralisation inventory. \\
+\textbf{Four keys can produce blocks} &
+An emergency path lets a 2-of-4 key set produce blocks that bypass the node-eligibility check, with
+no time or stall-detection gating on when it may be used. &
+Intended for recovery from a stalled chain, and the set is planned to move to 3-of-4 with fresh
+keys. But the gating is absent at either size: nothing in consensus limits \emph{when} the path
+fires, only \emph{who} can fire it. The full paper lists it in the centralisation inventory
+alongside the discovery endpoint. \\
+\textbf{The bridge is administered} &
+Mint, release and upgrades are 3-of-4 among four people from one organisation, and the contracts
+are upgradable. &
+Explicitly a bring-up safety net, with immutability the stated destination once a third-party audit
+and a proven operating record exist. Until the upgrade path is renounced on chain, the paper
+describes the bridge as administered, not trust-minimized. \\
+\textbf{Accelerators attach whole} &
+A GPU is passed through as an entire device. There is no subdivision, and a request under
+contention is silently dropped rather than refused. &
+This is the one thing the small-model thesis of \Cref{sec:short:whatfor} needs and the current
+allocation cannot do. Planned with the cloud/edge merge; not shipped. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+None of these is hidden in the full paper, and none should be hidden here. A reader deciding whether
+to run a node, deploy an application, or build on this platform is better served by knowing them
+than by discovering them.

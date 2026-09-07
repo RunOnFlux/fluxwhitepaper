@@ -83,8 +83,10 @@
 \newcommand{\hpon}{\ensuremath{h_{\PoN}}}                             % PoN activation height
 \newcommand{\hpa}{\ensuremath{h_{\mathrm{PA}}}}                       % PA-Depletion height (PNR activation)
 \newcommand{\hstar}{\ensuremath{\hgt^{\star}}}                        % spec v9 enforcement height (round 17: 3,050,000); introduced in \S10. Round 18, G25.
-\newcommand{\hshield}{\ensuremath{h_{\mathrm{shield}}}}               % shielded-pool sunset height (round 11: 4,517,830 = \hpa + 1,051,200); introduced in \S20. Round 18, G25.
+\newcommand{\hshield}{\ensuremath{h_{\mathrm{shield}}}}               % shielded-pool sunset height (round 37: 3,600,000 = 2027-04-27, announced at publication, before \hpa; earlier rounds 11/33 had \hpa + 1,051,200); introduced in \S20. Round 18, G25.
 \newcommand{\hsnap}{\ensuremath{h_{\mathrm{snap}}}}                   % migration snapshot height, announced in advance (round 9), no later than \hpa - 259,200; introduced in \S22. Round 18, G25.
+\newcommand{\hopen}{\ensuremath{h^{\mathrm{mig}}_{\mathrm{open}}}}       % redemption window opens: nothing can be swapped into a retiring chain; swapping back and claiming continue (rounds 34-36; 3,450,000 = 2027-03-06)
+\newcommand{\hclose}{\ensuremath{h^{\mathrm{mig}}_{\mathrm{close}}}}     % retiring chains shut down; residue to the Foundation (rounds 34, 36; 3,880,000 = 2027-08-02)
 \newcommand{\tslot}{\ensuremath{\tau}}                                % PoN slot index
 \newcommand{\spacingpon}{\ensuremath{\Delta_{\PoN}}}                  % PoN target spacing
 \newcommand{\spacingpow}{\ensuremath{\Delta_{\PoW}}}                  % legacy PoW target spacing

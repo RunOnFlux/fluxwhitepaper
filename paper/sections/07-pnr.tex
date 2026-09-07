@@ -103,7 +103,7 @@ load-bearing here and are restated so that no proof silently assumes more than t
 Fleet figures are $\ncount{\tC} = 3{,}247$, $\ncount{\tN} = 1{,}615$, $\ncount{\tS} = 1{,}627$,
 total $6{,}489$ \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}. The settlement model
 and its generated data files were computed at $\ncount{\tC} = 3{,}246$
-\srcdoc{scripts/07-pnr-settlement.py, run 2026-09-03}; the one-node difference changes nothing at
+\srcdoc{scripts/07-pnr-settlement.py, run 2026-09-07}; the one-node difference changes nothing at
 the precision reported. The activation-scale revenue figure $V_0 = 1{,}431{,}600 \flux$ per year is
 the team's assumption of $1{,}193$ applications at $100\flux$ per month, \emph{not} a measured
 receipt total \srcintent{design intake}; the census over the same window returned
@@ -149,7 +149,7 @@ Fix the operator-share schedule
 with $\hpon = 2{,}020{,}000$ \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{153},
 $\redint = 1{,}051{,}200$ blocks \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{157},
 $\redmax = 20$ \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{158},
-$\hpa = 3{,}466{,}630$, $\rampstep = 0.05$ and $\nodesharecap = 0.50$
+$\hpa = 3{,}787{,}502$, $\rampstep = 0.05$ and $\nodesharecap = 0.50$
 \srcintent{design intake}. Write $r(\hgt) \defeq 100\,\nodeshare(\hgt) \in \mathbb{Z}$.
 
 Let $\mathsf{sink}$ denote the \emph{application-payment address}: one transparent address carried
@@ -1427,7 +1427,7 @@ event & height & date & $\subsidy$ (\flux/block) & $\nodeshare$\\
 \midrule
 current tip (baseline, \shipped)      & $\sim$2{,}912{,}015 & 2026-09-03 & $14.0$   & ---\\
 reduction 1 ($\times 9/10$)           & 3{,}071{,}200 & 2026-10-25 & $12.6$   & ---\\
-\textbf{PA Depletion} ($\times 1/2$)  & \textbf{3{,}466{,}630} & \textbf{2027-03-12} & $\mathbf{6.3}$ & $\mathbf{0.20}$ --- \PNR begins\\
+\textbf{PA Depletion} ($\times 1/2$)  & \textbf{3{,}787{,}502} & \textbf{2027-07-01} & $\mathbf{6.3}$ & $\mathbf{0.20}$ --- \PNR begins\\
 reduction 2                            & 4{,}122{,}400 & 2027-10-25 & $5.67$   & $0.25$\\
 reduction 3                            & 5{,}173{,}600 & 2028-10-24 & $5.103$  & $0.30$\\
 reduction 4                            & 6{,}224{,}800 & 2029-10-24 & $4.5927$ & $0.35$\\
@@ -1463,7 +1463,7 @@ The design intake activated \PNR{} at PA~Depletion simultaneously with the paral
 cut, while the public roadmap stated that parallel-asset mining retirement comes \emph{only after}
 \PNR{} is demonstrably paying operators, ninety days announced, with the two in different halves of
 2027. The team has settled it: activation is \textbf{simultaneous}, both at
-$\hpa = \num{3466630}$ \srcintent{design intake} (\planned), superseding the
+$\hpa = \num{3787502}$ \srcintent{design intake} (\planned), superseding the
 roadmap's strictly-after ordering (\S\ref{sec:pa-sequencing}).
 
 The consequence is recorded rather than smoothed over, because simultaneity removes a check the
@@ -1516,7 +1516,7 @@ would be $6{,}386{,}040/0.20 = 31{,}930{,}200\flux$ per year, or $22.3\times V_0
 stage start & date & $\subsidy$ & $\nodeshare$ & operator issuance & parity revenue & growth needed\\
 (height) & & (\flux) & & (\flux/yr) & (\flux/yr) & from $V_0$\\
 \midrule
-3{,}466{,}630  & 2027-03-12 & $6.3000$ & $0.20$ & 6{,}386{,}040 & 31{,}930{,}200 & ---\\
+3{,}787{,}502  & 2027-07-01 & $6.3000$ & $0.20$ & 6{,}386{,}040 & 31{,}930{,}200 & ---\\
 4{,}122{,}400  & 2027-10-25 & $5.6700$ & $0.25$ & 5{,}747{,}436 & 22{,}989{,}744 & $16.1\times$\\
 5{,}173{,}600  & 2028-10-24 & $5.1030$ & $0.30$ & 5{,}172{,}692 & 17{,}242{,}308 & $12.0\times$\\
 6{,}224{,}800  & 2029-10-24 & $4.5927$ & $0.35$ & 4{,}655{,}423 & 13{,}301{,}209 & $9.3\times$\\
@@ -1529,7 +1529,7 @@ stage start & date & $\subsidy$ & $\nodeshare$ & operator issuance & parity reve
 \bottomrule
 \end{tabular}
 \caption{Parity requirement in \flux terms \planned. The two levers compound as intended: the
-requirement falls from $31.9$M to $6.8$M\flux\ per year in $5.6$ years and to $1.7$M on the
+requirement falls from $31.9$M to $6.8$M\flux\ per year in $5.3$ years and to $1.7$M on the
 perpetual tail. The final row is the flat tail of \S5: after twenty reductions the subsidy freezes,
 so operator issuance never reaches zero \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{158}.
 Source: \texttt{paper/\allowbreak{}data/\allowbreak{}pnr\_crossover.\allowbreak{}dat}.}
@@ -1544,16 +1544,16 @@ Source: \texttt{paper/\allowbreak{}data/\allowbreak{}pnr\_crossover.\allowbreak{
 annual revenue growth $g$ & crossover & revenue at crossover (\flux/yr) & $\nodeshare$ at crossover\\
 \midrule
 \SI{0}{\percent}   & \textbf{never} & --- & ---\\
-\SI{10}{\percent}  & 2038-10 & $4.33$M & $0.50$\\
-\SI{25}{\percent}  & 2033-10 & $6.28$M & $0.50$\\
-\SI{50}{\percent}  & 2031-10 & $9.33$M & $0.45$\\
-\SI{100}{\percent} & 2030-10 & $17.6$M & $0.40$\\
-\SI{200}{\percent} & 2029-10 & $25.6$M & $0.35$\\
+\SI{10}{\percent}  & 2038-10 & $4.21$M & $0.50$\\
+\SI{25}{\percent}  & 2034-10 & $7.33$M & $0.50$\\
+\SI{50}{\percent}  & 2032-10 & $12.4$M & $0.50$\\
+\SI{100}{\percent} & 2030-10 & $14.3$M & $0.40$\\
+\SI{200}{\percent} & 2029-10 & $18.3$M & $0.35$\\
 \bottomrule
 \end{tabular}
 \caption{Crossover year under constant annual revenue growth from $V_0$, \flux terms \planned.
-Required sustained growth to reach parity by a given year: 2029, \SI{134}{\percent};
-2030, \SI{73}{\percent}; 2031, \SI{47}{\percent}; 2032, \SI{32}{\percent}; 2033, \SI{25}{\percent};
+Required sustained growth to reach parity by a given year: 2029, \SI{162}{\percent};
+2030, \SI{82}{\percent}; 2031, \SI{51}{\percent}; 2032, \SI{34}{\percent}; 2033, \SI{26}{\percent};
 2035, \SI{16}{\percent}. Source: \texttt{paper/\allowbreak{}data/\allowbreak{}pnr\_crossover.\allowbreak{}dat}, columns
 \texttt{pnr\_g000}\,\dots\,\texttt{pnr\_g200}.}
 \label{tab:pnr:crossover}
@@ -1653,7 +1653,7 @@ $862{,}659\flux$ per year. Price does not appear on either axis and no price cla
 
 \begin{remark}[Figure provenance]
 The coordinates plotted in Figures~\ref{fig:pnr:crossover} and~\ref{fig:pnr:real} are the tabulated
-output of \texttt{scripts/\allowbreak{}07-pnr-settlement.\allowbreak{}py} (run 2026-09-03), which also wrote
+output of \texttt{scripts/\allowbreak{}07-pnr-settlement.\allowbreak{}py} (run 2026-09-07), which also wrote
 \texttt{paper/\allowbreak{}data/\allowbreak{}pnr\_crossover.\allowbreak{}dat} and \texttt{paper/\allowbreak{}data/\allowbreak{}pnr\_crossover\_real.\allowbreak{}dat}. Every
 plotted point in Figure~\ref{fig:pnr:crossover} has been checked against the corresponding row of
 that data file and agrees exactly; the data files carry their own \texttt{\#} provenance headers and
@@ -1679,11 +1679,11 @@ as a forecast gives the following years-to-parity after activation.
 \cmidrule(l){2-6}
 real growth $g$ & $0.5$ & $1$ & $2$ & $5$ & $10$\\
 \midrule
-\SI{0}{\percent}   & $14.6$ & never & never & never & never\\
-\SI{10}{\percent}  & $7.6$  & $11.6$ & $14.6$ & $19.6$ & $26.1$\\
-\SI{25}{\percent}  & $5.6$  & $6.6$  & $9.6$  & $11.6$ & $13.6$\\
-\SI{50}{\percent}  & $3.6$  & $4.6$  & $5.6$  & $7.6$  & $9.6$\\
-\SI{100}{\percent} & $2.6$  & $3.6$  & $4.6$  & $5.6$  & $5.6$\\
+\SI{0}{\percent}   & $14.3$ & never & never & never & never\\
+\SI{10}{\percent}  & $7.3$  & $11.3$ & $14.3$ & $19.3$ & $26.1$\\
+\SI{25}{\percent}  & $5.3$  & $7.3$  & $9.3$  & $12.3$ & $14.3$\\
+\SI{50}{\percent}  & $3.3$  & $5.3$  & $6.3$  & $7.3$  & $9.3$\\
+\SI{100}{\percent} & $2.3$  & $3.3$  & $4.3$  & $5.3$  & $6.3$\\
 \bottomrule
 \end{tabular}
 \caption{Years from activation to \flux-terms parity, as a function of real demand growth $g$ and an

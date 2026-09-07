@@ -1,0 +1,82 @@
+%% ---------------------------------------------------------------- cover
+\begin{titlepage}
+\thispagestyle{empty}
+\centering
+\vspace*{0.17\textheight}
+
+{\color{FluxRule}\rule{\linewidth}{1.4pt}}\par\vspace{1.5em}
+{\Huge\bfseries\color{FluxBlue} Flux\par}
+\vspace{0.6em}
+{\LARGE A Decentralized Cloud for\\[0.3em] Autonomous Compute\par}
+\vspace{0.9em}
+{\large\color{FluxSlate} A short introduction\par}
+\vspace{1.5em}
+{\color{FluxRule}\rule{\linewidth}{1.4pt}}\par
+
+\vspace{2.2em}
+{\large Tadeas Kmenta\par}
+\vspace{0.45em}
+{\color{FluxSlate}\today\par}
+
+\vspace{3em}
+\begin{minipage}{0.88\linewidth}
+\small\color{FluxSlate}\setlength{\parskip}{0.75em}
+\setlength{\emergencystretch}{2em}\hyphenpenalty=2000
+What \Flux{} is, as measured on 2026-09-03; how it works; what is changing in v9 and when; what it
+is for; and what does not work yet. Every number here is taken from a longer technical paper that
+cites source code for each claim about deployed behaviour, and nothing here goes beyond it.
+
+Where this document describes something planned rather than running, the sentence says so.
+Where a claim has a limit, the limit sits beside it in a grey box. That is the method, and it is
+the reason the document can be trusted.
+\end{minipage}
+
+\vfill
+{\footnotesize\color{FluxSlate}
+Companion to \emph{Flux v9: A Decentralized Cloud for Autonomous Compute}.\par}
+\vspace{1.2em}
+\end{titlepage}
+
+%% ---------------------------------------------------------------- in one page
+\clearpage
+\thispagestyle{empty}
+\section*{In one page}
+\addcontentsline{toc}{section}{In one page}
+
+\textbf{What it is.} A decentralized cloud of \num{6489} independently operated, collateralised
+machines running \num{1195} deployed applications, coordinated by its own blockchain. An operator
+locks \flux{} to join; the chain decides who may host and who is paid. Nobody signs a contract with
+anyone.
+
+\textbf{What already runs on it.} Not a proposal. By census: web services, blockchain
+infrastructure, and \num{27} scientific-simulation deployments doing real protein-folding work on
+about \SI{9}{\percent} of the fleet's committed CPU. A general-purpose cloud with science on it, into
+which AI is one arriving workload among several.
+
+\textbf{The bet.} The next tenant is software, not a person. Every major cloud is built for a human
+with a card and an account. \Flux{} is being rebuilt for a caller that is a program --- one that
+provisions, pays, and releases capacity with no human anywhere. It can, for one narrow and decisive
+reason: on \Flux{}, paying is a signed transaction, not a billing relationship. \emph{A program can
+hold a key. It cannot hold a corporate account.}
+
+\textbf{Why this fleet.} The thing that centralises frontier AI --- sharding one model across many
+accelerators that must be wired together --- simply does not apply to a model that fits on one
+device. And the models most people actually need fit on one device. A dispersed fleet with a great
+deal of memory is a structurally sensible home for them.
+
+\textbf{What changes.} In July 2027, at block \num{3787502}, operators stop being paid purely by new
+issuance: a fifth of every application payment flows into a pool that pays them instead. Ten
+parallel-asset chains become two. The shielded pool is retired. A collateral-weighted vote can remove
+an application. Each has a date, and each is planned rather than shipped until it lands.
+
+\textbf{What does not work yet.} Hosting an application earns a node nothing extra, by design --- so
+the whole hosting guarantee rests on an eligibility gate that today is bound to neither the operator
+nor the machine. Four owner identities together hold enough weight to remove any application. There
+will be no chain-level privacy. One Foundation-run API is the sole source of where applications
+live. The bridge is administered by four people from one organisation. None of this is hidden in the
+long paper, and none is hidden here.
+
+\clearpage
+\pdfbookmark[0]{Contents}{toc}
+\tableofcontents
+\clearpage

@@ -1,0 +1,63 @@
+\section{Where this goes}
+\label{sec:short:where}
+
+\subsection{The dates}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[font=\scriptsize,
+  ev/.style={draw=FluxBlue, fill=FluxBlue!9, rounded corners=2pt, text width=25mm,
+             align=center, inner sep=4pt},
+  now/.style={draw=FluxSlate, fill=FluxSlate!10, rounded corners=2pt, text width=25mm,
+              align=center, inner sep=4pt},
+  tick/.style={FluxSlate, thick}, lead/.style={FluxSlate!55, thin}]
+%% Axis fits the text block; events alternate between two heights so that
+%% neighbouring boxes cannot collide however long their labels run.
+\draw[->, thick, FluxSlate] (0,0) -- (13.2,0);
+\foreach \x/\l in {0.7/{Sep 2026\\now}, 2.0/{Oct 2026}, 4.9/{Mar 2027}, 7.2/{Apr 2027}, 10.1/{Jul 2027}, 12.3/{Aug 2027}}
+  {\draw[tick] (\x,-0.12) -- (\x,0.12);
+   \node[below=2pt, text=FluxSlate, align=center] at (\x,-0.12) {\l};}
+%% low row
+\draw[lead] (0.7,0.12) -- (0.7,0.75);
+\node[now, anchor=south] at (0.7,0.75) {measured baseline\\ \num{6489} nodes, \num{1195} apps};
+\draw[lead] (7.2,0.12) -- (7.2,0.75);
+\node[ev,  anchor=south] at (7.2,0.75) {shielded pool sunset\\ block \num{3600000}};
+\draw[lead] (10.1,0.12) -- (10.1,0.75);
+\node[ev,  anchor=south] at (10.1,0.75) {\textbf{PNR activates}\\ parallel-asset\\ mining cut\\ block \num{3787502}};
+%% high row
+\draw[lead] (2.0,0.12) -- (2.0,2.35);
+\node[ev,  anchor=south] at (2.0,2.35) {\textbf{spec v9 enforced}\\ block \num{3050000}\\ inference benchmark};
+\draw[lead] (4.9,0.12) -- (4.9,2.35);
+\node[ev,  anchor=south] at (4.9,2.35) {retiring chains one-way\\ no swaps in\\ block \num{3450000}};
+\draw[lead] (12.3,0.12) -- (12.3,2.35);
+\node[ev,  anchor=south] at (12.3,2.35) {retiring chains shut down\\ residue to the Foundation\\ block \num{3880000}};
+\end{tikzpicture}
+\caption{The dated schedule. Heights are consensus facts and calendar dates assume the thirty-second
+block target holds. Everything to the right of ``now'' is planned.}
+\label{fig:short:timeline}
+\end{figure}
+
+Three things are true about this schedule and worth stating together. The heights are fixed and
+public, so anyone can check whether they were met. The order is deliberate: the specification
+change lands roughly eight months before the economic change that depends on it, so the fields PNR
+needs have time to prove themselves. And the whole sequence is falsifiable --- the full paper names,
+for each milestone, the public observation that would show it had not happened.
+
+\subsection{How to participate}
+
+\textbf{Run a node.} Lock the collateral for a tier, run the node software on hardware that clears
+that tier's benchmark, and the chain does the rest. Income today is issuance by rotation; from July 2027 it is issuance plus a share of application revenue. What you cannot do is earn more by hosting
+more --- see \Cref{sec:short:limits} before deciding that is what you want.
+
+\textbf{Deploy an application.} Write a specification, sign it, pay for it. There is no account and
+no approval step. The application runs on several nodes until the paid period ends, and renewing it
+is your act. If you want subscriptions and cards, a third-party service offers them on top; the
+protocol does not.
+
+\textbf{Build for machines.} If your tenant is a program --- an agent, a pipeline, a system that
+provisions and releases capacity on its own --- \Flux{} is being built for exactly that caller. Give
+it a key, fund the key with what you are willing to lose, and it needs nothing else from anyone.
+
+\textbf{Read the source.} The chain, the node software and the tooling are public repositories, and
+the full paper cites them by file and line for every claim about behaviour. Where it cites a private
+repository, it says so.

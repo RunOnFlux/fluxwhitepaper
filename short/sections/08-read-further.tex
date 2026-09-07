@@ -1,0 +1,37 @@
+\section*{Read further}
+\addcontentsline{toc}{section}{Read further}
+\markboth{Read further}{}
+\label{sec:short:further}
+
+This document is a door into a longer one. \emph{Flux v9: A Decentralized Cloud for Autonomous
+Compute} runs to over four hundred pages, cites source code by file and line for every claim about
+deployed behaviour, proves what can be proved, and marks every undecided element as such. Nothing
+here goes beyond it; everything here is compressed from it. If a claim in this document seems too
+strong, too weak, or too neat, the section below is where to check.
+
+\begin{center}\small
+\begin{tabular}{@{}p{5.2cm}p{8.4cm}@{}}
+\toprule
+If you want\ldots & \ldots read, in the full paper \\
+\midrule
+the system model and the adversary it is defended against & \S2, System model \\
+the network as measured, with methodology & \S3, Flux as deployed today; \S25, Evaluation \\
+how Proof of Node works, and why fork choice is a block-count race & \S4, Consensus \\
+the full emission schedule and supply function & \S5, Monetary policy; Appendix C \\
+the parallel-asset measurement, chain by chain & \S6, Parallel assets \\
+PNR specified: the pool, the drip, the invariants, and why hosting pays nothing extra & \S7, Progressive Node Rewards \\
+how placement actually works, with the ninety-second rule & \S9, FluxOS \\
+the v9 specification and what consumes it & \S10--\S11 \\
+the boot chain, and what a tenant can and cannot verify & \S14, Attested execution \\
+the small-model argument, with the capacity estimates and their caveats & \S15, Accelerated compute \\
+what an agent can hold, sign and be bounded by & \S17--\S18 \\
+the bridge construction, its invariants, and the quorum's limits & \S22, Trust-minimized bridging \\
+the moderation quorum and the concentration measurement & \S23, Governance \\
+the shielded pool, its retirement, and the post-quantum finding & \S20, \S8 \\
+everything that does not hold, in one place & \S28, Limitations \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The full paper, its evidence corpus, and every script that produced a number in either document are
+in the public repository.

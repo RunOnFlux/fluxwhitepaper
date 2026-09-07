@@ -1,0 +1,101 @@
+%% Flux — the short introduction.
+%% A compression of the 422-page technical paper. Shares its numbers and its macros;
+%% every figure here must be greppable in ../paper and match. See plan/short-paper.md.
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+%% Wider margins and more leading than the long paper: this one is read linearly,
+%% not consulted.
+\usepackage[margin=1.15in]{geometry}
+\linespread{1.06}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{array}   %% >{\raggedright\arraybackslash} column specifiers
+\usepackage{siunitx}
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds,calc}
+\usepackage{xspace}
+\usepackage{microtype}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage[colorlinks=true]{hyperref}
+\usepackage[capitalise,nameinlink]{cleveref}
+
+\sisetup{group-separator={,},group-minimum-digits=4,group-digits=integer}
+\setlength{\emergencystretch}{3em}
+
+%% Same palette as the long paper, so the two read as siblings.
+\definecolor{FluxBlue}{HTML}{1F4E79}
+\definecolor{FluxSlate}{HTML}{44546A}
+\definecolor{FluxRule}{HTML}{BFC7D2}
+\definecolor{FluxSettled}{HTML}{2E7D32}
+\definecolor{FluxGap}{HTML}{5F6368}
+\definecolor{FluxProposed}{HTML}{1565C0}
+
+\hypersetup{linkcolor=FluxBlue,citecolor=FluxBlue,urlcolor=FluxBlue,
+  pdftitle={Flux: A Decentralized Cloud for Autonomous Compute — a short introduction},
+  pdfauthor={Tadeas Kmenta}}
+
+\pagestyle{fancy}\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyhead[L]{\footnotesize\color{FluxSlate}\nouppercase{\leftmark}}
+\fancyhead[R]{\footnotesize\color{FluxSlate}\thepage}
+\renewcommand{\sectionmark}[1]{\markboth{\thesection\quad #1}{}}
+
+\titleformat{\section}[hang]{\Large\bfseries\color{FluxBlue}}{\thesection}{0.7em}{}
+\titleformat{\subsection}[hang]{\large\bfseries\color{FluxSlate}}{\thesubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{2.8ex plus 1ex}{1.5ex}
+
+%% Shared macros: component names, symbols, maturity tags. Reused rather than
+%% redefined so the two documents cannot drift apart on terminology.
+\input{../paper/notation}
+
+%% This document states maturity in plain English, not in small caps. The long
+%% paper's tags are suppressed here — but the distinction they carry is not, and
+%% every planned item below is written as planned in the sentence itself.
+\renewcommand{\shipped}{}
+\renewcommand{\planned}{}
+\renewcommand{\inprogress}{}
+\renewcommand{\vision}{}
+\renewcommand{\srccode}[2]{}
+\renewcommand{\srcbranch}[3]{}
+\renewcommand{\srcdoc}[1]{}
+\renewcommand{\srcroadmap}[1]{}
+\renewcommand{\srcintent}[1]{}
+\renewcommand{\srcmeasured}[2]{}
+\renewcommand{\srcinferred}{}
+
+%% A pull-out for the honest counterweight that follows each claim. The document's
+%% method in one visual device: nothing is claimed without its limit beside it.
+\newcommand{\limitnote}[1]{%
+  \par\smallskip\noindent
+  \begingroup\small
+  \setlength{\fboxsep}{0pt}%
+  \colorbox{FluxGap!55!white}{\rule{2.2pt}{0pt}}\hspace{-2.2pt}%
+  \colorbox{FluxGap!10!white}{%
+    \begin{minipage}[t]{\dimexpr\linewidth-14pt\relax}%
+      \vspace{5pt}\hspace{6pt}%
+      \begin{minipage}[t]{\dimexpr\linewidth-12pt\relax}%
+        \textcolor{FluxGap!60!black}{\textbf{What this does not do yet.}}~#1%
+      \end{minipage}\vspace{5pt}%
+    \end{minipage}}%
+  \endgroup\par\smallskip}
+
+\begin{document}
+
+\input{sections/00-front}
+\input{sections/01-what-flux-is}
+\input{sections/02-how-it-works}
+\input{sections/03-what-changes}
+\input{sections/04-what-its-for}
+\input{sections/05-what-we-measured}
+\input{sections/06-what-doesnt-work}
+\input{sections/07-where-this-goes}
+\input{sections/08-read-further}
+
+\end{document}

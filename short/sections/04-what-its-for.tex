@@ -1,0 +1,164 @@
+\section{What it is for}
+\label{sec:short:whatfor}
+
+Everything so far has been description. This section is the argument: what a network of this shape
+is good for, and why that is about to matter more than it did.
+
+\subsection{The bet: the next tenant is software}
+
+Open any cloud console today and you will find an interface built for a person. Pick a region. Choose
+an instance size. Enter a card. Agree to terms. Every major cloud is built on the assumption that a
+human is making the decision, and the whole surface --- accounts, billing relationships, credit
+checks, support tiers --- follows from it.
+
+\Flux{} is being rebuilt on the opposite assumption: that the caller is a program. Something that
+provisions capacity when it needs it, pays for it, scales it, and releases it when the work is done,
+with no human in the loop and no account anywhere.
+
+The reason this is possible here and awkward everywhere else is narrow and concrete. On \Flux{},
+paying for a deployment is a signed transaction. It is not a billing relationship. There is no
+account to open, no card to hold, no legal entity to be. \textbf{A program can hold a key. It cannot
+hold a corporate account.} That one asymmetry is the whole of the positioning claim, and everything
+in this section follows from it.
+
+This is not a prediction that people stop using clouds. It is a claim about where the growth goes.
+Software that writes software, agents that run errands, pipelines that spin up a hundred short-lived
+workers and vanish --- these are workloads whose natural interface is a key and a transaction, not a
+console and an invoice.
+
+\subsection{One substrate, and it already runs more than AI}
+
+It would be easy, and wrong, to present \Flux{} as an AI network.
+
+What actually runs on it today, by census rather than by aspiration, is a general-purpose mix:
+ordinary web applications, blockchain infrastructure, content sites --- and \textbf{27 folding and
+Rosetta deployments} doing real protein-folding and structural-biology work, which alone account for
+roughly \SI{9}{\percent} of committed fleet CPU. Scientific simulation is not a use case \Flux{} is
+hoping to attract. It is a use case that is already there, paying, at scale.
+
+That matters more than it sounds, and the reason is economic rather than technical. A network that
+serves only inference is idle whenever inference is idle. A network that serves web hosting,
+scientific simulation, blockchain infrastructure and model inference --- from the same collateral,
+the same placement, the same payment path --- has a demand base whose parts do not move together.
+The generality is the resilience.
+
+So the claim is not that \Flux{} becomes an AI cloud. It is that \Flux{} is a compute substrate on
+which AI is one arriving workload class among several that are already running.
+
+\subsection{Cloud and edge, converging}
+
+\FluxCloud{} and \FluxEdge{} are to merge into a single product, offering accelerated compute through
+one interface. A tenant should describe the work and let placement decide where it runs --- a
+container on a commodity node, or a GPU on a datacenter machine --- without having to know which
+product they are in. That convergence is planned, not shipped.
+
+\limitnote{Convergence is at present an architectural intention with thin implementation behind it.
+The only concrete artefact is a small, new capability specification, and the placement code that
+would have to consume it does not read it yet: the three fields the new specification adds for this
+purpose appear nowhere in the placement path. A merge announced is not a merge shipped, and this
+document would rather say so than let a reader discover it later.}
+
+\subsection{Why small models fit this fleet in particular}
+
+The interesting question is not whether a decentralized network can run AI workloads. It is which
+ones, and why.
+
+Frontier-model inference is centralised for a specific engineering reason: the model does not fit on
+one device, so it is sharded across many accelerators that must exchange activations at every layer.
+That demands an interconnect --- machines physically close, wired together at bandwidths a wide-area
+network cannot approach. A fleet of commodity machines scattered across the world is genuinely
+unsuited to it, and no amount of decentralization enthusiasm changes that.
+
+\textbf{But that requirement does not exist for a model that fits on a single device.} A model small
+enough to sit in one machine's memory needs no interconnect at all, because there is nothing to
+shard. The property that makes a dispersed fleet useless for frontier inference is simply absent for
+the models most people actually need: the one that drafts the email, summarises the document,
+triages the inbox, answers the question. Most work does not require a frontier model, and the work
+that does not is precisely the work this shape of network can serve.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[font=\small,
+  gpu/.style={draw=FluxSlate, fill=FluxSlate!14, rounded corners=1.5pt,
+              minimum width=9mm, minimum height=11mm, inner sep=1pt,
+              font=\scriptsize, text=FluxSlate},
+  fnode/.style={draw=FluxBlue, fill=FluxBlue!10, rounded corners=2pt,
+                minimum width=16mm, minimum height=12mm, align=center,
+                font=\scriptsize, text=FluxBlue!75!black},
+  lbl/.style={font=\scriptsize, text=FluxSlate},
+]
+%% ---- left: sharded frontier inference ----
+\node[lbl, anchor=south, font=\scriptsize\bfseries] at (2.7,2.05)
+  {Frontier model: sharded};
+\foreach \i/\x in {0/1.0,1/2.15,2/3.3,3/4.45} \node[gpu] (g\i) at (\x,1.15) {GPU};
+\foreach \i/\j in {0/1,1/2,2/3} \draw[<->, thick, FluxSlate!80] (g\i) -- (g\j);
+\begin{scope}[on background layer]
+  \node[draw=FluxSlate!35, dashed, rounded corners=3pt, inner sep=5pt,
+        fit=(g0)(g3)] (rack) {};
+\end{scope}
+\node[lbl, anchor=north, text width=52mm, align=center] at (2.7,0.42)
+  {activations cross the links at every layer\\
+   \textbf{needs a fast interconnect}\\
+   one building, or it does not run};
+
+%% ---- divider ----
+\draw[FluxRule, thick] (6.35,-0.75) -- (6.35,2.15);
+
+%% ---- right: single-device small model ----
+\node[lbl, anchor=south, font=\scriptsize\bfseries] at (10.6,2.05)
+  {Small model: fits on one device};
+\node[fnode] (n0) at (8.3,1.15) {node};
+\node[fnode] (n1) at (10.6,1.15) {node};
+\node[fnode] (n2) at (12.9,1.15) {node};
+\node[lbl, anchor=north, text width=58mm, align=center] at (10.6,0.42)
+  {nothing to shard, so nothing to exchange\\
+   \textbf{no interconnect requirement}\\
+   anywhere there is memory};
+\end{tikzpicture}
+\caption{Why the constraint that centralises frontier inference does not bind here. Sharding a model
+across accelerators forces them into one building; a model that fits on one device imposes no such
+requirement, and a dispersed fleet stops being a disadvantage.}
+\label{fig:short:interconnect}
+\end{figure}
+
+There is a second, sharper reason the fit is good, and it is a property of this fleet rather than of
+decentralized networks generally. Decode speed follows a model's \emph{active} parameters, but
+residency --- whether the model fits at all --- follows its \emph{total} parameters. Mixture-of-experts
+models separate the two: they read only a few billion parameters per token while having to hold
+tens of billions in memory. Such models therefore want \textbf{RAM} more than they want memory
+bandwidth. RAM is what this fleet has, in quantity, across thousands of independent machines.
+
+On commodity dual-channel hardware a four-billion-parameter quantised model runs at roughly
+\num{12} tokens per second; on an eight-channel server, roughly \num{40}. Across the network's
+tenant-available memory the capacity, at full utilisation, is on the order of tens of thousands of
+concurrent small-model instances.
+
+\limitnote{Those rates are a memory-bandwidth model --- achievable bandwidth divided by bytes read
+per token --- and have \emph{not} been measured on \Flux{} hardware. A benchmark on each tier's
+reference machines is scheduled for Q4~2026, and until it lands these are estimates rather than
+results. The capacity figures are upper bounds at full utilisation, not availability: roughly
+\SI{9}{\percent} of fleet CPU is already committed to the scientific workloads above. And the GPU
+path has a harder limit --- accelerators are attached whole, with no subdivision, so a tenant wanting
+a fraction of a card cannot have one, and a GPU request under contention is silently dropped rather
+than refused.}
+
+\subsection{What an autonomous tenant can and cannot do}
+
+The agent story is the most likely place for a reader to assume more than is true, so it is worth
+closing on precisely.
+
+An agent on \Flux{} can hold a key, sign a deployment specification, pay for it, watch it run and
+let it expire --- with no human, no account, and no intermediary at any step. That is real today for
+the payment path, and it is the direct consequence of settlement being a transaction rather than a
+relationship.
+
+What an agent cannot be given is a spending limit the network enforces. \Flux{} inherits Bitcoin's
+model, in which validating a transaction is a function of that transaction and the coins it spends
+--- and nothing else. A rule like \emph{spend at most five \flux{} per day} requires knowing what the
+key spent yesterday, and there is nowhere for that rule to live. \textbf{An agent's budget is
+whatever you fund its key with, and that is the honest bound.} Anything richer needs a co-signer,
+which puts back the intermediary the design exists to remove.
+
+That is a real constraint and the paper states it rather than working around it. It is also, in
+practice, a workable one: funding a key with what you are willing to lose is a familiar discipline,
+and it fails closed.

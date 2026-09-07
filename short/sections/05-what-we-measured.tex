@@ -1,0 +1,45 @@
+\section{What we measured}
+\label{sec:short:measured}
+
+Every number in this document was retrieved from the network's own public interfaces on the dates
+shown, and every one is reproducible by running the corresponding script in the public repository.
+This is the credibility of the document, so it is stated compactly and without interpretation.
+
+\begin{center}\small
+\begin{tabular}{@{}lrl@{}}
+\toprule
+Quantity & Value & Retrieved \\
+\midrule
+Nodes, all tiers & \num{6489} & 2026-09-03 \\
+\quad Cumulus / Nimbus / Stratus & \num{3247} / \num{1615} / \num{1627} & 2026-09-03 \\
+Collateral locked & \num{88514500}~\flux & 2026-09-03 \\
+Applications deployed & \num{1195} & 2026-09-03 \\
+\quad on specification v8 & \num{873} (\SI{73.05}{\percent}) & 2026-09-03 \\
+\quad scientific-simulation deployments & \num{27} & 2026-09-03 \\
+Issued main-chain supply & \num{429466823.97}~\flux & height \num{2912015} \\
+Shielded pools, Sprout $+$ Sapling & \num{96479.94}~\flux & height \num{2917115} \\
+Parallel-asset liability, all ten chains & \num{223027781.21}~\flux & 2026-09-03/04 \\
+\quad exposed to the redemption window & \num{6226900.80}~\flux{} (\SI{2.79}{\percent}) & 2026-09-03/04 \\
+Proof of Node activation & block \num{2020000} & 2025-10-25 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Two of these were harder to obtain than they look, and are worth a sentence each because they
+correct impressions the raw figures give.
+
+\textbf{Parallel-asset liability is not total supply.} Each parallel asset was minted at its full
+nominal amount --- \num{440000000} on most chains --- and the issuer still holds nearly all of it.
+The figure that matters for consolidation is what left the issuer's hands, which required the
+issuer's own address registry to compute. On Solana, for instance, nominal supply is sixty million
+and the outstanding balance is \num{373067.20}.
+
+\textbf{Two chains needed a different method.} Kadena's token contract exposes no total-supply
+function; supply was recovered by enumerating every account across its twenty chains and summing.
+Tron required the block explorer's API rather than the node's. Both are scripted.
+
+\limitnote{The table states what is public. It does not state utilisation, which no public interface
+reports; per-owner concentration beyond what the chain exposes, which needs beneficial-ownership
+data; or real token rates for inference, which are scheduled to be measured in Q4~2026. Where a
+number is absent here, it is because it could not be established rather than because it was not
+looked for.}

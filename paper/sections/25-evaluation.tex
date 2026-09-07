@@ -27,8 +27,8 @@ because they were captured at different points in the same collection run; both 
 explicitly wherever they are used, and the difference (5,100 blocks, about 42.5 hours at 30 s
 spacing) is immaterial to every figure below.
 
-Modelled figures come from two independent, stdlib-only Python scripts, both executed
-2026-09-03, both deterministic given the pinned constants they read, and both citable in full in
+Modelled figures come from two independent, stdlib-only Python scripts, executed
+2026-09-03 and 2026-09-07 respectively, both deterministic given the pinned constants they read, and both citable in full in
 Appendix C: \texttt{flux-\allowbreak{}roadmap/\allowbreak{}supply/\allowbreak{}emission\_model.\allowbreak{}py} (with its generator
 \texttt{\_gen\_dat.py}) for the supply and emission figures of \S\ref{sec:eval-supply}, and
 \texttt{scripts/\allowbreak{}07-pnr-settlement.\allowbreak{}py} for the \PNR crossover and drip figures of
@@ -361,11 +361,11 @@ stratus\_per\_node, cumulus\_total, nimbus\_total, stratus\_total, total).}
 \label{sec:eval-pnr-crossover}
 
 \PNR does not exist in deployed code. As of the measurement tip (height 2,917,115), the chain is
-549,515 blocks short of the planned activation height $\hpa = 3{,}466{,}630$ (approximately
-2027-03-12 at 30 s spacing). Everything in this subsection is therefore a \planned projection —
+870,387 blocks short of the planned activation height $\hpa = 3{,}787{,}502$ (approximately
+2027-07-01 at 30 s spacing). Everything in this subsection is therefore a \planned projection —
 \srcintent{design intake} for the settled design (an 80\%/20\% Foundation/operator
 split at activation, ramping by 5 percentage points at each \PoN reduction to a cap of 50\%), and
-\srcdoc{scripts/07-pnr-settlement.py, run 2026-09-03} for every number computed from it — and is
+\srcdoc{scripts/07-pnr-settlement.py, run 2026-09-07} for every number computed from it — and is
 stated in future tense throughout. It is stated in both FLUX terms (primary, because FLUX is what
 consensus governs) and real terms (secondary, with a price multiple treated as an exogenous axis,
 not a forecast); the two must never be used to defend one another. This paper makes no price
@@ -395,7 +395,7 @@ application revenue of \textbf{31,930,200 FLUX/yr}, 22.3$\times$ $V_0$, at activ
 \toprule
 stage start ($\hgt$) & date & subsidy (FLUX) & $\nodeshare$ & operator issuance (FLUX/yr) & parity revenue (FLUX/yr) & growth from $V_0$ \\
 \midrule
-3,466,630 & 2027-03-12 & 6.3000 & 0.20 & 6,386,040 & 31,930,200 & --- \\
+3,787,502 & 2027-07-01 & 6.3000 & 0.20 & 6,386,040 & 31,930,200 & --- \\
 4,122,400 & 2027-10-25 & 5.6700 & 0.25 & 5,747,436 & 22,989,744 & 16.1$\times$ \\
 5,173,600 & 2028-10-24 & 5.1030 & 0.30 & 5,172,692 & 17,242,308 & 12.0$\times$ \\
 6,224,800 & 2029-10-24 & 4.5927 & 0.35 & 4,655,423 & 13,301,209 & 9.3$\times$ \\
@@ -409,12 +409,12 @@ stage start ($\hgt$) & date & subsidy (FLUX) & $\nodeshare$ & operator issuance 
 \end{tabular}
 \caption{Planned \PNR schedule in FLUX terms (primary), modelled 2026-09-03. Dates are 30-second-spacing
 extrapolations (\S\ref{sec:eval-threats}). \srcintent{design intake};
-\srcdoc{scripts/07-pnr-settlement.py, run 2026-09-03}.}
+\srcdoc{scripts/07-pnr-settlement.py, run 2026-09-07}.}
 \label{tab:eval-pnr-flux}
 \end{table}
 
 The two levers (falling subsidy, rising $\nodeshare$) would together bring the parity requirement
-down from 31.9 M to 6.8 M FLUX/yr over 5.6 years and to 1.7 M FLUX/yr on the perpetual tail. Whether
+down from 31.9 M to 6.8 M FLUX/yr over 5.3 years and to 1.7 M FLUX/yr on the perpetual tail. Whether
 demand ever reaches that requirement is a separate question, answered only under explicit,
 stated assumptions about revenue growth $g$ — never as a forecast. Table~\ref{tab:eval-pnr-growth}
 gives the modelled crossover year under six such assumptions ($g \in \{0\%, 10\%, 25\%, 50\%,
@@ -429,15 +429,15 @@ range, not predictions of which growth rate, if any, will occur.
 $g$ (per year) & crossover & revenue at crossover (FLUX/yr) & $\nodeshare$ at crossover \\
 \midrule
 0\% & never & --- & --- \\
-10\% & 2038-10 & 4.33 M & 0.50 \\
-25\% & 2033-10 & 6.28 M & 0.50 \\
-50\% & 2031-10 & 9.33 M & 0.45 \\
-100\% & 2030-10 & 17.6 M & 0.40 \\
-200\% & 2029-10 & 25.6 M & 0.35 \\
+10\% & 2038-10 & 4.21 M & 0.50 \\
+25\% & 2034-10 & 7.33 M & 0.50 \\
+50\% & 2032-10 & 12.4 M & 0.50 \\
+100\% & 2030-10 & 14.3 M & 0.40 \\
+200\% & 2029-10 & 18.3 M & 0.35 \\
 \bottomrule
 \end{tabular}
 \caption{Modelled crossover year under constant annual revenue growth from $V_0$.
-\srcdoc{scripts/07-pnr-settlement.py, run 2026-09-03}; data in \texttt{paper/\allowbreak{}data/\allowbreak{}pnr\_crossover.\allowbreak{}dat}
+\srcdoc{scripts/07-pnr-settlement.py, run 2026-09-07}; data in \texttt{paper/\allowbreak{}data/\allowbreak{}pnr\_crossover.\allowbreak{}dat}
 (columns \texttt{pnr\_g000}\ldots\texttt{pnr\_g200}).}
 \label{tab:eval-pnr-growth}
 \end{table}
@@ -447,7 +447,7 @@ $g$ (per year) & crossover & revenue at crossover (FLUX/yr) & $\nodeshare$ at cr
 of 50\%, \PNR income at flat $V_0$ would never reach \PoN issuance income; the parity requirement
 falls over time only because the subsidy keeps falling, and reaching it is a statement about demand
 growth, never about the subsidy schedule alone. Sustained growth required to reach parity by a
-given year: 134\%/yr by 2029, 73\%/yr by 2030, 47\%/yr by 2031, 32\%/yr by 2032, 25\%/yr by 2033,
+given year: 162\%/yr by 2029, 82\%/yr by 2030, 51\%/yr by 2031, 34\%/yr by 2032, 26\%/yr by 2033,
 16\%/yr by 2035. As scheduled, \PNR would begin as a supplement to operator income; whether it ever
 becomes the dominant component is a statement about demand that this paper does not make.
 
@@ -458,11 +458,11 @@ becomes the dominant component is a statement about demand that this paper does 
 \toprule
 $g$ \textbackslash\ $m$ & 0.5 & 1 & 2 & 5 & 10 \\
 \midrule
-0\% & 14.6 & never & never & never & never \\
-10\% & 7.6 & 11.6 & 14.6 & 19.6 & 26.1 \\
-25\% & 5.6 & 6.6 & 9.6 & 11.6 & 13.6 \\
-50\% & 3.6 & 4.6 & 5.6 & 7.6 & 9.6 \\
-100\% & 2.6 & 3.6 & 4.6 & 5.6 & 5.6 \\
+0\% & 14.3 & never & never & never & never \\
+10\% & 7.3 & 11.3 & 14.3 & 19.3 & 26.1 \\
+25\% & 5.3 & 7.3 & 9.3 & 12.3 & 14.3 \\
+50\% & 3.3 & 5.3 & 6.3 & 7.3 & 9.3 \\
+100\% & 2.3 & 3.3 & 4.3 & 5.3 & 6.3 \\
 \bottomrule
 \end{tabular}
 \caption{Modelled years to \PNR parity, real terms (secondary), under real demand growth $g$
@@ -470,7 +470,7 @@ $g$ \textbackslash\ $m$ & 0.5 & 1 & 2 & 5 & 10 \\
 against the rebased price table, $m$ is a modelling axis, not a forecast). Under rebasing, price
 appreciation \emph{delays} FLUX-terms parity even as real operator income rises — the two
 statements are made in different denominations and this paper does not use one to defend the other.
-\srcdoc{scripts/07-pnr-settlement.py, run 2026-09-03}; data in
+\srcdoc{scripts/07-pnr-settlement.py, run 2026-09-07}; data in
 \texttt{paper/\allowbreak{}data/\allowbreak{}pnr\_crossover\_real.\allowbreak{}dat}.}
 \label{tab:eval-pnr-real}
 \end{table}
@@ -478,7 +478,7 @@ statements are made in different denominations and this paper does not use one t
 \subsection{The drip trade-off}
 \label{sec:eval-drip}
 
-This subsection is also \planned and modelled, \srcdoc{scripts/07-pnr-settlement.py, run 2026-09-03},
+This subsection is also \planned and modelled, \srcdoc{scripts/07-pnr-settlement.py, run 2026-09-07},
 and supports the settled value \drip = 86,400 blocks (30 days at 30 s spacing) of \S7. The
 drip constant $\drip$ trades intra-rotation income spread and activation lag against timing-attack
 resistance and pool size. Table~\ref{tab:eval-drip} gives the trade-off at the five candidate values
@@ -504,7 +504,7 @@ first-versus-last-payee income ratio within one Cumulus rotation under zero infl
 the fraction of its own \PNR payment a single Stratus node could recover by timing that payment,
 against the $10^{-4}$ threshold of requirement H5. Ramp is the time to reach 95\% of steady-state
 drip from a zero pool at activation. Pool at parity is the modelled steady-state pool at
-parity-scale revenue and $\nodeshare = 0.50$. \srcdoc{scripts/07-pnr-settlement.py, run 2026-09-03};
+parity-scale revenue and $\nodeshare = 0.50$. \srcdoc{scripts/07-pnr-settlement.py, run 2026-09-07};
 data in \texttt{paper/\allowbreak{}data/\allowbreak{}pnr\_drip.\allowbreak{}dat}.}
 \label{tab:eval-drip}
 \end{table}

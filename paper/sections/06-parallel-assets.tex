@@ -381,8 +381,9 @@ Base already carries a deployed \flux contract today \shipped
 \srccode{flux-supply-tracker/\allowbreak{}index.html}{346}, per Table~\ref{tab:parallel-assets}, and that contract
 does not get relaunched. Base's existing holders go through the same retirement and redemption path as
 every other non-surviving chain, specified in \S\ref{sec:pa-requirements}: a published schedule, a
-6-month one-directional redemption window through the existing bridge at 1:1, and the same
-disposition for balances left unclaimed when that window closes. Base's weight in that path is worth
+one-directional redemption window through the existing bridge at 1:1 --- open from $\hopen$ (March
+2027) to shutdown at $\hclose$ (August 2027) --- and the same disposition for balances left unclaimed
+when that window closes. Base's weight in that path is worth
 stating, because it is not the weight its share of total liability suggests: its measured outstanding
 balance of \num{2528858.42991062}\flux \shipped
 \srcmeasured{scripts/\allowbreak{}13-issuer-balances.sh}{2026-09-03} is \SI{1.13}{\percent} of the ten-chain
@@ -395,10 +396,12 @@ liability concentrated on precisely the holders who must act.
 \label{sec:pa-requirements}
 
 The construction that replaces today's custodial \Fusion mechanism — canonical mint-and-burn with
-attested proof-of-reserve — is specified in \S\ref{sec:bridging}. The migration's terms are now set.
-Contract changes are prepared in advance and take effect at PA Depletion ($\hpa$, height
-3{,}466{,}630, \S\ref{sec:pa-sequencing}), simultaneous with the swap contract, so nothing is switched
-off without notice (\planned; \srcintent{design intake}).
+attested proof-of-reserve — is specified in \S\ref{sec:bridging}. The migration's terms are now set, and
+staged: the new Ethereum and BNB Chain contracts go live first, on readiness and before the cut; from
+$\hopen$ (March 2027) the eight retiring chains become one-directional; the emission cut lands at PA
+Depletion ($\hpa$, height 3{,}787{,}502, \S\ref{sec:pa-sequencing}); and the retiring chains shut
+down at $\hclose$ (August 2027). Nothing is switched off without notice (\planned;
+\srcintent{design intake}; \srcintent{08-answers-round-2.md, round 34}).
 
 \paragraph{Two migration paths, and they are different mechanisms.} A holder's exposure to the
 migration depends entirely on which of two paths that holder's chain is on, and the paper separates
@@ -419,12 +422,14 @@ them because conflating them misstates the exposure by two orders of magnitude
   they choose (\planned; \srcintent{design intake}). ``Surviving'' and
   ``snapshot-carried'' are therefore not the same set, and only the latter escapes the window.
 \item[Holder-initiated redemption, for the retiring chains.] Avalanche C-Chain, Base, Polygon and
-  the non-EVM assets are retired. From $\hpa$ a \textbf{6-month redemption window} opens, during
+  the non-EVM assets are retired. From $\hopen$ (March 2027) until shutdown at $\hclose$ (August
+  2027) --- about five months, spanning the emission cut --- a \textbf{redemption window} is open, during
   which \Fusion — the existing custodial swap and claim mechanism of \S\ref{sec:pa-acquisition} — is
   the stated route back to main-chain \flux, at 1:1 (\planned;
   \srcintent{design intake}). The holder must act. \textbf{That route is
-  one-directional}: during the window it permits migrating \emph{to} the main chain and claiming
-  \emph{on} the main chain only, and nothing else (\planned;
+  one-directional}: from $\hopen$ the retiring chains permit migrating \emph{to} the main chain and
+  claiming mining entitlement --- on the chain itself or on the main chain --- and nothing inbound:
+  no swap \emph{into} a retiring chain \srcintent{08-answers-round-2.md, round 35} (\planned;
   \srcintent{design intake}).
 \end{description}
 
@@ -438,11 +443,11 @@ retiring chains, which are therefore subject to the
 window and the forfeiture term (\shipped; \srcmeasured{scripts/\allowbreak{}13-issuer-balances.sh}{2026-09-03};
 \srcmeasured{scripts/\allowbreak{}15-nonevm-liability.sh, scripts/\allowbreak{}16-remaining-liability.sh,
 scripts/\allowbreak{}18-tron-final.sh, scripts/\allowbreak{}19-kadena-ledger.js}{2026-09-04}).
-\textbf{The amount exposed to the six-month window and the unclaimed-balance term is
+\textbf{The amount exposed to the redemption window and the unclaimed-balance term is
 \num{6226900.80}\flux across the eight retiring chains} (\S\ref{sec:pa-supply-accounting}). This is
 no longer a lower bound: every legacy asset is now measured, and \SI{97.21}{\percent} of all
 parallel-asset liability sits on the two chains that require no holder action at all. What fraction of that exposure fails to migrate
-within six months is unknown, and this paper does not estimate it. The policy is a legitimate one —
+within the window is unknown, and this paper does not estimate it. The policy is a legitimate one —
 unclaimed value must belong to someone, and a stated destination is better than an unstated one — but
 it is also a transfer from holders who do not act within the window to the issuer, and the paper
 names it in those terms rather than omitting it. What the snapshot path changes is not the term's
@@ -469,7 +474,96 @@ paper.
 The public roadmap and the design intake originally stated this differently, and an earlier draft of
 this paper carried it as an open conflict (C1a). It is now settled directly by the team: \PNR
 activation and the parallel-asset emission cut are \textbf{simultaneous}, both at PA Depletion,
-height $\hpa = 3{,}466{,}630$ (2027-03-12) (\planned; \srcintent{design intake}).
+height $\hpa = 3{,}787{,}502$ (2027-07-01) (\planned; \srcintent{design intake}). Around it the
+parallel-asset schedule is staged \srcintent{08-answers-round-2.md, round 34}: Ethereum and BNB Chain
+move to the new contracts earlier, on readiness; from $\hopen$ the eight retiring chains are
+one-directional --- nothing can be swapped into them, while swapping back and claiming continue; the
+chains shut down at $\hclose$,
+after which unclaimed balances pass to the Foundation (\S\ref{sec:pa-requirements}).
+\settlednote{$\hopen = \num{3450000}$ (2027-03-06) and $\hclose = \num{3880000}$ (2027-08-02):
+proposed by this paper at the \SI{30}{\second} target for the author's months, March and August
+2027, and confirmed \srcintent{08-answers-round-2.md, round 36}.}
+
+\begin{remark}[``Depletion'' is the computed exhaustion height]
+\label{rem:pa-depletion-is-a-cutoff}
+The event's name is the design intake's, and it is literally accurate: $\hpa$ is the block at which
+the parallel-asset coinbase pools are exhausted, and that block is computable exactly from the
+emission schedule. Each chain was funded with \num{22000000}\flux{} by the main-chain
+swap pool \srccode{flux-roadmap/supply/emission\_model.py}{165--172}, split three ways: a user
+snapshot of \num{12313785.94991485}\flux{}, a \num{1000000}\flux{} development-and-exchange fund,
+and a coinbase pool of \num{8686214.05008515}\flux{} \shipped
+\srccode{insight-api/lib/status.js}{277--279}. From block \num{825001} every coinbase receiver is
+entitled to a further \SI{10}{\percent} of each output on every parallel chain
+\srcdoc{fusiondocs/openapi/openapi.yaml:667}, so the pool accrues at one tenth of the main-chain block
+subsidy per block --- roughly \num{1.4}\flux{} after \PoN{}
+\srccode{fusion/src/services/coinbaseService.js}{16--19,49--51}. Across the ten chains that is the
+whole block subsidy again in claimable tokens, so until the cut an operator who claims earns about
+twice the main-chain subsidy \srcinferred{}. Summing that accrual over the
+emission schedule, the pool is exhausted at \textbf{block \num{3787502}}, about 1--4 July 2027
+\srcinferred{} --- and three independent models agree on it to within a block: this paper's
+emission model, the prior whitepaper's supply model, and that whitepaper's own stated remainder of
+\num{2449214.05}\flux{} at block \num{2000000}. The intake's earlier figure of \num{3466630}
+preceded this by \num{320872} blocks and was superseded on that ground
+\srcintent{08-answers-round-2.md, round 33}; no consensus constant yet encodes the height.
+Table~\ref{tab:pa-depletion-epochs} gives the sum epoch by epoch.
+Claiming, however, is voluntary, per chain and fee-bearing, with a start height and no coded end
+\srccode{fusion/config/default.js}{239}. Nor does a claim require touching the parallel chain at
+all: the mining-claim endpoint accepts up to twelve \emph{main-chain} addresses, computes each one's
+entitlement from its coinbase receipts, and pays the claim in main-chain \flux{} from a
+Fusion-operated wallet \shipped
+\srccode{fusion/src/services/claimMiningService.js}{1222--1235,1492}. The team confirms this is
+the intended route \srcintent{08-answers-round-2.md, round 31}. Claiming on the retiring chains themselves continues until shutdown; what closes at $\hopen$
+is the swap \emph{into} them \srcintent{08-answers-round-2.md, round 35}. Where a claim is paid on
+the main chain it is paid from the per-chain swap pool, so its counterpart in that chain's
+\texttt{MINING} and \texttt{LOCKED MINING} balances must be excluded at the snapshot or destroyed,
+or the backing invariant of \S\ref{sec:bridging} fails \srcinferred{}. Two consequences follow. Unclaimed
+entitlement is not stranded on a retiring chain, so the retirement cut-off interacts with
+main-chain claiming and not only with the parallel-chain redemption window. And the main-chain
+side must hold a balance to honour those claims; the wallet that pays them, and what backs it, are
+not in the evidence corpus, so this paper records the payout path and not its reserve. Measured on 2026-09-07, between \num{3000322}\flux{} (Ethereum)
+and \num{3782411}\flux{} (Tron) sits per chain in the \texttt{MINING} and \texttt{LOCKED MINING}
+addresses \srcmeasured{scripts/13-issuer-balances.sh; public RPC}{2026-09-07}. That is more than
+the \num{1112549.95}\flux{} not yet accrued at the measurement height, and the difference is
+entitlement that has accrued and never been claimed --- on Ethereum about
+\num{1887772}\flux{}, a quarter of everything accrued to date \srcinferred. Tron's
+\texttt{MINING} address paid out \num{428}\flux{} per day over \num{74} days, about
+\num{0.148}\flux{} per block against \num{1.4} accruing
+\srcmeasured{apilist.tronscan.org token\_trc20/transfers}{2026-09-07}; claims lag accrual and
+arrive in lumps. At $\hpa$ nothing is left to accrue; what the height does not settle is that
+accrued-but-unclaimed quarter, and the round-7 provision that unclaimed balances pass to the
+Foundation is what disposes of it. The prior whitepaper's ``2027--2028'' \cite{fluxpouw2} is
+consistent with the computed July 2027 (conflicts C64, C65).
+\end{remark}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lrrrrr}
+\toprule
+blocks & subsidy (\flux) & \SI{10}{\percent}/block & blocks in epoch & epoch accrual (\flux) & cumulative (\flux)\\
+\midrule
+825{,}001 -- 1{,}313{,}199     & 75.00 & 7.500 & 488{,}199   & 3{,}661{,}492.50 & 3{,}661{,}492.50\\
+1{,}313{,}200 -- 2{,}019{,}999 & 37.50 & 3.750 & 706{,}800   & 2{,}650{,}500.00 & 6{,}311{,}992.50\\
+2{,}020{,}000 -- 3{,}071{,}199 & 14.00 & 1.400 & 1{,}051{,}200 & 1{,}471{,}680.00 & 7{,}783{,}672.50\\
+3{,}071{,}200 -- 3{,}787{,}501 & 12.60 & 1.260 & 716{,}302   & 902{,}540.52     & 8{,}686{,}213.02\\
+\midrule
+\multicolumn{6}{l}{block \textbf{3{,}787{,}502} completes the pool: 1.03008515\,\flux{} of 8{,}686{,}214.05008515 remained for it}\\
+\bottomrule
+\end{tabular}
+\caption{Per-chain coinbase-pool accrual: \SI{10}{\percent} of the block subsidy per block from
+block 825{,}001 \srccode{fusion/config/default.js}{239}, credited on every coinbase output, dev
+fund included \srccode{fusion/src/services/coinbaseService.js}{113--118}, over the subsidy
+schedule as coded \srccode{fluxd/src/main.cpp}{2796--2850}: halvings at 657{,}850 and
+1{,}313{,}200 with the third suppressed; \PoN{} 14.0 at 2{,}020{,}000, $\times 9/10$ at
+3{,}071{,}200. The pool is 22{,}000{,}000 less the 12{,}313{,}785.94991485 snapshot and the
+1{,}000{,}000 chain fund \srccode{insight-api/lib/status.js}{277--279}. The second reduction
+(11.34 at 4{,}122{,}400) lies 334{,}898 blocks past depletion and does not enter. Cross-check:
+through block 2{,}000{,}000 this sum gives 6{,}236{,}996.25 against the prior whitepaper's
+6{,}237{,}000 \cite{fluxpouw2}, one block of accrual apart. Block 3{,}787{,}502 falls on
+2027-07-01 at the \SI{30}{\second} target and 2027-07-04 at the observed \SI{30.13}{\second}
+spacing \srcinferred{}.}
+\label{tab:pa-depletion-epochs}
+\end{table}
 This \textbf{supersedes} the roadmap's stated gate — that retirement of any parallel asset's mining
 rewards ``comes only after PNR v2 is demonstrably paying operators,'' with retirement itself
 scheduled in H2~2027, ``announced at least 90 days ahead'' \srcroadmap{flux-roadmap-public.md:133,159}

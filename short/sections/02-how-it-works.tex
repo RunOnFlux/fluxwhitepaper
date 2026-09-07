@@ -1,0 +1,123 @@
+\section{How it works}
+\label{sec:short:how}
+
+One pass through the three layers, with no formalism. The full paper specifies each of these to the
+depth at which it could be reimplemented; this section aims only at the depth at which it can be
+understood.
+
+\subsection{The chain: a rotation, not a race}
+
+Every collateralised node is in a queue. Producing a block moves a node from the front of the queue
+to the back, and the block reward goes to whoever produced it, split by tier according to a fixed
+schedule. There is no difficulty to grind and nothing to mine; a node's expected income is a function
+of how many nodes are in its tier and how long the rotation takes to come round.
+
+Because every block carries the same fixed weight, the chain does not have a longest-chain rule in
+the Bitcoin sense. Fork choice is a block-count race resolved by which block was seen first, and
+reorganisations are capped at forty blocks by consensus. That is a deliberate simplification, and it
+has a cost the full paper treats at length: with no cumulative-work signal in the header, a
+lightweight client that verifies without a full node cannot be built on today's format.
+
+\subsection{Where new \flux{} comes from}
+
+Every block mints new \flux{}, and today that issuance is the whole of an operator's income. The
+rate is \num{14.0}~\flux{} per block, split across the three tiers and a development fund by fixed
+shares. It falls by ten percent each October --- to \num{12.6} at block \num{3071200} in 2026, then
+\num{11.34}, and so on for twenty annual steps --- and then \emph{freezes} rather than continuing
+toward zero: from the twentieth reduction onward the chain issues a constant tail of roughly
+\num{1789219}~\flux{} a year. Total issued supply reaches \num{548043625.86}~\flux{} by 2045 and
+crosses \num{560000000} around 2052.
+
+Two things follow for a holder. There is no hard cap that issuance approaches and stops at --- the
+tail is perpetual by design. And the emission curve is what v9 is built to \emph{replace} as the
+source of operator income: at PNR activation the operators' share of new issuance is planned to be
+cut in half, with revenue from applications taking its place (\Cref{sec:short:changes}).
+
+\subsection{The cloud: publish, claim, run}
+
+A deployment starts as a specification --- the container image, the resources it needs, how many
+copies should run, how long it is paid for. The owner signs it, pays for it, and broadcasts it.
+That is the whole act of deploying: there is no console and no account.
+
+Nodes then \emph{claim} it. Every eligible node sees the specification, decides whether it can
+host it, and if so announces its intention and waits ninety seconds. If nobody else has claimed the
+same instance in that window, it installs and starts the container. If the announced count is
+already met, it stands down. The application ends up running on several nodes at once, chosen by
+whoever was fast rather than by any scheduler.
+
+This is unusual, and the paper says so plainly. There is no placement algorithm in the sense a
+cloud engineer would expect --- no bin-packing, no affinity, no capacity model. What there is
+instead is an incentive: nodes want to be full, applications want to be replicated, and the ninety-
+second collision rule keeps them from tripping over each other. It works at the current scale. What
+it does not do is give a tenant any say over \emph{where} the application lands.
+
+\emph{How you reach it.} A running application gets a name under \texttt{app.runonflux.io} (and
+\texttt{app2.runonflux.io}), resolved by the network's own DNS and fronted by load balancers that
+health-check each instance and route around the ones that fail. That layer is what makes an
+application on several anonymous machines look like one service --- and it is operated by the
+Foundation on a sixteen-host fleet, which \Cref{sec:short:limits} returns to.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[font=\small, node distance=9mm and 9mm,
+  st/.style={draw=FluxBlue, fill=FluxBlue!8, rounded corners=2pt, minimum height=11mm,
+             text width=27mm, align=center, font=\scriptsize},
+  ar/.style={->, thick, FluxSlate}]
+\node[st] (spec) {owner signs and pays for a specification};
+\node[st, right=of spec] (bcast) {specification reaches every node};
+\node[st, right=of bcast] (claim) {eligible nodes announce a claim, wait \SI{90}{\second}};
+\node[st, right=of claim] (run) {uncontested claimants install and run};
+\draw[ar] (spec) -- (bcast); \draw[ar] (bcast) -- (claim); \draw[ar] (claim) -- (run);
+\node[below=3mm of run, font=\scriptsize, text=FluxSlate, text width=30mm, align=center]
+  {runs on several nodes; expires when the paid period ends};
+\end{tikzpicture}
+\caption{From a signed specification to a running application. No account is opened at any step,
+and no scheduler decides placement: nodes claim work, and a fixed wait resolves collisions.}
+\label{fig:short:lifecycle}
+\end{figure}
+
+\subsection{Paying: a transaction, not a relationship}
+
+Today, paying for a deployment means one thing: a single signed transaction, for the full price of
+the period, to an address the chain knows. The price is a function of the resources reserved and the
+duration --- CPU, memory, disk, instances, blocks --- and it is a \emph{reservation} price. You pay
+for what you asked to hold, not for what you used. There is no metering, and therefore nothing to
+meter, dispute, or attest.
+
+When the paid period ends, the application stops. Renewing it is the owner's act, done the same way.
+The protocol offers no subscriptions and no automatic renewal; operators who want that convenience
+can buy it from a third-party service that holds a balance on their behalf, and the paper is
+explicit that such a service is a business built on \Flux{}, not a feature of it.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[font=\small,
+  box/.style={draw=FluxSlate, fill=FluxSlate!8, rounded corners=2pt, minimum height=10mm,
+              text width=30mm, align=center, font=\scriptsize},
+  hi/.style={box, draw=FluxBlue, fill=FluxBlue!10},
+  ar/.style={->, thick, FluxSlate}, lbl/.style={font=\scriptsize, text=FluxSlate}]
+\node[lbl, anchor=west] at (0,2.55) {\textbf{Today}};
+\node[box] (t1) at (1.7,1.7) {owner pays the full price};
+\node[box] (t2) at (6.2,1.7) {payment address};
+\node[box] (t3) at (10.7,1.7) {operators are paid by \emph{new issuance}, by tier rotation};
+\draw[ar] (t1) -- (t2);
+\draw[ar, dashed, FluxSlate!60] (t2) -- node[above, lbl] {no link} (t3);
+
+\node[lbl, anchor=west] at (0,0.35) {\textbf{After PNR (July 2027)}};
+\node[hi] (p1) at (1.7,-0.5) {owner pays the full price};
+\node[hi] (p2) at (6.2,-0.5) {consensus splits it: \SI{80}{\percent} / \SI{20}{\percent}};
+\node[hi] (p3) at (10.7,-0.5) {the \SI{20}{\percent} feeds a pool that pays operators};
+\draw[ar] (p1) -- (p2); \draw[ar] (p2) -- (p3);
+\end{tikzpicture}
+\caption{Where a payment goes. Today the money a tenant pays and the money an operator earns are
+unconnected --- operators are paid by issuance. Under PNR, part of every payment flows into a pool
+that pays operators instead. This is the hinge between the network as it is and as it is being
+rebuilt.}
+\label{fig:short:payment}
+\end{figure}
+
+\limitnote{The payment address is a single consensus-known address, and the split is applied by
+consensus, not by the node software --- so a software release cannot change the distribution. What
+the protocol does \emph{not} give a tenant is any remedy if a node fails to serve what was paid for.
+Reservation pricing has no delivered-uptime quantity to compute a refund against, and the paper
+records the decision that any such guarantee lives in the service layer, not the protocol.}

@@ -1,6 +1,9 @@
 # Flux v9: A Decentralized Cloud for Autonomous Compute
 
-**[FluxWhitepaper.pdf](FluxWhitepaper.pdf)** — 412 pages, version 1.0.
+**[FluxWhitepaper-Combined.pdf](FluxWhitepaper-Combined.pdf)** — the one document for any
+audience: the 16-page short paper first, the 423-page full paper behind it, each with its own
+bookmarks. Also separately: **[FluxWhitepaper.pdf](FluxWhitepaper.pdf)** (full paper, 423 pages,
+version 1.0) and **[FluxWhitepaper-Short.pdf](FluxWhitepaper-Short.pdf)** (short paper, 16 pages).
 
 A technical description of the Flux network as deployed, and a specification of the
 architecture it is being rebuilt into. Both halves are written to the same standard:
@@ -17,14 +20,14 @@ paper does not settle a question; those are stated limits, not omissions.
 ## Building
 
 ```
-bash scripts/build.sh          # -> FluxWhitepaper.pdf
+bash scripts/build.sh          # -> FluxWhitepaper.pdf, FluxWhitepaper-Short.pdf, FluxWhitepaper-Combined.pdf
 CLEAN=1 bash scripts/build.sh  # full rebuild from scratch
 ```
 
 Requires a TeX distribution with `latexmk`, `pgfplots`, `algorithm2e`, `siunitx`,
 `booktabs`, `longtable`, `tikz`, `adjustbox`, `titlesec` and `biblatex`'s `natbib`
-compatibility. A clean build produces no errors, no undefined references and no
-undefined citations.
+compatibility; the combined document needs `pypdf` (`python3 -m pip install pypdf`). A clean
+build produces no errors, no undefined references and no undefined citations.
 
 ## Reproducing the measurements
 

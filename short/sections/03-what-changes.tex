@@ -1,0 +1,108 @@
+\section{What changes in v9}
+\label{sec:short:changes}
+
+Six changes, each with a date. Every one of them is planned rather than shipped unless the sentence
+says otherwise, and the reader should hold that distinction throughout: this section describes a
+network being rebuilt, and the full paper marks every element of it that is still undecided.
+
+\subsection{Operators are paid by demand, not by issuance}
+
+This is the change the others serve. Today an operator's income is new \flux{} minted every block;
+the applications running on the network contribute nothing to it. Under \emph{Progressive Node
+Rewards} that reverses: consensus takes \SI{20}{\percent} of every application payment on arrival
+and pays it into a pool, and the pool drips into operator rewards over a rolling window of
+\num{86400} blocks --- thirty days. The other \SI{80}{\percent} goes to the Foundation address that
+already receives application payments today.
+
+The split is applied by consensus at the address, not by any software a tenant or a node runs. The
+pool balance is committed in every block and recomputed by every validator, so it cannot be
+misreported. Activation is at block \textbf{\num{3787502}}, expected \textbf{1 July 2027}. That
+height is not arbitrary: it is the block at which the parallel-asset mining allocation is exhausted,
+computable today from the emission schedule, though no consensus constant encodes it yet; the
+calendar date follows from the height at the thirty-second block target.
+
+A reader should understand what this does and does not change. It changes \emph{where operator
+income comes from} --- from issuance toward the workloads themselves. It does not, by design, pay a
+node more for hosting more: every eligible node in a tier draws the same share of the pool
+regardless of what it runs. The team chose that deliberately, because paying by placement would
+turn the first-to-claim rule of \Cref{sec:short:how} into a race with money on it. The consequence
+is stated in \Cref{sec:short:limits}.
+
+\subsection{Ten parallel assets become two, on one redesigned bridge}
+
+\Flux{} exists as a token on ten other chains. That footprint is being consolidated. Ethereum and
+BNB Chain survive: balances there are carried across to new contracts by snapshot, and holders do
+nothing. The other eight --- Base, Polygon, Avalanche, Ergo, Algorand, Solana, Tron and Kadena ---
+are retired in stages: from March 2027 (block \num{3450000}) they become one-directional, with balances redeemable back to
+the main chain and mining claims still collectable, but nothing swappable into them; the allocation
+is cut in July, at the block where
+it is exhausted and PNR activates; and in August (block \num{3880000}) the chains shut down, after which
+unclaimed balances go to the Foundation. Ethereum and BNB Chain move to their new contracts earlier. What the height does
+not settle is the balance already earned: roughly a quarter of what operators have accrued on these
+chains has never been claimed, and the forfeiture rule is what closes that.
+
+The numbers were measured rather than assumed, and they are reassuring in a way the raw supply
+figures are not. Across all ten chains, \num{223027781.21}~\flux{} is actually held outside the
+issuer's own addresses. Of that, \SI{97.21}{\percent} sits on the two surviving chains and needs
+no holder action. Only \textbf{\num{6226900.80}~\flux{} --- \SI{2.79}{\percent}} --- is on the
+retiring chains and exposed to the window.
+
+The new bridge is mint-and-burn: minting on a parallel chain requires locked backing on the main
+chain, so the total can never exceed what exists. It is guarded by a 3-of-4 signing quorum, a
+1-of-4 emergency pause, a per-chain cap of \num{250000000}~\flux{}, a rate limit of
+\num{10000000}~\flux{} per chain per day, and a 48-hour delay on any upgrade during which a
+single guardian can cancel it. The quorum is held by four named people from one organisation,
+and the paper says so.
+
+\subsection{A new application specification}
+
+Version 9 of the specification adds what the rest of this section needs: a duration expressed in
+seconds rather than blocks, so lifetimes stop moving when block timing changes; a payment memo that
+binds a payment to the application it funds, which is what lets PNR attribute revenue; and a
+machine-type field that lets a specification ask for accelerated hardware. Enforcement is at block
+\textbf{\num{3050000}}, expected in \textbf{late October 2026}, with existing applications migrated
+automatically in the same quarter.
+
+\limitnote{The fields are in the schema and not yet in the code that would act on them: as of the
+survey, the payment memo, referral code and machine-type fields appear nowhere in the placement
+path. The enforcement height is constrained to follow the implementation, not precede it.}
+
+\subsection{The network can remove an application}
+
+A collateral-weighted vote. Any node operator can file a report against an application on chain;
+other operators vote by signing a transaction with their collateral key; if votes reach
+\SI{25}{\percent} of the network's weight within a day, the next block carries a ban memo and every
+node stops the application. The ban is final, the unused prepaid balance is burned, and the deployer
+may return only as a new application. There is no appeal.
+
+The team's stated position is that this is a network-level veto over content, not merely over
+behaviour. That is a stronger power than any comparable network exercises, chosen knowingly, and its
+principal risk is measured rather than hypothetical --- see \Cref{sec:short:limits}.
+
+\subsection{Nodes that can prove what they are}
+
+Two layers. The first is shipped: \ArcaneOS{}, the operating image nodes run, boots through a
+measured chain --- Secure Boot, a pinned platform key, a hardware root, encrypted storage --- and
+refuses to come up if any link fails. The second is planned: a bonded attestation network in which
+nodes stake collateral on claims about what they serve, and lose it if a challenger proves them
+wrong. Its parameters are set; its slashing construction, the paper is candid, is unsolved.
+
+\subsection{The shielded pool is retired, and what that costs}
+
+\Flux{}'s chain inherited Zcash's private-transaction machinery. It has been sealed to new entrants
+since 2021 and today holds \num{96479.94}~\flux{} --- two hundredths of one percent of supply. The
+decision is to retire it: announced now, sunset at block \num{3600000} in April 2027, before PNR
+activates, and then remove the code. That makes the chain smaller, removes an inherited trusted
+setup, and makes supply exactly auditable. It also means \textbf{\Flux{} will have no chain-level
+privacy}: every payment will be publicly linkable, as on Bitcoin. The paper treats payment privacy
+as an open problem from that point, not a delivered feature.
+
+\subsection{And one change the fleet's own design forces}
+
+A post-quantum note that is specific to \Flux{}. Because registering a node publishes the
+collateral's public key on chain, \num{88514500}~\flux{} --- \SI{20.61}{\percent} of everything
+issued --- sits in outputs a sufficiently capable quantum computer could spend immediately. Bitcoin's
+comfort, that an unspent output hides its key, does not apply here. The adopted answer uses the one
+lever \Flux{} has and Bitcoin does not: node collateral is a registered set that must keep
+transacting to be paid, so migration to a post-quantum key can be made a condition of eligibility.
+Operators who do not migrate stop earning; nothing is ever frozen.

@@ -656,15 +656,20 @@ weight.
 recommendation and are confirmed by the author (Remark~\ref{rem:shield-schedule-confirmed}).
 
 \begin{itemize}
-  \item \textbf{Announcement at $\hpa = \num{3466630}$}, the height at which the parallel-asset
-  consolidation is already scheduled to take effect (\S\ref{sec:pa-sequencing}). One consolidation message covering
-  both is better than two, and the holder sets barely overlap.
-  \item \textbf{Sunset at $\hshield = \num{4517830}$}, i.e. $\hpa + \num{1051200}$ blocks
-  $\approx$ 12 months at the \SI{30}{\second} target. After this height, transactions carrying
-  \texttt{vShieldedSpend} or \texttt{vJoinSplit} are invalid; notes not swept are permanently
-  unspendable. Twelve months is deliberately longer than the six-month parallel-asset window
-  (\S\ref{sec:bridging-migration}): that window ends in forfeiture to a named recipient, whereas this
-  one ends in destruction, which warrants more notice for less value.
+  \item \textbf{Announcement at publication}, i.e. with this paper (2026-09-07), alongside the notice
+  of the parallel-asset one-way switch at $\hopen$ (\S\ref{sec:pa-sequencing}). One consolidation
+  message covering both is better than two, and the holder sets barely overlap.
+  \item \textbf{Sunset at $\hshield = \num{3600000}$}, about 2027-04-27 at the \SI{30}{\second}
+  target: \num{232} days after publication, \num{150000} blocks after $\hopen$ and \num{187502}
+  blocks \emph{before} $\hpa$ \srcintent{08-answers-round-2.md, round 37}. After this height,
+  transactions carrying \texttt{vShieldedSpend} or \texttt{vJoinSplit} are invalid; notes not swept
+  are permanently unspendable. Seven and a half months is deliberately longer than the roughly
+  five-month parallel-asset window (\S\ref{sec:bridging-migration}): that window ends in forfeiture
+  to a named recipient, whereas this one ends in destruction, which warrants more notice for less
+  value. The height is a consensus rule and must ship in a \texttt{fluxd} release ahead of it.
+  \proposednote{Carry it in the \texttt{fluxd} upgrade the roadmap already plans for H1 2027
+  (collateral maturity, \S\ref{sec:migration}), so that retirement adds no release of its own before
+  \PNR{}.}
   \item \textbf{No change to exit paths during the window.} \zaddr${}\to{}$\taddr already works and
   needs no consensus change to keep working; the window requires an announcement, not a code change.
   \item \textbf{Activate ZIP-209 turnstile enforcement with Flux-correct constants for the duration
@@ -680,8 +685,8 @@ recommendation and are confirmed by the author (Remark~\ref{rem:shield-schedule-
 \begin{remark}[Schedule confirmed]
 \label{rem:shield-schedule-confirmed}
 The heights above were proposed by this paper and are \textbf{confirmed by the author}
-\srcintent{design intake}: announcement at $\hpa = \num{3466630}$ and sunset at
-$\hshield = \num{4517830}$. Activating ZIP-209 turnstile enforcement with Flux-correct constants for
+\srcintent{design intake}; the sunset was then brought forward to $\hshield = \num{3600000}$ and the
+announcement to publication \srcintent{08-answers-round-2.md, round 37}. Activating ZIP-209 turnstile enforcement with Flux-correct constants for
 the window remains this paper's recommendation, not a confirmed decision: round 11 confirmed the
 numbers, and a switch is not a number \srcintent{design intake}. The retirement
 decision and its heights are settled, and \S\ref{sec:private-payment}'s construction questions are

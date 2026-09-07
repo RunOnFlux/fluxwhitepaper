@@ -31,7 +31,7 @@ for f in SEC:
 CANON = {
  "6489": "fleet size", "1195": "deployed applications", "88514500": "locked collateral",
  "429466823.97": "supply at 2,912,015", "2020000": "PoN activation height",
- "3466630": "PA Depletion height", "86400": "drip constant K", "1932380": "v8 enforcement height",
+ "3787502": "PA Depletion height", "86400": "drip constant K", "1932380": "v8 enforcement height",
  "219958321.46": "measured EVM liability", "6386040": "operator issuance at activation",
  "156217342.78": "Ethereum outstanding", "77188.75921324": "Sapling pool",
  "835554": "UPGRADE_FLUX height", "2176519": "v8 min-instance height",

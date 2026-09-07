@@ -16,3 +16,13 @@ __pycache__/
 
 # Internal-only tracking documents must never land here.
 SECURITY-INTERNAL.md
+
+# Short-paper build artefacts (short/main.tex); the root PDF is tracked deliberately.
+short/*.aux
+short/*.log
+short/*.out
+short/*.toc
+short/*.fls
+short/*.fdb_latexmk
+short/*.synctex.gz
+short/sections/*.aux

@@ -46,7 +46,7 @@ Bridge redesign (mint-and-burn) $\to$ independent audit (gate before deploy) & Q
 Bridge redesign contracts $\to$ attestation / proof-of-reserve work & Q4 2026 & stated & \srcroadmap{flux-roadmap-public.md:99} \\
 Q4 2026 bridge attestation work $\to$ attestation network's ``first customer'' & Q4 2026 $\to$ H1 2027 & stated & \srcroadmap{flux-roadmap-public.md:138} \\
 PNR v2 testnet $\to$ pilot (CumulusVPN payments) $\to$ mainnet $\to$ per-tier before/after examples published before activation & H1 2027 & stated & \srcroadmap{flux-roadmap-public.md:119} \\
-\PNR mainnet activation $=$ parallel-asset mining-reward retirement (simultaneous, at $\hpa$) & roadmap labels H1 2027 / H2 2027 (superseded); resolved date 2027-03-12 & resolved: simultaneity, not the roadmap's sequential gate & \srcintent{design intake}, superseding \srcroadmap{flux-roadmap-public.md:133,159} \\
+\PNR mainnet activation $=$ parallel-asset mining-reward retirement (simultaneous, at $\hpa$) & roadmap labels H1 2027 / H2 2027 (superseded); resolved date 2027-07-01, with the retiring chains one-directional from March 2027 and shut down in August 2027 (round 34) & resolved: simultaneity, not the roadmap's sequential gate & \srcintent{design intake}, superseding \srcroadmap{flux-roadmap-public.md:133,159} \\
 Q4 2026 privacy groundwork (technical/legal/exchange plan) $\to$ chain privacy implementation & Q4 2026 $\to$ H2 2027 & stated & \srcroadmap{flux-roadmap-public.md:102,158} \\
 Collateral-maturity proposal $\to$ operator discussion $\to$ activation scheduling, riding an already-planned upgrade & H1 2027 & stated & \srcroadmap{flux-roadmap-public.md:146} \\
 Main-chain pruning $\leftrightarrow$ RPC/archive/indexing product & Q3 2026 (product) / H1 2027 (pruning) & inferred (roadmap's own directionality) & \srcroadmap{flux-roadmap-public.md:34,121-122} \\
@@ -96,7 +96,7 @@ record that the two events are now simultaneous rather than sequential (\S\ref{s
 \node[n] (coll) at (7.8,0.0) {collateral maturity activation};
 % H2 / resolved
 \node[n, fill=green!12] (act) at (11.6,6.2)
-  {\textbf{\PNR{} mainnet $=$ PA retirement}\\{\scriptsize simultaneous, 2027-03-12}};
+  {\textbf{\PNR{} mainnet $=$ PA retirement}\\{\scriptsize simultaneous, 2027-07-01}};
 \node[n] (chpr) at (11.6,0.0) {chain privacy implementation};
 
 \draw[st] (rfc) -- (v9);
@@ -231,7 +231,7 @@ section is that reopening leaves the migration path entirely.
 Three items therefore leave the dependency graph rather than moving within it: the reopening
 activation height, wallet integration for shielded sends in Zelcore and SSP, and the construction in
 \S\ref{sec:private-payment} that would have consumed newly-entered value. One item is added: a
-sunset height $\hshield = \num{4517830}$ after which shielded spends are invalid, together
+sunset height $\hshield = \num{3600000}$ after which shielded spends are invalid, together
 with the outreach that must precede it (\S\ref{sec:shielded-retirement}). The roadmap's published direction --- ``we are bringing private
 transactions back'' \srcroadmap{flux-roadmap-public.md:167}, and ``chain privacy implementation'' in
 H2 2027 \srcroadmap{flux-roadmap-public.md:158} --- is superseded by this decision, and the paper
@@ -255,7 +255,7 @@ Event & Height & Date & Subsidy ($\subsidypon$, \flux) & Node share ($\nodeshare
 \midrule
 Current & $\sim$2{,}912{,}015 & 2026-09-03 & 14.0 & --- \\
 Reduction 1 ($-10\%$) & 3{,}071{,}200 & 2026-10-25 & 12.6 & --- \\
-PA Depletion ($-50\%$), $\hpa$ & \textbf{3{,}466{,}630} & \textbf{2027-03-12} & \textbf{6.3} & \textbf{20\% --- \PNR begins} \\
+PA Depletion ($-50\%$), $\hpa$ & \textbf{3{,}787{,}502} & \textbf{2027-07-01} & \textbf{6.3} & \textbf{20\% --- \PNR begins} \\
 Reduction 2 ($-10\%$) & 4{,}122{,}400 & 2027-10-25 & 5.67 & 25\% \\
 Reduction 3 ($-10\%$) & 5{,}173{,}600 & 2028-10-24 & 5.103 & 30\% \\
 annually thereafter & $+1{,}051{,}200$ & --- & $\times 0.9$ & $+5$pp \\
@@ -271,7 +271,7 @@ declared cap $\nodesharecap = 50\%$, reached around 2033 on the stated annual st
 \end{table}
 
 \PNR activation and the parallel-asset emission cut occur at the \emph{same} event: height
-$\hpa = 3{,}466{,}630$, 2027-03-12, is when the node share $\nodeshare$ first becomes nonzero and when
+$\hpa = 3{,}787{,}502$, 2027-07-01, is when the node share $\nodeshare$ first becomes nonzero and when
 parallel-asset mining-reward emission is cut (\planned; \srcintent{design intake}). This resolves what
 earlier drafts of this paper carried as an open sequencing conflict (C1a). The public roadmap had
 stated a different, sequential plan — ``retirement of any parallel asset's mining rewards comes only
@@ -354,7 +354,7 @@ Ramp lowers the parity threshold to $\sim$6.8M\flux/yr by 2032-10, $\sim$5.6 yea
 \addlinespace
 Simultaneous activation removes the roadmap's proving-period checkpoint & \PNR credibility;
 parallel-asset retirement (\S\ref{sec:pa-sequencing}, \S\ref{sec:26-schedule}) &
-\PNR activation and the parallel-asset emission cut are simultaneous at $\hpa = 3{,}466{,}630$
+\PNR activation and the parallel-asset emission cut are simultaneous at $\hpa = 3{,}787{,}502$
 (\srcintent{design intake}), superseding the roadmap's plan to retire parallel
 assets only after \PNR is ``demonstrably paying operators,'' announced 90 days ahead
 (\srcroadmap{flux-roadmap-public.md:133,159}) &
@@ -400,7 +400,7 @@ $t \to z$ closed since height 835{,}554, approximately 5.4 years (\srccode{fluxd
 reopening is cancelled and both pools are to be retired
 (\srcintent{design intake}); roadmap will not pin a date on a cryptographic
 change before its audit is scoped (\srcroadmap{flux-roadmap-public.md:177}) &
-Sunset settled at $\hshield = \num{4517830}$, twelve months after $\hpa$
+Sunset settled at $\hshield = \num{3600000}$ (2027-04-27), announced at publication and \num{187502} blocks before $\hpa$
 (\srcintent{design intake}); ZIP-209 turnstile enforcement active for the window
 and direct holder outreach are this paper's recommendations, not confirmed decisions
 (\S\ref{sec:shielded-retirement}) \\
@@ -440,7 +440,7 @@ credits, the provisioning API's bounds, or the datacenter tier can activate on t
 roadmap implies (\srcdoc{reconciliation record}).
 \item \textbf{The shielded-pool sunset must be executed as settled.} Reopening $t \to z$ is cancelled and
 both pools are to be retired \srcintent{design intake}; what replaces the old open
-question is a sunset height $\hshield = \num{4517830}$, confirmed
+question is a sunset height $\hshield = \num{3600000}$, confirmed
 \srcintent{design intake}, together with ZIP-209 turnstile enforcement for the
 drain-only window and the direct outreach preceding it, both this paper's recommendations
 (\S\ref{sec:shielded-retirement}, \S\ref{sec:26-privacy}).

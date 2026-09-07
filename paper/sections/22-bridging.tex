@@ -95,7 +95,7 @@ $T_{\mathrm{att}}$, $T_{\mathrm{silence}}$, $T_{\mathrm{react}}$ & time & attest
 $\Lambda_c$, $\Lambda$ & $\mathbb{Z}_{\ge 0}$ \sat & legacy circulating supply on $c$ at the snapshot; $\Lambda = \sum_c \Lambda_c$ \\
 $R_0$ & $\mathbb{Z}_{\ge 0}$ \sat & initial L1 backing locked before migration opens \\
 $\mathcal{I}_c$ & --- & issuer-held (Foundation) address set on $c$, published before $\hsnap$; its balances are excluded from $\Lambda_c$ \\
-$\hsnap$, $h^{\mathrm{mig}}_{\mathrm{close}}$ & height & migration snapshot height; the close of the redemption window, decided at six months from \hpa{} ($\approx \num{3992230}$) \\
+$\hsnap$, $\hopen$, $\hclose$ & height & migration snapshot height; the opening of the one-directional window (retiring chains, March 2027) and its close at shutdown (August 2027)\\
 $\ell$, $\mathsf{used}_c$ & --- & lock identifier $(\mathrm{txid}, \mathrm{vout})$; consumed lock set on $c$ \\
 $n_b$, $B_c$ & $\mathbb{Z}_{\ge 0}$ & a burn nonce; the next burn nonce on $c$ \\
 $\varphi_{\mathrm{mint}}$, $\varphi_{\mathrm{rel}}$ & $\mathbb{Z}_{\ge 0}$ \sat & per-operation bridge fees; $F_{\mathrm{mint}}, F_{\mathrm{rel}}$ their cumulative sums \\
@@ -1637,7 +1637,7 @@ mistake a reader could make here. \textbf{Only Ethereum and BSC are snapshot-and
 balances are captured at $\hsnap$ and reissued $1{:}1$ into the new contracts, coordinated
 with exchange partners and ecosystem integrators, and their holders take no action at all
 \srcintent{design intake}. \textbf{Every other chain redeems through the
-incumbent bridge} to the main chain during the six-month window, with unclaimed balances passing to
+incumbent bridge} to the main chain during the redemption window, from $\hopen$ to $\hclose$, with unclaimed balances passing to
 the Foundation at close.
 
 \textbf{Solana sits in both descriptions and belongs to the second.} It is a surviving chain in the
@@ -1687,7 +1687,7 @@ decided plan uses \emph{different} mechanisms for the surviving and the retiring
 two-orders-of-magnitude error in earlier drafts of this subsection and of
 \Cref{sec:parallel-assets}. \textbf{Surviving chains are carried by snapshot; retiring chains are
 redeemed by the holder.} The first requires no holder action and therefore no holder is at risk of
-the forfeiture term; the second requires an act within a six-month window and therefore every
+the forfeiture term; the second requires an act within the redemption window and therefore every
 non-acting holder is. \planned
 
 \smallskip
@@ -1808,18 +1808,20 @@ unspendable and binds the disposal to a \texttt{fluxAddr}; Solana has a self-cus
 parameters this subsection previously carried as open. \planned
 
 \begin{enumerate}
-\item \textbf{Effective date.} The contract changes are prepared now and take effect at PA Depletion,
-      $\hpa = \num{3466630}$ (approximately 2027-03), \emph{simultaneously} with the swap contract
-      and with \PNR activation (\Cref{sec:pnr}, \Cref{sec:migration}). Nothing takes effect earlier
-      and there is no phased cutover.
-\item \textbf{Redemption window.} Six months from $\hpa$ --- \SI{182.5}{\day} nominal, approximately
-      \num{525600} L1 blocks at the \PoN target spacing \srcinferred --- so
-      $h^{\mathrm{mig}}_{\mathrm{close}} \approx \num{3992230}$. During the window, redemption
-      back to main-chain FLUX runs at 1:1 through the \textbf{existing bridge}.
-\item \textbf{The redemption route is one-directional.} During the window the existing bridge permits
-      migrating \emph{to} the main chain and claiming \emph{on} the main chain, and nothing else:
-      holders can move to the main chain and nowhere else
-      \srcintent{design intake}.
+\item \textbf{Staged dates.} The new Ethereum and BNB Chain contracts go live first, on readiness and
+      before the cut \srcintent{08-answers-round-2.md, round 34}; the retiring chains become
+      one-directional at $\hopen$; the emission cut and \PNR activation land together at PA Depletion,
+      $\hpa = \num{3787502}$ (2027-07-01) (\Cref{sec:pnr}, \Cref{sec:migration}); the retiring
+      chains shut down at $\hclose$.
+\item \textbf{Redemption window.} From $\hopen = \num{3450000}$ (2027-03-06) to
+      $\hclose = \num{3880000}$ (2027-08-02) \srcintent{08-answers-round-2.md, round 36},
+      \num{430000} L1 blocks, about \num{149} days at the \PoN target
+      spacing, spanning the cut \srcinferred. During the window, redemption back to main-chain FLUX
+      runs at 1:1 through the \textbf{existing bridge}.
+\item \textbf{The redemption route is one-directional.} From $\hopen$ the existing bridge permits
+      migrating \emph{to} the main chain, and mining entitlement stays claimable on the chain or on
+      the main chain until shutdown; nothing can be swapped \emph{into} a retiring chain
+      \srcintent{design intake}; \srcintent{08-answers-round-2.md, round 35}.
 \item \textbf{Unclaimed balances.} At window close, \textbf{unclaimed balances pass to the Flux
       Foundation to fund development.}
 \end{enumerate}
@@ -1862,7 +1864,7 @@ eight retiring chains & --- & \textbf{\num{6226900.80}} \\
 all ten chains & --- & \num{223027781.21} \\
 \bottomrule
 \end{tabular}
-\caption{Exposure to the six-month window and the unclaimed-balance term, by migration path.
+\caption{Exposure to the redemption window and the unclaimed-balance term, by migration path.
 Surviving-chain holders are carried across by \Cref{alg:carry} and take no action, so they are not
 at risk of forfeiture; only the retiring chains are. Figures are
 \srcmeasured{scripts/\allowbreak{}13-issuer-balances.sh}{2026-09-03} and
@@ -1873,23 +1875,24 @@ legacy assets are measured; no component of this table is an estimate.}
 \label{tab:migration-exposure}
 \end{table}
 
-\noindent So the amount exposed to the six-month window and the unclaimed-balance term is
+\noindent So the amount exposed to the redemption window and the unclaimed-balance term is
 \textbf{\num{6226900.80}\flux across the eight retiring chains}. That is \SI{2.79}{\percent} of
 the \num{223027781.21}\flux measured across all ten chains: the overwhelming majority of parallel-asset supply is
 issuer-held and never left the treasury, and the overwhelming majority of what did is on the two
 chains that survive and are carried across without holder action. \textbf{The fraction of that which fails to migrate
-within six months is unknown, and this paper does not estimate it}: there is no holder-count or
+within the window is unknown, and this paper does not estimate it}: there is no holder-count or
 dormancy measurement for any of the ten legacy assets in the evidence corpus, and a number produced
 without one would be a guess placed next to a real measurement.
 \srcintent{design intake}
 
 \paragraph{Three consequences of routing redemption through the incumbent, one of which is a real
-mitigation.} First, the incumbent's custody model is not retired at $\hpa$ but at window close six
-months later. For that interval the bound of \Cref{prop:worst-case} applies to the new
+mitigation.} First, the incumbent's custody model is not retired at $\hpa$ but at window close, $\hclose$,
+about a month later --- and it is already reduced to a one-directional exit from $\hopen$, four
+months before the cut. For that interval the bound of \Cref{prop:worst-case} applies to the new
 lock-and-mint path and \emph{not} to the redemption path, whose exposure remains the balance under
 the 32 hot keys with no bound and no on-chain attribution (\Cref{prop:dominance}). The section's
 dominance claim is therefore a claim about the steady state after window close, and about the new
-path from $\hpa$; it is not a claim about the window. \textbf{Second, and this materially narrows
+path from the time its contracts go live; it is not a claim about the window. \textbf{Second, and this materially narrows
 the first: the route is one-directional} \srcintent{design intake}. The incumbent's
 residual role during the window is an \emph{exit to the main chain}, not general two-way traffic, so
 the swap engine's chain-pair matrix, its several disagreeing confirmation tables and its
@@ -2001,14 +2004,16 @@ hold the new address. \planned
       and BSC.
 \item \textbf{Solana}: audit A2 --- the bridge program \emph{and} the SSP multisig program, the
       latter already roadmap-gated --- then steps 4--7 for Solana.
-\item \textbf{Close} the window at $h^{\mathrm{mig}}_{\mathrm{close}} \approx \num{3992230}$; the
+\item \textbf{Close} the window at $\hclose = \num{3880000}$ (2027-08-02); the
       migrator dies; the residual backing --- against the \num{6226900.80}\flux measured exposure of
       \Cref{tab:migration-exposure}, not against the ten-chain total --- passes to the Flux
       Foundation.
 \end{enumerate}
 
-\noindent Steps 3--7 land at $\hpa = \num{3466630}$, since the contract changes take effect there and
-not before; steps 1 and 2 must complete earlier, and step 2 is not complete: $\Lambda_c$ is measured
+\noindent Steps 3--7 are staged \srcintent{08-answers-round-2.md, round 34}: the Ethereum and BNB Chain
+carry and public lock-to-mint first, on readiness and before $\hpa$; holder-initiated migration on
+the retiring assets from $\hopen$; the close at $\hclose$. Steps 1 and 2 must complete before the
+first of these, and step 2 is not complete: $\Lambda_c$ is measured
 for all ten legacy assets, and $R_0$ is not yet established. \textbf{Whether public mint opens under the named quorum or waits for a bonded
 attester feed is settled by the same decision:} the launch configuration is 3-of-4 with autonomy to
 follow, and the fallback on record is to ship 3-of-4 and take a second fork
@@ -2087,13 +2092,13 @@ slashing construction & \emph{open} & Research-class \\
 \paragraph{Where the reserve number comes from.} $\mathsf{R}_{\mathrm{hot}}$ is the one parameter
 here that can be derived rather than judged, and \Cref{tab:issuer-liability} now supplies the
 operand. The measured redeeming set is \num{6226900.80}\flux{} across the eight retiring chains, and
-the migration window is six months, so the \emph{mean} redemption rate over the window is
-$\num{6226900.80}/180 \approx \num{34594}\flux$ per day \srcinferred. Redemption will not be uniform
+the migration window is about \num{149} days, so the \emph{mean} redemption rate over the window is
+$\num{6226900.80}/149 \approx \num{41791}\flux$ per day \srcinferred. Redemption will not be uniform
 --- announcement-driven flows are front-loaded, and the \SI{40.6}{\percent} of the set sitting on
 Base concentrates it further --- so a hot reserve sized at the mean would be drained by the first
-week. \num{500000}\flux{} is roughly fourteen days at the mean, which absorbs a first-week surge of
+week. \num{500000}\flux{} is roughly twelve days at the mean, which absorbs a first-week surge of
 several times the average without a cold-storage round trip, and the \num{200000}\flux{} top-up
-trigger leaves about six days of cover at the point the top-up is initiated. Both figures should be
+trigger leaves about five days of cover at the point the top-up is initiated. Both figures should be
 re-derived once real redemption data exists; they are sized from the only measurement available.
 
 \paragraph{Finality, not confirmations.} $D_{\mathrm{ETH}}$, $D_{\mathrm{BSC}}$ and

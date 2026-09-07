@@ -1,0 +1,66 @@
+\section{What Flux is}
+\label{sec:short:what}
+
+Concrete before abstract. Everything in this section was measured on 2026-09-03 from the network's
+own public interfaces, and can be measured again by anyone who runs the scripts in the repository.
+
+\subsection{A cloud made of collateralised machines}
+
+\Flux{} is a decentralized cloud: a network of independently operated machines that run other
+people's applications, coordinated by a blockchain rather than by a company. On the day of
+measurement it consisted of \textbf{\num{6489} nodes} running \textbf{\num{1195} deployed
+applications}.
+
+What makes a machine a node is not an agreement with anyone. It is a lock. An operator locks a
+fixed amount of \flux{} as collateral, runs the node software, and from then on the chain itself
+decides whether that machine is eligible to host and to be paid. Leave, and the collateral unlocks.
+Misbehave in ways the chain can see, and it does not.
+
+Three tiers, three collateral sizes, three hardware floors:
+
+\begin{center}\small
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+Tier & Collateral & Nodes today & Share of voting weight \\
+\midrule
+Cumulus & \num{1000}~\flux & \num{3247} & \SI{3.67}{\percent} \\
+Nimbus & \num{12500}~\flux & \num{1615} & \SI{22.81}{\percent} \\
+Stratus & \num{40000}~\flux & \num{1627} & \SI{73.52}{\percent} \\
+\midrule
+\multicolumn{2}{@{}l}{Total locked} & \num{6489} & \num{88514500}~\flux \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Two things in that table are worth noticing before moving on. First, the collateral is real and
+large: \num{88514500}~\flux{} is locked across the fleet, about a fifth of everything ever issued.
+Second, weight follows collateral, not headcount --- half the nodes are Cumulus, but they carry under
+four percent of the weight. That fact returns in \Cref{sec:short:limits}, where it stops being a
+curiosity.
+
+\subsection{A chain that pays for capacity, not for hashing}
+
+The network runs on its own chain. Until October 2025 that chain was proof-of-work; at block
+\num{2020000} it switched to \emph{Proof of Node}, in which the right to produce a block is drawn
+by lot from the collateralised nodes rather than won by burning electricity. Blocks arrive every
+thirty seconds. Node income is a position in a rotation, not a lottery ticket.
+
+The consequence for a reader is simple: the thing the chain rewards is \emph{being available with
+collateral at stake}, which is exactly the thing a cloud needs its machines to be.
+
+\subsection{What actually runs on it}
+
+Applications are containers, described by a specification the owner publishes to the chain and pays
+for by the block. Three-quarters of deployed applications (\num{873} of \num{1195}) are on the
+current specification version, and the mix is more general than a newcomer might guess: ordinary web
+services and content sites; blockchain infrastructure, including full nodes for other chains;
+and a substantial block of scientific-computing work --- \num{27} protein-folding and
+structural-biology deployments that between them hold roughly \SI{9}{\percent} of the fleet's
+committed CPU.
+
+That last point matters enough to come back to in \Cref{sec:short:whatfor}. For now: this is a
+running, general-purpose cloud, not a proposal for one.
+
+\limitnote{Capacity is measurable; utilisation is not. The interfaces this section was measured from
+report what each node \emph{has} and what is \emph{deployed}, not how busy anything is. The paper
+states the counts it can stand behind and does not estimate the number it cannot.}
