@@ -25,7 +25,7 @@ COPY FluxWhitepaper-Combined.pdf \
      FluxWhitepaper-Short.pdf \
      /usr/share/nginx/html/
 
-EXPOSE 8080
+EXPOSE 80 8080
 
 # Cheap liveness probe: /health returns a few bytes, so a health check never
 # pulls the 3.8 MB PDF.
