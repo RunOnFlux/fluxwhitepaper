@@ -175,7 +175,7 @@ wait for network peers and end of initial block download\tcp*{\srccode{fluxd/\al
       \If{$c$ eligible for $\tslot$}{
         sleep $\mathrm{rank}(c) \times 4000\,\mathrm{ms}$\tcp*{orphan-avoidance heuristic only --- no consensus enforcement, \srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon-minter.cpp}{78--104,217--221,250}}
         \If{$\tslot$ has not expired \emph{and} $\mathrm{tip}$ has not moved}{
-          build candidate block, coinbase paying the dev-fund address\tcp*{\srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon-minter.cpp}{288--314}}
+          \rev{R016}{build candidate block, coinbase paying the dev-fund address}{build candidate block, coinbase paying one node per tier and the dev-fund remainder}\tcp*{\srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon-minter.cpp}{288--314}}
           sign block hash with $sk$ via \textsc{SignPONBlock}\;
           submit via \textsc{ProcessNewBlock}\tcp*{\srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon-minter.cpp}{29--76}}
         }
@@ -436,7 +436,7 @@ receives an additive tolerance bonus before the threshold check of $+2$/$+4$/$+9
 Cumulus/Nimbus/Stratus \shipped \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.h}{86--88}.
 
 The result is signed by \texttt{BenchmarkSign}, which hashes the transaction's \texttt{sig},
-\texttt{benchmarkTier}, \texttt{benchmark\allowbreak{}Sig\allowbreak{}Time}, and \texttt{ip} fields and signs with the fluxnode
+\rev{R017}{\texttt{benchmarkTier}, \texttt{benchmark\allowbreak{}Sig\allowbreak{}Time}, and \texttt{ip} fields and signs with the fluxnode}{\texttt{benchmarkTier}, \texttt{benchmark\allowbreak{}Sig\allowbreak{}Time}, and \texttt{ip} fields (\texttt{benchmarkTier} is the tier whose hardware minimum the benchmark checked; it does not set the node's tier, which is fixed by collateral, and consensus rejects a confirmation whose \texttt{benchmarkTier} is below the collateral tier \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{1590--1596}) and signs with the fluxnode}
 key selected for the current time window
 \shipped \srccode{fluxbench/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}benchmarks.cpp}{3439--3480}. The same verification routine,
 \texttt{Check\allowbreak{}Benchmark\allowbreak{}Signature}, is linked into \fluxd and run as part of consensus validation of the
@@ -491,7 +491,7 @@ emergency keys can mint a fully valid block at any height once \PoN is active, a
 on-chain evidence that the network was in fact stalled. This is a consensus-level centralization
 surface, and it is stated here as one, not as a caveat.
 
-The team intends to raise this threshold to \textbf{3-of-4 with a newly generated key set},
+\rev{R229}{The team intends to raise this threshold to \textbf{3-of-4 with a newly generated key set},
 aligning consensus emergency-key governance with the bridge's 3-of-4 quorum (\S22), with no
 activation height scheduled \planned \srcintent{design intake}. This is a stated direction of travel, not a deployed change: \texttt{n\allowbreak{}Emergency\allowbreak{}Min\allowbreak{}Signatures}
 remains \textbf{2} against the current four-key set on mainnet and testnet today, which is why this
@@ -499,7 +499,12 @@ section states 2-of-4 \shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}chai
 threshold does not change the shape of the disclosure just made: a 3-of-4 key set, like the 2-of-4
 set it would replace, produces blocks outside \PoN{} eligibility and outside the per-node signature
 check, with no time or stall-detection gating either before or after the change; what moves is only
-the number of colluding or compromised keys required, from two of four to three of four. The absence
+the number of colluding or compromised keys required, from two of four to three of four.}{The team does not intend to change this threshold: \texttt{n\allowbreak{}Emergency\allowbreak{}Min\allowbreak{}Signatures}
+stays \textbf{2} against the current four-key set on mainnet and testnet
+\shipped \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{242--253}. A higher threshold would not
+change the shape of the disclosure just made in any case: a key set of any size on this path produces
+blocks outside \PoN{} eligibility and outside the per-node signature check, with no time or
+stall-detection gating; only the number of colluding or compromised keys required would differ.} The absence
 of any temporal or liveness constraint on \emph{when} an emergency block may be produced --- the more
 consequential fact of the two --- is untouched by this parameter.
 
@@ -532,7 +537,7 @@ observed gap in the public registry, chain tip height 2{,}917{,}115
 \label{tab:pon-rotation}
 \begin{tabular}{lrrrr}
 \toprule
-Tier & Nodes ($\ncount{\cdot}$) & Expected rotation ($\rot{\cdot}$, blocks) & Max blocks since paid & Duration at $\spacingpon$ \\
+Tier & Nodes ($\ncount{\cdot}$) & Expected rotation ($\rot{\cdot}$, blocks) & Max blocks since paid & \rev{R018}{Duration at $\spacingpon$}{Expected duration at $\spacingpon$} \\
 \midrule
 Cumulus & 3{,}247 & 3{,}247 & 3{,}202 & 27.06 h \\
 Nimbus  & 1{,}615 & 1{,}615 & 1{,}597 & 13.46 h \\

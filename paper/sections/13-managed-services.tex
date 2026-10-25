@@ -1,8 +1,10 @@
 \section{Managed services: databases, RPC, archive, and indexing}
 \label{sec:managed-services}
 
-A stateless application on \Flux tolerates a bad host: if the container dies, \FluxOS
-reschedules it elsewhere and the workload resumes with no state to lose. A managed
+A stateless application on \Flux tolerates a bad host: \rev{R068}{if the container dies, \FluxOS
+reschedules it elsewhere and the workload resumes with no state to lose.}{if the container dies, \FluxOS
+restarts it, and if its node leaves the network another node self-selects to run a replacement
+instance (\S\ref{sec:fluxos-placement}); either way the workload resumes with no state to lose.} A managed
 database cannot make that trade. Its correctness is defined by what happens to data
 that exists only on machines the operator does not control, that are geographically
 dispersed, that may leave the network without notice, and that share none of a

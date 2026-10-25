@@ -92,9 +92,12 @@ completions, image generation, document intelligence — backed by a fixed, admi
 GPU servers internally called ``RGP'' (Remote GPU). An administrator creates an RGP record, selects a
 model, and triggers an asynchronous Ansible playbook that connects over SSH and stands up the
 inference stack on the target rig \shipped\ \srccode{fluxai/\allowbreak{}fluxai\_admin/\allowbreak{}pages/\allowbreak{}views\_rgp.py}{36,468}.
-There is no self-service provisioning path for an external caller in this product; capacity changes
+There is no self-service provisioning path for an external caller in this product; \rev{R072}{capacity changes
 only through this admin workflow, and \texttt{fluxai} is itself a tenant application deployed onto
-\FluxCloud rather than part of the cloud substrate.
+\FluxCloud rather than part of the cloud substrate.}{capacity changes
+only through this admin workflow, and \texttt{fluxai} is itself an ordinary tenant (customer) of
+\FluxEdge{} and of other GPU providers such as Vast.ai, not an application on \FluxCloud{} or the
+\FluxNode{} network.}
 
 \texttt{pouwbackend} is the backend of \FluxEdge, a separate, Rancher/Kubernetes-orchestrated
 compute-rental marketplace with its own OpenAPI-documented REST interface and its own CLI
@@ -104,10 +107,14 @@ compute-rental marketplace with its own OpenAPI-documented REST interface and it
 \texttt{fluxai-\allowbreak{}fluxedge} is the GitOps glue between the two: a repository of Kubernetes manifests and
 Argo \texttt{Workflow} templates that clone the repository, build a \texttt{kustomize} overlay for a
 given model, and \texttt{kubectl apply} it onto a node selected at submission time by \FluxEdge
-\shipped\ \srccode{fluxai-fluxedge/\allowbreak{}custom-workflow-fluxone.yaml}{7-9,21-52}. In other words,
+\shipped\ \srccode{fluxai-fluxedge/\allowbreak{}custom-workflow-fluxone.yaml}{7-9,21-52}. \rev{R073}{In other words,
 \texttt{fluxai}'s own inference pods are themselves provisioned as workloads on \FluxEdge — the two
 product surfaces are physically coupled by self-hosting even though their APIs are independent
-products, and a reader should not assume that describing one describes the other.
+products, and a reader should not assume that describing one describes the other.}{In other words,
+\texttt{fluxai}'s own inference pods are provisioned as ordinary tenant workloads on \FluxEdge, as
+they are on Vast.ai and other providers --- a customer--provider relationship, not a coupling of the
+two products, and one that involves neither \FluxCloud{} nor the \FluxNode{} network. A reader should
+not assume that describing one product describes the other.}
 
 \begin{figure}[H]
 \centering
@@ -132,7 +139,7 @@ products, and a reader should not assume that describing one describes the other
 \node[font=\scriptsize, text width=3.3cm, align=right, anchor=east] at (6.75,1.75)
   {FluxAI's own inference pods run as \FluxEdge{} tenant workloads};
 \end{tikzpicture}
-\caption{The two GPU-bearing product surfaces and the self-hosting relationship between them.}
+\rev{R074}{\caption{The two GPU-bearing product surfaces and the self-hosting relationship between them.}}{\caption{The two GPU-bearing product surfaces and the tenant relationship between them.}}
 \label{fig:accelerated-compute-surfaces}
 \end{figure}
 
@@ -261,9 +268,12 @@ nodes is, to first order, the same as serving them from $n$ co-located devices.
 on one device, the structural advantage of centralisation disappears}, because the property that
 creates it --- the interconnect --- is not exercised. A geographically dispersed, heterogeneous,
 commodity fleet is not a compromised version of a datacentre for this class of work; it is an
-appropriate substrate for it, and it brings two properties a datacentre does not: physical proximity to
+appropriate substrate for it, \rev{R075}{and it brings two properties a datacentre does not: physical proximity to
 the user, and per-tenant isolation that is a whole machine rather than a scheduler abstraction
-(\S\ref{sec:accelerated-compute-allocation}).
+(\S\ref{sec:accelerated-compute-allocation}).}{and it brings two properties a datacentre does not: physical proximity to
+the user, and --- on \FluxEdge{}, where a computer is rented to one renter exclusively --- per-tenant
+isolation that is a whole machine rather than a scheduler abstraction
+(\S\ref{sec:accelerated-compute-allocation}).}
 
 \paragraph{What the network measurably has for it.}
 Small quantised models are frequently served acceptably on CPU and host memory alone, with no
@@ -275,8 +285,10 @@ CPU-served portion of this workload class is deployable on the substrate as it s
 ordinary application path of \S\ref{sec:fluxos}.
 
 \paragraph{The tension, which is the honest half.}
-\Flux's GPU allocation is whole-device passthrough, with no MIG partitioning, no vGPU and no
-time-slicing anywhere in the surveyed code (\S\ref{sec:accelerated-compute-allocation}). \textbf{That is precisely the
+\rev{R076}{\Flux's GPU allocation is whole-device passthrough, with no MIG partitioning, no vGPU and no
+time-slicing anywhere in the surveyed code}{\FluxEdge{}'s GPU allocation is whole-device passthrough (\FluxNode{}s have no GPU allocation at
+all, \S\ref{sec:accelerated-compute-fluxos}), with no MIG partitioning, no vGPU and no
+time-slicing anywhere in the surveyed code} (\S\ref{sec:accelerated-compute-allocation}). \textbf{That is precisely the
 wrong granularity for the workload this subsection argues the network suits.} A small quantised model
 may need a fraction of a modern accelerator's memory and a fraction of its throughput; under
 whole-device allocation it nonetheless occupies the entire device, and the economics of serving many
@@ -309,8 +321,9 @@ It is a claim about architectural fit, not about demand. This paper takes no pos
 of inference will be served by small task-specialised models rather than frontier ones; that is the same
 bet the document declares in \S\ref{sec:introduction} and does not defend. What is argued here is
 narrower and checkable: \emph{if} that workload class matters, the interconnect requirement that
-centralises frontier inference does not apply to it, and a collateralised dispersed fleet is a
-structurally appropriate substrate --- once accelerators can be subdivided. No claim is made about
+centralises frontier inference does not apply to it, \rev{R077}{and a collateralised dispersed fleet is a
+structurally appropriate substrate --- once accelerators can be subdivided.}{and a dispersed fleet is a
+structurally appropriate substrate --- once accelerators can be subdivided.} No claim is made about
 price, capacity relative to any other provider, or market size.
 \end{remark}
 
@@ -365,9 +378,11 @@ happens to suit a fleet of many mid-sized machines better than it suits a few la
 Against the tenant-available RAM measured in \S\ref{sec:deployed-today}, the network could hold, as
 an upper bound at full utilisation: \textbf{$\sim$\num{63300} concurrent Qwen3-4B, $\sim$\num{30800}
 Qwen3-8B, $\sim$\num{11400} gpt-oss-20b, or $\sim$\num{6500} Qwen3-30B-A3B instances}
-\srcdoc{scripts/23-network-capacity.py}. Those are capacity figures and not availability: roughly
+\srcdoc{scripts/23-network-capacity.py}. Those are capacity figures and not availability: \rev{R078}{roughly
 \SI{9}{\percent} of fleet CPU is already committed to the workloads of
-\S\ref{sec:sci-simulation}, and no claim is made here about demand.
+\S\ref{sec:sci-simulation}}{roughly
+\SI{5}{\percent} of fleet application-usable CPU is already committed to the workloads of
+\S\ref{sec:sci-simulation}}, and no claim is made here about demand.
 
 Two honest qualifications. These throughputs are derived, not measured --- no benchmark of a
 quantised model on a Cumulus, Nimbus or Stratus node was run for this paper, and the 8-channel column
@@ -380,10 +395,35 @@ figures above are a bandwidth model, and the gap between that model and a real n
 configuration, NUMA topology, and what else is resident --- is precisely what a benchmark would
 close. \textbf{That benchmark is scheduled for Q4 2026} \srcintent{design intake},
 so this is a dated gap rather than an indefinite one: the estimate above is to be replaced by a
-measurement, not defended.}
+measurement, not defended.} \rev{R250}{}{
 
-\paragraph{Where this is going.} \FluxCloud{} and \FluxEdge{} are to merge, offering accelerated
-capacity through one interface \srcintent{design intake} (\planned). Until then the
+\paragraph{Since publication: CPU inference in production.} After this paper was published, the team
+began serving language models from the collateralised fleet itself. \texttt{llm.\allowbreak{}runonflux.\allowbreak{}com}
+is an OpenAI-compatible endpoint, gated by API keys, that routes each request to pools of ordinary
+\FluxCloud{} applications running Ollama (llama.cpp) on \FluxNodes, and no pool's specification
+requests a GPU; on 2026-10-25 it listed nine models served by six pools of \num{140} instances \shipped\
+\srcmeasured{llm.\allowbreak{}runonflux.\allowbreak{}com}{2026-10-25}
+\srccode{ownllm/\allowbreak{}tools/\allowbreak{}gen.js}{200--221}. One of them is the team's own model,
+\texttt{fluxai:tiny}: a LoRA fine-tune of IBM's Granite~4.0-H-Tiny, a hybrid Mamba-2
+mixture-of-experts model, trained on deployment dialogues and grounded documentation questions and
+served as a 4-bit GGUF from \num{40} instances of 12~vCPU and \SI{24}{\giga\byte} each
+\srccode{ownllm/\allowbreak{}finetune/\allowbreak{}README.md}{3--44,117--157}. Its pool configuration records
+about 18 tokens per second of generation per instance, with prompt processing, not generation, the
+cost that grows with context \srccode{ownllm/\allowbreak{}tools/\allowbreak{}gen.js}{202--205}. That is one
+model on one machine configuration, not the per-tier benchmark scheduled above, but it is measured
+rather than derived. The same endpoint serves the documentation assistant (retrieval over the \Flux{}
+documentation, answered by \texttt{fluxai:tiny}, on \num{20} instances behind a 5-instance router),
+embedded as the ``Ask Flux AI'' widget on \Flux{} websites, and the \FluxCloud{} deployment assistant
+of \S\ref{sec:nl-deployment}. Despite the shared name, \texttt{fluxai:tiny} is not part of the
+\texttt{fluxai} GPU inference product described in \S\ref{sec:accelerated-compute-surfaces}: it runs on
+\FluxNodes, not on \FluxEdge{}, and only its training used a rented data-centre GPU.}
+
+\paragraph{Where this is going.} \rev{R254}{\FluxCloud{} and \FluxEdge{} are to merge, offering accelerated
+capacity through one interface \srcintent{design intake} (\planned).}{\FluxCloud{} is to become the one place from which both are
+available: first as a single interface over the two separate systems, with GPU rentals still served
+by \FluxEdge{}'s centralized backend, and only later as a merge of the systems themselves, whose
+design is not yet worked out; the long-term plan is one decentralized network running all
+kinds of applications \srcintent{design intake} (\planned).} Until then the
 division is worth stating plainly, because it is a strength rather than an embarrassment:
 \FluxEdge{} rents whole GPUs for work that needs them, and \FluxCloud{} runs the model classes that
 do not --- which, as the table above shows, now includes models that were frontier-adjacent two years
@@ -393,10 +433,13 @@ ago.
 \label{sec:sci-simulation}
 
 The largest single workload on the network by requested CPU is not an AI product. It is Monte Carlo
-science. The 2026-09-03 application census carries \textbf{27 folding and Rosetta deployments across
+science. The 2026-09-03 application census carries \rev{R079}{\textbf{27 folding and Rosetta deployments across
 \num{2409} requested instances and \num{2408} vCPU-equivalents} --- roughly \SI{9}{\percent} of the
 fleet's aggregate core capacity of \S\ref{sec:deployed-today} --- of which 26 are configured under a
-Foundation-held owner and one is third-party \shipped
+Foundation-held owner and one is third-party \shipped}{\textbf{27 folding and Rosetta deployments across
+\num{2409} requested instances and \num{2408} vCPU-equivalents} --- roughly \SI{5}{\percent} of the
+fleet's application-usable vCPU capacity of \S\ref{sec:deployed-today} --- of which 26 are owned by
+a single team-held identity (\texttt{196GJWy\ldots}, \S\ref{sec:private-payment}) and one is third-party \shipped}
 \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}.
 Whatever else this network is, it is already a Monte Carlo cluster.
 
@@ -454,8 +497,9 @@ would permit a platform-supplied image, which is what a catalogue offering would
 tenant-supplied route above does not depend on that answer.}
 
 There is one \Flux{}-specific wrinkle a cloud tenant does not face, and it is this paper's own
-finding rather than a licensing question: two Foundation-held FluxIDs carry the \texttt{fluxteam}
-privilege on every node's \FluxOS{} API (TB9, \Cref{tab:trust}), which confers rights including exec
+finding rather than a licensing question: \rev{R080}{two Foundation-held FluxIDs carry the \texttt{fluxteam}
+privilege on every node's \FluxOS{} API (TB9, \Cref{tab:trust})}{two FluxIDs held personally by the co-founders (K4, \Cref{def:foundation}) carry the
+\texttt{fluxteam} privilege on every node's \FluxOS{} API (TB13, \Cref{tab:trust})}, which confers rights including exec
 into a running container. A licensee should know that before treating a \Flux{} deployment as
 equivalent to a rented VM.
 
@@ -511,8 +555,9 @@ and by \S\ref{sec:attested-execution}, not by encryption.
 
 \paragraph{Patient data is disqualified today, and phantom data is not.} Treatment-planning dose
 calculation on real patient imaging cannot run on this network as it is built, and the reasons are
-this paper's own findings rather than a general caution: two Foundation-held FluxIDs carry the
-\texttt{fluxteam} privilege on \emph{every} node's \FluxOS{} API (TB9, \Cref{tab:trust}),
+this paper's own findings rather than a general caution: \rev{R081}{two Foundation-held FluxIDs carry the
+\texttt{fluxteam} privilege on \emph{every} node's \FluxOS{} API (TB9, \Cref{tab:trust}),}{two FluxIDs held personally by the co-founders (K4, \Cref{def:foundation}) carry the
+\texttt{fluxteam} privilege on \emph{every} node's \FluxOS{} API (TB13, \Cref{tab:trust}),}
 \texttt{fluxstorage} holds oversized environment variables and commands unencrypted at rest with no
 write-side protection \srccode{fluxstorage/\allowbreak{}src/\allowbreak{}routes.js}{17--67}, and the
 policy documents every node fetches and enforces are unsigned and served over plain HTTPS. No

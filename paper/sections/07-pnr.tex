@@ -33,7 +33,7 @@ means \PoN's rotation; wherever it says ``the pool'' or ``the drip'' it means \P
 
 \paragraph{Symbols local to this section.}
 Beyond \texttt{notation.tex} this section uses: $F_\hgt$ for the pool inflow of block $\hgt$ (in
-$\sat$); $G_\hgt$ for the Foundation share of the same block's receipts; $D_\hgt$ for the drip paid
+\rev{R028}{$\sat$); $G_\hgt$ for the Foundation share of the same block's receipts;}{$\sat$); $G_\hgt$ for the Foundation share of the same block's receipts, i.e.\ the share paid through the existing dev-fund coinbase output (``the Foundation'' is used informally, as in \Cref{def:foundation}, for the holder of that output, not a legal entity);} $D_\hgt$ for the drip paid
 out of the coinbase of block $\hgt$ and $D_{\hgt,t}$ for its tier-$t$ part; $\epsilon_\hgt$ for the
 integer partition residue and $U_\hgt$ for tier parts that find no payee; $A_F$ and $A_\Phi$ for the
 Foundation and pool parts into which consensus divides a single received payment; $\mathsf{sink}$
@@ -79,8 +79,8 @@ load-bearing here and are restated so that no proof silently assumes more than t
     every emergency block ever produced is on the chain, so stating it here discloses nothing that was
     not disclosed by shipping it. What publication does change is that the capability becomes
     \emph{legible}, and the paper's position is that the right response is to close it rather than to
-    leave it undescribed: time or stall gating in \fluxd{}, and the move to 3-of-4 over a freshly
-    generated key set that \S\ref{sec:governance} records as the team's intent, are both cheap
+    leave it undescribed: \rev{R230}{time or stall gating in \fluxd{}, and the move to 3-of-4 over a freshly
+    generated key set that \S\ref{sec:governance} records as the team's intent, are both cheap}{time or stall gating in \fluxd{} is cheap}
     relative to the design work S1 below has to do to contain it.
   \item[\textbf{A4}] \emph{The eligibility gate is not operator-bound and not machine-bound.} The
     benchmark signature that admits a node to the payee set is produced by a process on the
@@ -91,8 +91,9 @@ load-bearing here and are restated so that no proof silently assumes more than t
     fixed address is parseable.} Consensus can identify value received at an address it carries as a
     constant, and can therefore divide that value without the payer's cooperation and without any
     off-chain party's. What consensus cannot decide is whether a given application \emph{ought} to
-    have been paid for: the admission rule that binds a payment to a deployment is a \FluxOS
-    validation rule, and the \flux-denominated price table is Foundation policy. The precise scope
+    have been paid for: \rev{R029}{the admission rule that binds a payment to a deployment is a \FluxOS
+    validation rule, and the \flux-denominated price table is Foundation policy.}{the admission rule that binds a payment to a deployment is a \FluxOS
+    validation rule, and the \flux-denominated price table is policy, set by on-chain messages from a multisig held personally by the four co-founders (\S2, K8).} The precise scope
     of ``consensus-enforced'' is thus: \emph{the distribution of application revenue is a consensus
     rule; the obligation to pay, and the price, are policy} \srcdoc{reconciliation record}.
 \end{enumerate}
@@ -258,7 +259,7 @@ in \texttt{ConnectBlock}, because a node running the changed rule would be rejec
 node. Under Definition~\ref{def:pnr:tx} the division is evaluated in \texttt{ConnectBlock} and the
 admission rule is evaluated in \FluxOS, so the two are separated by the strongest boundary the
 system has. Note precisely what E2 does not say: it does not say the \emph{amount} is beyond policy.
-The price table is Foundation-set (Definition~\ref{def:pnr:price}, O9) and which channels settle
+\rev{R030}{The price table is Foundation-set (Definition~\ref{def:pnr:price}, O9)}{The price table is set by the price-message multisig (Definition~\ref{def:pnr:price}, O9)} and which channels settle
 through $\mathsf{sink}$ at all is a \FluxOS rule (O8). Consensus would fix the distribution; policy
 would fix the base.
 \end{proof}
@@ -359,7 +360,7 @@ price and again after the duration multiplier $\dur/L^{\ast}(\hgt)$ is applied \
 No geolocation multiplier exists in this path. A marketplace multiplier and duration discounts of
 \num{3}/\num{6}/\SI{12}{\percent} do exist, but only in the USD-denominated \emph{quote}
 (\S\ref{sec:pnr:openparams}, O9), never in the on-chain \flux{} price that \FluxOS{} validates a
-payment against --- which is the quantity PS4 would divide. O3 is closed and this marker with it.
+payment against --- which is the quantity PS4 would divide. \rev{R031}{O3 is closed and this marker with it.}{The aggregation is therefore no longer open.}
 
 Two consequences of Definition~\ref{def:pnr:price} deserve to be visible rather than discovered.
 First, the pool would receive $\nodeshare(\hgt)\,v$ regardless of how $\price$ was computed:
@@ -1058,9 +1059,11 @@ leak: the party that sets the price table would be exposed to one fifth of it.
 This is the sharpest question about the design and it is answered here rather than buried. It is
 also the one most easily stated wrongly, so the distinction comes first.
 
-\textbf{\PNR{} is a strong incentive to \emph{operate a node}.} It is the mechanism by which
+\rev{R032}{\textbf{\PNR{} is a strong incentive to \emph{operate a node}.} It is the mechanism by which
 application revenue reaches operators at all, and on the team's own projection it becomes the largest
-component of operator income \srcintent{design intake}. Nothing below qualifies that.
+component of operator income \srcintent{design intake}.}{\textbf{\PNR{} would be a strong incentive to \emph{operate a node}.} It would be the mechanism by which
+application revenue reaches operators at all --- today none does --- and on the team's own projection it would become the largest
+component of operator income \srcintent{design intake} \planned.} Nothing below qualifies that.
 
 What the property proves is narrower: income does not vary with \emph{which} applications a
 particular node happens to run. That is not a free-riding opportunity, because \textbf{an operator
@@ -1623,27 +1626,27 @@ its magnitude is not established.}
   every axis plot/.append style={thick},
 ]
 \addplot[black,mark=*,mark size=1.2pt] coordinates {
-  (2027.19,6386040) (2027.81,5747436) (2028.81,5172692) (2029.81,4655423)
+  (2027.50,6386040) (2027.81,5747436) (2028.81,5172692) (2029.81,4655423)
   (2030.81,4189881) (2031.81,3770893) (2032.81,3393803) (2035.81,2474083)
   (2040.80,1460921) (2045.80,862659)};
 \addlegendentry{operator issuance, $\tfrac{13.5}{14}\subsidy\blocksyear$}
 \addplot[blue,densely dashed,mark=square*,mark size=1.1pt] coordinates {
-  (2027.19,286320) (2027.81,357900) (2028.81,429480) (2029.81,501060)
+  (2027.50,286320) (2027.81,357900) (2028.81,429480) (2029.81,501060)
   (2030.81,572640) (2031.81,644220) (2032.81,715800) (2035.81,715800)
   (2040.80,715800) (2045.80,715800)};
 \addlegendentry{\PNR income, $g=\SI{0}{\percent}$}
 \addplot[teal,dashdotted,mark=triangle*,mark size=1.3pt] coordinates {
-  (2027.19,286320) (2027.81,411010) (2028.81,616517) (2029.81,899102)
-  (2030.81,1284395) (2031.81,1806178) (2032.81,2508521) (2035.81,4899436)
-  (2040.80,14918700) (2045.80,45546000)};
+  (2027.50,286320) (2027.81,384269) (2028.81,576404) (2029.81,840590)
+  (2030.81,1200842) (2031.81,1688684) (2032.81,2345395) (2035.81,4580849)
+  (2040.80,13979643) (2045.80,42662484)};
 \addlegendentry{\PNR income, $g=\SI{25}{\percent}$}
 \addplot[red,dotted,mark=diamond*,mark size=1.3pt] coordinates {
-  (2027.19,286320) (2027.81,550090) (2028.81,1320222) (2029.81,3081018)
-  (2030.81,7041655) (2031.81,15844590) (2032.81,35210000)};
+  (2027.50,286320) (2027.81,446340) (2028.81,1071216) (2029.81,2499504)
+  (2030.81,5713151) (2031.81,12854590) (2032.81,28565756)};
 \addlegendentry{\PNR income, $g=\SI{100}{\percent}$}
 \end{axis}
 \end{tikzpicture}
-\caption{Crossover in \flux terms \planned. Operator issuance falls on the reduction grid while the
+\caption{\revnote{R036}{plotted values corrected}\revnote{R035}{plotted values corrected}\revnote{R034}{plotted values corrected}\revnote{R033}{plotted values corrected}Crossover in \flux terms \planned. Operator issuance falls on the reduction grid while the
 operator share $\nodeshare$ ramps from $0.20$ to the cap $\nodesharecap = 0.50$; \PNR income is
 $\nodeshare(\hgt)\,V_0(1+g)^{t}$. The $g = \SI{0}{\percent}$ series flattens at
 $715{,}800\flux$ per year and never meets the issuance curve, whose perpetual tail is
@@ -1710,22 +1713,22 @@ Source: \texttt{paper/\allowbreak{}data/\allowbreak{}pnr\_crossover\_real.\allow
   every axis plot/.append style={thick},
 ]
 \addplot[blue,mark=*,mark size=1.2pt] coordinates {
-  (0.5,7.6) (1,11.6) (2,14.6) (5,19.6) (10,26.1)};
+  (0.5,7.3) (1,11.3) (2,14.3) (5,19.3) (10,26.1)};
 \addlegendentry{$g=\SI{10}{\percent}$}
 \addplot[teal,densely dashed,mark=square*,mark size=1.1pt] coordinates {
-  (0.5,5.6) (1,6.6) (2,9.6) (5,11.6) (10,13.6)};
+  (0.5,5.3) (1,7.3) (2,9.3) (5,12.3) (10,14.3)};
 \addlegendentry{$g=\SI{25}{\percent}$}
 \addplot[orange,dashdotted,mark=triangle*,mark size=1.3pt] coordinates {
-  (0.5,3.6) (1,4.6) (2,5.6) (5,7.6) (10,9.6)};
+  (0.5,3.3) (1,5.3) (2,6.3) (5,7.3) (10,9.3)};
 \addlegendentry{$g=\SI{50}{\percent}$}
 \addplot[red,dotted,mark=diamond*,mark size=1.3pt] coordinates {
-  (0.5,2.6) (1,3.6) (2,4.6) (5,5.6) (10,5.6)};
+  (0.5,2.3) (1,3.3) (2,4.3) (5,5.3) (10,6.3)};
 \addlegendentry{$g=\SI{100}{\percent}$}
-\addplot[black,only marks,mark=x,mark size=2.5pt] coordinates {(0.5,14.6)};
+\addplot[black,only marks,mark=x,mark size=2.5pt] coordinates {(0.5,14.3)};
 \addlegendentry{$g=\SI{0}{\percent}$ (parity unreachable for $m \ge 1$)}
 \end{axis}
 \end{tikzpicture}
-\caption{Real-terms sensitivity \planned, secondary analysis. Reading, and it is the point of the
+\caption{\revnote{R041}{plotted values corrected}\revnote{R040}{plotted values corrected}\revnote{R039}{plotted values corrected}\revnote{R038}{plotted values corrected}\revnote{R037}{plotted values corrected}Real-terms sensitivity \planned, secondary analysis. Reading, and it is the point of the
 figure: under a rebasing price policy, \emph{price appreciation delays \flux-terms parity} --- every
 curve rises to the right. Appreciation can raise operator income in real terms while the
 \flux-denominated ratio barely moves. The two statements live in different denominations and must
@@ -1741,12 +1744,16 @@ $17{,}544{,}229$~MB of RAM and $160{,}107$~GB of disk across $7{,}486$ instances
 this subsection scales linearly with it; the growth-rate conclusions do not.}
 
 \settlednote{Rule-based rebasing (\Cref{tab:pnr-recommended}). The
-decision is that rebasing follows a published rule rather than discretion or an oracle; the rule's
+\rev{R042}{decision is that rebasing follows a published rule rather than discretion or an oracle; the rule's
 functional form is specified in \S\ref{sec:pnr:recommended} as trailing measured receipts adjusted at
-fixed intervals, and its coefficients are a policy calibration rather than a mechanism choice. O9 --- price-table rebasing policy. Domain: $\{\text{discretionary (today)},\
-\text{rule-based},\ \text{USD oracle}\}$. A rule removes a Foundation lever over pool inflow; an
+fixed intervals, and its coefficients are a policy calibration rather than a mechanism choice.}{decision is that rebasing follows a published rule rather than discretion; the rule's
+functional form is specified in \S\ref{sec:pnr:recommended} as rebasing against a real-terms anchor, with the
+price feed and its failure behaviour stated as part of the rule, and its coefficients are a policy calibration rather than a mechanism choice.} O9 --- price-table rebasing policy. Domain: $\{\text{discretionary (today)},\
+\text{rule-based},\ \text{USD oracle}\}$. \rev{R044}{A rule removes a Foundation lever over pool inflow;}{A rule removes a discretionary lever, held by the multisig that posts price messages, over pool inflow;} \rev{R043}{an
 oracle adds a trust dependency that would need its own treatment. The existence of a
-\texttt{getappspecsusdprice} work item suggests movement here.}
+\texttt{getappspecsusdprice} work item suggests movement here.}{an
+oracle would formalise the off-consensus price feed the quoting path already runs (\S\ref{sec:pnr:recommended}), whose failure modes would need their own treatment. The deployed
+\texttt{getappspecsusdprice} endpoint already returns USD-denominated quotes \shipped.}}
 
 % ---------------------------------------------------------------------------
 \subsection{Open parameters}
@@ -1866,8 +1873,9 @@ O20 halving uniformity & \textbf{uniform $\times 1/2$} & every parity figure in
 
 \textbf{O11, no seed.} Seeding $\pool_{\hpa-1}$ above zero would remove the ninety-day ramp and give
 operators income from the first post-activation block. It would also be a one-off Foundation transfer
-to node operators, and it would have to be described as one --- in a section whose entire argument is
-that \PNR{} replaces issuance with demand-side revenue. Starting at zero makes the ramp visible and
+to node operators, and it would have to be described as one --- \rev{R045}{in a section whose entire argument is
+that \PNR{} replaces issuance with demand-side revenue.}{in a section whose entire argument is
+that \PNR{} would add demand-side revenue to issuance.} Starting at zero makes the ramp visible and
 makes the first ninety days an honest measurement of whether demand exists. If the ramp is judged too
 harsh, the correct instrument is the activation schedule, not a subsidy that muddies what the pool
 balance means.
@@ -1877,8 +1885,9 @@ see.} The price table is a lever over pool inflow, which sits awkwardly beside a
 legitimacy rests on operators being paid from receipts rather than from discretion. Two corrections
 have to be made before the recommendation can stand.
 
-\emph{First, the lever is narrower than ``Foundation policy'' suggests.} A price revision is not a
-configuration edit: it is an on-chain message, sent from a Foundation multisig address to itself,
+\rev{R046}{\emph{First, the lever is narrower than ``Foundation policy'' suggests.} A price revision is not a
+configuration edit: it is an on-chain message, sent from a Foundation multisig address to itself,}{\emph{First, the lever is narrower than ``policy'' suggests.} A price revision is not a
+configuration edit: it is an on-chain message, sent from one of the application-payment multisig addresses to itself (held personally by the four co-founders, \S2, K8),}
 carrying the seven-field table \texttt{p\_cpu\_ram\_hdd\_minPrice\_port\_scope\_staticip}, which every
 node parses from its own copy of the chain and applies from the message's height onward \shipped
 \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}explorerService.js}{279--303,387},
@@ -1891,8 +1900,9 @@ better starting point than a table published over an API, and the paper should c
 times volume. A rule that sets next period's price from last period's receipts has no exogenous
 anchor: it is a feedback loop that can drift arbitrarily far from the cost of the resources being
 sold, in either direction, and calling it a rule rather than a lever changes who turns the crank, not
-whether the number means anything. What the deployed table has actually tracked across its five
-revisions --- a \SI{100}{\percent}-fold fall in the CPU rate --- is real cost and the \flux{} price,
+whether the number means anything. \rev{R047}{What the deployed table has actually tracked across its five
+revisions --- a \SI{100}{\percent}-fold fall in the CPU rate --- is real cost}{What the deployed table has actually tracked across its five
+revisions --- a $100\times$ fall in the CPU rate --- is real cost} and the \flux{} price,
 not receipts.
 
 So the choice is a real one and it should be stated as such. \emph{Either} the rule targets a
@@ -1937,7 +1947,7 @@ system & who is paid & from what & what \Flux would do differently\\
 \midrule
 Ethereum, post-EIP-1559 & block proposer (priority fee); base fee burned & per-transaction fee, same block & no burn; the operator share is pooled and dripped to \emph{all} nodes through the rotation, and a producer gains nothing by including a payment. The same-block capture EIP-1559 grants the proposer by design is precisely what Theorem~\ref{thm:pnr:timing} removes\\
 Filecoin \citep{filecoin2017} & the specific storage provider & per-deal escrow released on proof of storage, with slashing & payment strictly conditional on proven service there; unconditional and network-wide here (H4, P7). \Flux would trade the proof-of-service dependency for fairness and simplicity, and inherit the free-rider problem of \S\ref{sec:pnr:hosting} in exchange\\
-Akash \citep{akash} & the winning provider & tenant escrow drawn down per block at the bid price, with a take rate to a community pool & no per-lease escrow to the host and no auction; the network take would be \SIrange{80}{50}{\percent} to a Foundation address rather than a governance-controlled pool. Stated without softening\\
+Akash \citep{akash} & the winning provider & tenant escrow drawn down per block at the bid price, with a take rate to a community pool & no per-lease escrow to the host and no auction; \rev{R048}{the network take would be \SIrange{80}{50}{\percent} to a Foundation address rather than a governance-controlled pool.}{the network take would be \SIrange{80}{50}{\percent} to the dev-fund address rather than a governance-controlled pool.} Stated without softening\\
 Render \citep{render} & node operators in proportion to work & burn-and-mint: payments burned, emissions minted to workers & burn-and-mint ties reward to metered work. The settled design rejects both the burn and the metering, which is exactly the roadmap model superseded by C1\\
 Dash masternodes & one masternode per block, longest-since-paid queue & block subsidy plus a treasury share & the nearest structural precedent for Proposition~\ref{prop:pnr:rotation}; Dash never routed application fees through the rotation. \Flux would be that rotation plus a fee pool \srcdoc{mechanism specification}\\
 Cosmos SDK \texttt{x/distribution} & all validators in proportion to stake, every block, lazily accumulated & transaction fees, with a community tax & exact and immediate, but requires per-validator accumulators and withdraw transactions. \Flux would pay through three existing coinbase outputs with no per-node state and no claim transaction (P4, P5), accepting a bounded \SI{3.83}{\percent} spread and a twenty-day lag instead. This is the road not taken \srcdoc{mechanism specification}\\

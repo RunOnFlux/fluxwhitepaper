@@ -19,7 +19,7 @@ reward for hosting an application is exactly zero. &
 Free-riding is individually rational; what compels hosting is the eligibility gate, and that gate is
 currently bound to neither the operator nor the machine. This is deliberate --- paying by placement
 would make the claim race a race for money --- and the answer is attested execution, which is why
-that work is a precondition rather than a follow-on. \\
+\rev{S20}{that work is a precondition rather than a follow-on.}{that work is the highest-priority security item on its own merits, with PNR's ramp tied to it.} \\
 \textbf{Four parties reach the removal threshold} &
 At the measured collateral distribution, four owner identities together hold \SI{25}{\percent} of
 voting weight. The moderation quorum is not censorship-resistant today. &
@@ -31,15 +31,20 @@ The shielded pool is being retired. Every payment will be publicly linkable. &
 A deliberate trade for a smaller, auditable chain. Payment privacy becomes an open problem, and the
 paper says so rather than claiming otherwise. \\
 \textbf{One discovery endpoint} &
-The service that tells the network which applications exist and where they run is a single
-Foundation-operated API, with no on-chain or peer-to-peer fallback. &
-If it goes down, nothing new propagates; the last-known configuration keeps serving. A real
-control-plane single point of failure, stated in the full paper's centralisation inventory. \\
+\rev{S21}{The service that tells the network which applications exist and where they run is a single
+Foundation-operated API, with no on-chain or peer-to-peer fallback.}{The routing layer (\FDM{}) learns which applications exist and where they run from a single
+configured API endpoint, with no automatic failover. The nodes themselves share this data peer to
+peer, and every node serves the same route.} &
+\rev{S22}{If it goes down, nothing new propagates; the last-known configuration keeps serving. A real
+control-plane single point of failure, stated in the full paper's centralisation inventory.}{If that endpoint goes down, the routing layer stops picking up changes and keeps serving its
+last-known configuration. A resilience gap in the routing layer, recorded in the full paper's
+centralisation inventory.} \\
 \textbf{Four keys can produce blocks} &
 An emergency path lets a 2-of-4 key set produce blocks that bypass the node-eligibility check, with
 no time or stall-detection gating on when it may be used. &
-Intended for recovery from a stalled chain, and the set is planned to move to 3-of-4 with fresh
-keys. But the gating is absent at either size: nothing in consensus limits \emph{when} the path
+\rev{S32}{Intended for recovery from a stalled chain, and the set is planned to move to 3-of-4 with fresh
+keys. But the gating is absent at either size:}{Intended for recovery from a stalled chain, and no change to the 2-of-4 threshold is planned. The
+gating is what is missing:} nothing in consensus limits \emph{when} the path
 fires, only \emph{who} can fire it. The full paper lists it in the centralisation inventory
 alongside the discovery endpoint. \\
 \textbf{The bridge is administered} &
@@ -49,8 +54,10 @@ Explicitly a bring-up safety net, with immutability the stated destination once 
 and a proven operating record exist. Until the upgrade path is renounced on chain, the paper
 describes the bridge as administered, not trust-minimized. \\
 \textbf{Accelerators attach whole} &
-A GPU is passed through as an entire device. There is no subdivision, and a request under
-contention is silently dropped rather than refused. &
+\rev{S23}{A GPU is passed through as an entire device. There is no subdivision, and a request under
+contention is silently dropped rather than refused.}{On \FluxEdge{} --- a separate, centralized product; the collateralised nodes have no GPU
+allocation --- a GPU is passed through as an entire device. There is no subdivision, and a request
+under contention is silently dropped rather than refused.} &
 This is the one thing the small-model thesis of \Cref{sec:short:whatfor} needs and the current
 allocation cannot do. Planned with the cloud/edge merge; not shipped. \\
 \bottomrule

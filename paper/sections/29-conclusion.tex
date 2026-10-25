@@ -17,8 +17,9 @@ dominant consumer of cloud capacity, and that \Flux's redesign follows from taki
 This paper does not argue the bet itself. What it argues is conditional and checkable --- given the
 bet, whether the remaining work is extension of what already exists or invention of what does not ---
 and \S\ref{sec:feasibility} answers it by classifying every mechanism in Part IV against that distinction: of twenty-two
-assessed, six are Extension, eleven are Engineering, one moves from Research toward Engineering, and
-four remain Research (\S\ref{sec:feasibility}, tally). Most of what the bet requires, this paper finds, \Flux can build by
+\rev{R249}{assessed, six are Extension, eleven are Engineering, one moves from Research toward Engineering, and
+four remain Research}{assessed, six are Extension, twelve are Engineering, and
+four remain Research} (\S\ref{sec:feasibility}, tally). Most of what the bet requires, this paper finds, \Flux can build by
 extending components already in production. Four things it cannot.
 
 The four are these, without re-arguing them here: post-quantum migration of outputs the protocol
@@ -30,9 +31,13 @@ One finding among these is the most consequential for how the remaining work sho
 \PNR, as specified, would pay every node through the \PoN rotation independent of what that node
 hosts, so the eligibility gate --- not the payment --- is what compels hosting (§7). That gate is
 presently bound to neither the operator who ran the benchmark nor the machine that produced the
-attestation (§4, §14). Activating \PNR before that binding exists would raise the payoff to passing
+attestation (§4, §14). \rev{R211}{Activating \PNR before that binding exists would raise the payoff to passing
 the gate without doing the work, by exactly what \PNR pays; hardening attestation is therefore a
-precondition for \PNR, not a parallel workstream or a follow-on (\S\ref{sec:feasibility}, \S\ref{sec:migration}).
+precondition for \PNR, not a parallel workstream or a follow-on (\S\ref{sec:feasibility}, \S\ref{sec:migration}).}{Activating \PNR before that binding exists would raise the payoff to passing
+the gate without doing the work, by exactly what \PNR pays --- about \SI{4.5}{\percent} on top of the
+issuance that already flows through the same gate. Hardening attestation is therefore the
+highest-priority security item on its own merits, and \PNR's ramp, not its activation, should track
+it (\S\ref{sec:feasibility}, \S\ref{sec:migration}).}
 
 The argument is falsifiable in two independent places. The bet itself fails if, once the delegated
 authority and machine-facing interfaces this paper specifies are wired and enforced (§17, §18), the

@@ -137,7 +137,7 @@ scoped from a source that does not know how many chains exist. \shipped
 One further caveat belongs here rather than in a footnote: as of the most recent local state of
 \texttt{holder-\allowbreak{}snapshot}, only its Ergo crawl is actually invoked — every other chain's
 \texttt{start()} call is commented out \shipped \srccode{holder-snapshot/\allowbreak{}index.js}{29-36} — so the
-tool that produced the ten-chain figure is not itself being run against ten chains today. That
+\rev{R019}{tool that produced the ten-chain figure is not itself being run against ten chains today.}{tool that produced the eight-chain figure is not itself being run against eight chains today.} That
 does not change the ten-chain count in the newer tracker, which is the operative figure.
 
 \subsection{How a parallel asset is acquired today}
@@ -249,7 +249,7 @@ the Algorand ASA and the Ergo token; the Solana mint reports \num{59999990.375}\
 the entire nominal cap, against a main chain that has issued \num{429466823.97}\flux in total
 (\Cref{sec:monetary-policy}), makes the point on its own: \texttt{totalSupply} measures what was
 minted into a contract, not what remains outstanding. What becomes of the issuer-held remainder is
-decided: the Foundation immobilises its own legacy holdings by transferring them to a published
+\rev{R020}{decided: the Foundation immobilises its own legacy holdings by transferring them to a published}{decided: the team is to immobilise the issuer's own legacy holdings by transferring them to a published}
 per-chain dead address (\S\ref{sec:bridging-migration}; \planned
 \srcintent{design intake}).
 
@@ -267,7 +267,7 @@ with \texttt{scripts/\allowbreak{}13-issuer-balances.\allowbreak{}sh}, \texttt{s
 \centering\footnotesize
 \caption{Outstanding parallel-asset liability by chain, using \texttt{balance-\allowbreak{}checker}'s registry of
 issuer-controlled addresses as the operand. All ten legacy assets are measured from key-free public
-endpoints. Nominal supply differs by chain: the eight EVM-style deployments were each minted at
+endpoints. Nominal supply differs by chain: \rev{R021}{the eight EVM-style deployments were each minted at}{the other eight deployments (five EVM, plus Algorand, Ergo and Tron) were each minted at}
 \num{440000000}, Solana at \num{59999990.375}, and Kadena at \num{39998820.81}.
 \shipped \srcmeasured{scripts/\allowbreak{}13-issuer-balances.sh}{2026-09-03};
 \srcmeasured{scripts/\allowbreak{}15-nonevm-liability.sh, scripts/\allowbreak{}16-remaining-liability.sh,
@@ -370,8 +370,9 @@ mandatory launch pair is Ethereum and BNB Chain, with Solana following later
 \srcintent{design intake}. Base (an Ethereum L2, OP Stack) and BNB Chain (an independent L1)
 are not the same chain by any reading.
 
-This is now settled directly by the team: \textbf{Base is retired, and no later re-addition is
-contemplated} (\planned; \srcintent{design intake}). That closes the question in the
+This is now settled directly by the team: \rev{R022}{\textbf{Base is retired, and no later re-addition is
+contemplated}}{\textbf{Base is to be retired, and no later re-addition is
+contemplated}} (\planned; \srcintent{design intake}). That closes the question in the
 direction the design intake already implied — Base is not a survivor — rather than leaving open which
 second chain accompanies Ethereum. The roadmap's naming of Base is recorded here because it is a real
 divergence between the team's own public and internal statements, not because the paper adjudicates it
@@ -422,7 +423,7 @@ them because conflating them misstates the exposure by two orders of magnitude
   they choose (\planned; \srcintent{design intake}). ``Surviving'' and
   ``snapshot-carried'' are therefore not the same set, and only the latter escapes the window.
 \item[Holder-initiated redemption, for the retiring chains.] Avalanche C-Chain, Base, Polygon and
-  the non-EVM assets are retired. From $\hopen$ (March 2027) until shutdown at $\hclose$ (August
+  \rev{R023}{the non-EVM assets are retired.}{the non-EVM assets are to be retired.} From $\hopen$ (March 2027) until shutdown at $\hclose$ (August
   2027) --- about five months, spanning the emission cut --- a \textbf{redemption window} is open, during
   which \Fusion — the existing custodial swap and claim mechanism of \S\ref{sec:pa-acquisition} — is
   the stated route back to main-chain \flux, at 1:1 (\planned;
@@ -433,7 +434,7 @@ them because conflating them misstates the exposure by two orders of magnitude
   \srcintent{design intake}).
 \end{description}
 
-\textbf{Unclaimed balances at window close pass to the Flux Foundation to fund development}
+\rev{R024}{\textbf{Unclaimed balances at window close pass to the Flux Foundation to fund development}}{\textbf{Unclaimed balances at window close are to pass to the team behind the project (informally, the Flux Foundation) to fund development}}
 (\planned; \srcintent{design intake}). That term reaches only the second path, so
 it is stated next to the right number rather than next to the whole measured liability. Of the
 \num{223027781.21}\flux measured across all ten chains in
@@ -479,7 +480,7 @@ parallel-asset schedule is staged \srcintent{08-answers-round-2.md, round 34}: E
 move to the new contracts earlier, on readiness; from $\hopen$ the eight retiring chains are
 one-directional --- nothing can be swapped into them, while swapping back and claiming continue; the
 chains shut down at $\hclose$,
-after which unclaimed balances pass to the Foundation (\S\ref{sec:pa-requirements}).
+\rev{R025}{after which unclaimed balances pass to the Foundation}{after which unclaimed balances pass to the team behind the project} (\S\ref{sec:pa-requirements}).
 \settlednote{$\hopen = \num{3450000}$ (2027-03-06) and $\hclose = \num{3880000}$ (2027-08-02):
 proposed by this paper at the \SI{30}{\second} target for the author's months, March and August
 2027, and confirmed \srcintent{08-answers-round-2.md, round 36}.}
@@ -530,8 +531,9 @@ entitlement that has accrued and never been claimed --- on Ethereum about
 \num{0.148}\flux{} per block against \num{1.4} accruing
 \srcmeasured{apilist.tronscan.org token\_trc20/transfers}{2026-09-07}; claims lag accrual and
 arrive in lumps. At $\hpa$ nothing is left to accrue; what the height does not settle is that
-accrued-but-unclaimed quarter, and the round-7 provision that unclaimed balances pass to the
-Foundation is what disposes of it. The prior whitepaper's ``2027--2028'' \cite{fluxpouw2} is
+accrued-but-unclaimed quarter, and \rev{R026}{the round-7 provision that unclaimed balances pass to the
+Foundation is what disposes of it.}{the round-7 provision that unclaimed balances pass to the
+team behind the project is what disposes of it.} The prior whitepaper's ``2027--2028'' \cite{fluxpouw2} is
 consistent with the computed July 2027 (conflicts C64, C65).
 \end{remark}
 
@@ -572,9 +574,11 @@ team's direct answer to this paper is the more recent and more specific statemen
 follows it.
 
 The practical consequence is that this section and \S\ref{sec:migration} describe \emph{one}
-coordinated transition rather than two phases with a proving interval between them: at $\hpa$, \PNR
+coordinated transition rather than two phases with a proving interval between them: \rev{R027}{at $\hpa$, \PNR
 begins paying operators, parallel-asset mining rewards are cut, and the redemption mechanics of
-\S\ref{sec:pa-requirements} open, all at the same height. The absence of the proving period the
+\S\ref{sec:pa-requirements} open, all at the same height.}{at $\hpa$, \PNR
+would begin paying operators and parallel-asset mining rewards would be cut, at the same height, inside the redemption window of
+\S\ref{sec:pa-requirements}, which opens earlier, at $\hopen$.} The absence of the proving period the
 roadmap's original sequencing would have created — the interval in which \PNR could have been
 observed actually paying operators before the parallel assets it was meant to justify retiring were
 cut — is a risk-relevant fact in its own right, and is addressed as such in \S\ref{sec:26-risk}.

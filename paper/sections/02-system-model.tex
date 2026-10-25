@@ -75,7 +75,7 @@ budget $\budget$ or a scope $\scopeset$ exists in the deployed system.
 
 \begin{definition}[The Foundation as a distinguished participant]
 \label{def:foundation}
-\shipped Write $\mathcal{F}$ for the participant defined \emph{extensionally}, as the holder of the
+\rev{R007}{\shipped Write $\mathcal{F}$ for the participant defined \emph{extensionally}, as the holder of the}{\shipped ``The Foundation'' is used in this paper informally, for the community and the people behind the project; it is not a legal entity. Write $\mathcal{F}$ for the participant defined \emph{extensionally}, as the holder of the}
 following key sets and the operator of the following infrastructure. $\mathcal{F}$ is distinguished
 because several of its capabilities cannot be acquired with any amount of \flux.
 
@@ -89,7 +89,7 @@ because several of its capabilities cannot be acquired with any amount of \flux.
   \item[\textbf{K3.}] The dev-fund recipient address, to which a consensus-enforced minimum coinbase output of
         $\subsidypon(\hgt) - \sum_{t\in\tiers}\subsidypon(\hgt)\tbase{t}/14$ --- i.e.\ $0.5/14 =
         3.57\%$ of \PoN{} emission at activation --- must be paid
-        \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2877--2884}, enforced at \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{1231--1249}.
+        \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2877--2884}, enforced at \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{1231--1249}. \rev{R226}{}{The address is a 2-of-4 multisignature held by the four named individuals below; every spend from it reveals the redeem script on chain. About once a year its accumulated outputs are consolidated into a separate 3-of-4 SSP~Enterprise custody multisignature in which each signer is itself a 2-of-2 wallet-and-key pair, so six of the eight keys are required; the most recent consolidation was at block \num{2998902} on 2026-10-01.}
   \item[\textbf{K4.}] Two FluxIDs holding the \texttt{fluxteam} privilege on \emph{every} node's \FluxOS{} API,
         conferring \texttt{adminandfluxteam} rights including broadcast injection, daemon
         start/restart, and application updates on behalf of an owner
@@ -113,10 +113,11 @@ because several of its capabilities cannot be acquired with any amount of \flux.
         \srccode{flux-fdm-infrastructure/\allowbreak{}ansible/\allowbreak{}inventory/\allowbreak{}hosts.yaml}{1--206}.
 \end{itemize}
 
-\decided{custody is \emph{personal}, not corporate. No legal entity holds these key sets: four
+\decided{custody is \emph{personal}, not corporate. \rev{R008}{No legal entity holds these key sets: four}{No legal entity holds these key sets. K9's servers are run by the team across several hosting providers, and its DNS is managed in a team Cloudflare account. The \texttt{runonflux.io} domain registrations and K1--K8 are held personally: four}
 named individuals --- Tadeas Kmenta, Valter Silva, Daniel Keller and Jeremy Anderson --- each hold
-one, personally governed \srcintent{design intake}, matching the 3-of-4 emergency
-and bridge configuration of \Cref{sec:governance}. The distinction bears on every concentration
+one, personally governed \srcintent{design intake}, \rev{R227}{matching the 3-of-4 emergency
+and bridge configuration of \Cref{sec:governance}.}{matching the four-key, 2-of-4 emergency
+configuration (\S\ref{sec:consensus}) and the 3-of-4 bridge configuration of \Cref{sec:governance}.} The distinction bears on every concentration
 argument in this paper: personal custody by four named people is a different accountability model
 from custody by a company, and both differ from the anonymous-operator model a reader of a
 decentralized-network paper might otherwise assume. No repository or endpoint read for this paper
@@ -322,7 +323,8 @@ its production is visible to anyone following the chain and detection does not d
 alerting system \srcintent{design intake}. That is the whole of the monitoring
 story --- this paper does not claim a rate limiter, an alarm or a watch rota outside the chain,
 because none is established and none is asserted. Observability is not the same as response, and
-\Cref{sec:governance}'s move to 3-of-4 with fresh keys is the control that bounds the path.}
+\rev{R228}{\Cref{sec:governance}'s move to 3-of-4 with fresh keys is the control that bounds the path.}{no control in consensus bounds the path: the threshold stays at 2-of-4 and time or stall gating is
+absent (\Cref{sec:governance}).}}
 \notestablished{whether \ArcaneOS{} release artefacts are signature-verified beyond the published
 SHA-256 sums is not established in the repositories read (TB8).}
 \notestablished{the fetch interval for \texttt{vettedrepositories.\allowbreak{}json} is not stated in the policy
@@ -332,7 +334,7 @@ bridge keys above --- Tadeas Kmenta, Valter Silva, Jeremy Anderson and Daniel Ke
 \srcintent{design intake}. The address itself is expected to change on migration to
 SSP Enterprise; the custody does not. This is a policy fact rather than a code fact: no artefact read
 for this paper establishes it, and it rests on the author's statement. It is stated because
-\Cref{sec:pnr}'s settlement sends every application payment to that one address, so who holds its key
+\rev{R009}{\Cref{sec:pnr}'s settlement sends every application payment to that one address}{every application payment is sent to that one address today (\Cref{sec:pnr})}, so who holds its key
 is load-bearing for the whole revenue path and not a detail a reader should have to infer.}
 
 \subsection{The adversary}
@@ -547,7 +549,7 @@ guard under fixed-work \PoN{} was not resolved.}
 
 \begin{assumption}[\textbf{A4} --- benchmark results are collateral-bound, not hardware-attested]
 \label{asm:a4-benchmark}
-\shipped A node's tier claim is carried in a confirmation transaction signed by \fluxbench{} using
+\rev{R010}{\shipped A node's tier claim is carried in a confirmation transaction signed by \fluxbench{} using}{\shipped A node's tier is fixed by the collateral amount in its start transaction. Its confirmation transaction carries a \texttt{benchmarkTier} attesting that the host meets that tier's hardware minimum (consensus rejects a confirmation whose \texttt{benchmarkTier} is below the collateral tier \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{1590--1596}) and is signed by \fluxbench{} using}
 keys shared across the fleet, validated by consensus against a maintainer allowlist
 \srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{233--240}, and obtained by \fluxd{} from the local
 \texttt{fluxbench-cli} through \texttt{popen()}, with \texttt{status:\allowbreak{}"complete"} treated as
@@ -600,7 +602,7 @@ to hold.
 
 \begin{assumption}[\textbf{A7} --- discovery, naming and runtime policy are operated]
 \label{asm:a7-operated}
-\shipped Application discovery has a single source \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}flux/\allowbreak{}dataFetcher.js}{47--91};
+\rev{R011}{\shipped Application discovery has a single source}{\shipped Application discovery for the routing layer (\FDM{} and DNS) has a single source} \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}flux/\allowbreak{}dataFetcher.js}{47--91};
 DNS, HAProxy election and certificate issuance run on a $16$-host fleet inside one private
 \texttt{/24} \srccode{flux-fdm-infrastructure/\allowbreak{}ansible/\allowbreak{}inventory/\allowbreak{}hosts.yaml}{1--206}; and the runtime
 network policy is a set of unsigned documents fetched over plain HTTPS and enforced by every node

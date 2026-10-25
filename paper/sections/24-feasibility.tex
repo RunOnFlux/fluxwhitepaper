@@ -43,7 +43,7 @@ be, because a survey that only ever revises in the direction of caution is not m
 8 & Post-quantum migration & Nothing: a repo-wide search returns zero hits & Primitive unchosen; residue classes outside collateral. Collateral path designed (\S\ref{sec:pq-frontier}) & Research \\
 9 & Moderation quorum & Node owner keys and collateral weights; a \mbox{GitHub-file} blocklist as today's mechanism & Four owner identities (three under linkage) reach the 25\% threshold; no mechanism change fixes concentration & Research \\
 10 & Direct per-deployment payment & \emph{Shipped twice}: application registration, and \CumulusVPN's memo-derived entitlement & None; this is the mature path & Extension \\
-11 & Deposited credits and renewal & \texttt{appsmonitor} auto-renewal with Foundation-held keys & Authorising a recurring charge without a custodian and without an allowance primitive --- placed outside protocol scope: the protocol offers no auto-renewal, and credits are a third-party custodial service built on \Flux{} \srcintent{design intake} & Engineering \\
+11 & Deposited credits and renewal & \rev{R180}{\texttt{appsmonitor} auto-renewal with Foundation-held keys}{\texttt{appsmonitor} auto-renewal with InFlux-held keys} & Authorising a recurring charge without a custodian and without an allowance primitive --- placed outside protocol scope: the protocol offers no auto-renewal, and \rev{R181}{credits are a third-party custodial service built on \Flux{} \srcintent{design intake}}{credits would be a custodial service run by InFlux outside the protocol \srcintent{design intake}} & Engineering \\
 12 & Agent deployment authority & \FluxOS validates owner signatures over specifications on every node & None; it composes with existing validation & Extension \\
 13 & Agent \emph{spending} authority, bounded & \mbox{ERC-4337} session-key substrate on EVM chains; scoped revocable FluxEdge tokens (action-bounded) & Not possible on the \Flux L1 without a new trusted party or new consensus state & Research \\
 14 & Agent-native provisioning API & Shipped MCP tools; OpenAPI 3.1.1 FluxEdge API with scoped tokens and auto-revocation & Inherits row 13 for its bounds & Extension \\
@@ -55,7 +55,7 @@ be, because a survey that only ever revises in the direction of caution is not m
 19b & Shielded-pool retirement & Both pools live, closed to entry, 96{,}479.94\,FLUX & Sunset height, outreach, and removal of the Rust proving stack & Engineering \\
 20 & GPU tenancy & Whole-device passthrough via Kubernetes & No MIG, vGPU or time-slicing; requests silently stripped on contention & Engineering \\
 21 & \FluxCloud/\FluxEdge convergence & Two runtimes and two products & Organisational as much as technical & Engineering \\
-22 & Decentralizing the reachability path & \FDM, \PDNS, gateway and certificates all working & \texttt{api.\allowbreak{}runonflux.\allowbreak{}io} is the sole application-discovery source, with no on-chain or P2P fallback & Engineering \\
+22 & Decentralizing the reachability path & \FDM, \PDNS, gateway and certificates all working & \rev{R182}{\texttt{api.\allowbreak{}runonflux.\allowbreak{}io} is the sole application-discovery source, with no on-chain or P2P fallback}{\texttt{api.\allowbreak{}runonflux.\allowbreak{}io} is the sole application-discovery source for the routing layer (\FDM); nodes themselves replicate specifications and locations peer-to-peer} & Engineering \\
 \bottomrule
 \caption{Distance from the deployed system to the target architecture. Citations for every ``exists
 today'' entry are given in the section that describes it.}
@@ -116,7 +116,7 @@ genuinely open.
 \subsection{Where the claim holds, and where it does not}
 
 For the cloud layer the claim holds well. \specv{9}, pruning, deployment authority, direct payment and
-the provisioning API are all Extension, and the \specv{9} substrate is demonstrably built and tested.
+the provisioning API are all Extension, \rev{R183}{and the \specv{9} substrate is demonstrably built and tested.}{and the \specv{9} substrate is substantially implemented and tested on a development branch, though not yet shipped or activated.}
 The proposition that \Flux can extend rather than invent its way to an agent-serving cloud is
 \emph{largely correct, for everything except payment bounds and payment privacy}.
 
@@ -137,9 +137,11 @@ depends on is that scoped, achievable piece, not the bonded network as a whole.
 One edge in the dependency graph deserves to be lifted out of the table, because it changes what
 should ship first.
 
-\PNR pays all nodes from a shared pool, so a node's income does not depend on which applications it
-runs. That is not free-riding --- placement is not the operator's to refuse (\S\ref{sec:pnr:hosting})
---- but it does mean \PNR{} supplies no gradient rewarding good hosting, so what compels performance
+\rev{R184}{\PNR pays all nodes from a shared pool, so a node's income does not depend on which applications it
+runs.}{\PNR would pay all nodes from a shared pool, so a node's income would not depend on which applications it
+runs.} \rev{R185}{That is not free-riding --- placement is not the operator's to refuse (\S\ref{sec:pnr:hosting})
+--- but it does mean \PNR{} supplies no gradient rewarding good hosting,}{That is not free-riding --- placement is not the operator's to refuse (\S\ref{sec:pnr:hosting})
+--- but it does mean \PNR{} would supply no gradient rewarding good hosting,} so what compels performance
 is the eligibility gate, and rows 4 and 9 establish that the gate is neither operator-bound nor
 machine-bound. \textbf{\PNR raises the payoff to passing that gate without doing the work, by exactly
 what it pays.}
@@ -159,9 +161,11 @@ schedule in those terms.
 
 A second, milder dependency: rows 1, 5, 11, 14 and 21 all wait on \specv{9} fields that currently have
 no consumers --- \texttt{paymentMemo}, \texttt{referralCode} and \texttt{machineType}
-(\S\ref{sec:appspec-v9}). \specv{9} is therefore the critical path for most of Part IV, and its
+(\S\ref{sec:appspec-v9}). \specv{9} is therefore the critical path for most of Part IV, \rev{R186}{and its
 enforcement height, since settled at $\hstar = \num{3050000}$ (\S\ref{sec:appspec-v9}), is the
-single most schedule-relevant date in this document.
+single most schedule-relevant date in this document.}{and its
+enforcement height, planned at $\hstar = \num{3050000}$ (\S\ref{sec:appspec-v9}) but not activated and still subject to the implementation, is the
+single most schedule-relevant date in this document.}
 
 %% Drain this section's float queue before the next begins.
 \FloatBarrier

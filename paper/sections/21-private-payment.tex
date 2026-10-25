@@ -201,7 +201,7 @@ reading a construction that does not deliver it.
 \begin{property}[Amount recovery from the fee pool]
 \label{prop:pp-amount}
 Let $\nodeshare(\hgt) \in (0,1]$ be the operator share at height $\hgt$ and write
-$r(\hgt) = 100\,\nodeshare(\hgt) \in \{1,\dots,100\}$. Under \PNR{} (\S7, PT1--PT5), a hosting payment
+$r(\hgt) = 100\,\nodeshare(\hgt) \in \{1,\dots,100\}$. \rev{R128}{Under \PNR{} (\S7, PT1--PT5), a hosting payment}{Under \PNR{} (\S7, PS1--PS4), a hosting payment}
 of price $\price \in \mathbb{N}$ \sat{} credits
 $A_\Phi = \left\lfloor r(\hgt)\,\price / 100 \right\rfloor$ \sat{} to the consensus fee pool $\pool$,
 and the per-block drip $D_\hgt = \floorfrac{\pool_{\hgt-1}}{\drip}$ appears in the coinbase. Then
@@ -411,8 +411,9 @@ sequencing wrong rather than merely optimistic. \textbf{Reopening is now cancell
 to be retired instead \srcintent{design intake} (\planned,
 \S\ref{sec:shielded-retirement}). Second, capacity was never the constraint and membership was: at
 the list-price revenue of the entire measured population --- \num{3817.62}\flux{} per
-\num{30.56}-day period under \Cref{def:price} as corrected, of which \num{1784.97}\flux{}
-(\SI{46.8}{\percent}, over \num{247} applications) is deployed by the Foundation's own identities and
+\num{30.56}-day period under \Cref{def:price} as corrected, \rev{R129}{of which \num{1784.97}\flux{}
+(\SI{46.8}{\percent}, over \num{247} applications) is deployed by the Foundation's own identities}{of which \num{1784.97}\flux{}
+(\SI{46.8}{\percent}, over \num{247} applications) is deployed by the team's own identities} and
 \num{2032.65}\flux{} (\SI{53.2}{\percent}, over \num{948}) is third-party
 \srcdoc{scripts/21-private-renewal.py} --- the Sapling pool alone would have funded the whole
 network's hosting for \num{1.69} years, or \num{3.18} years of third-party hosting alone.
@@ -420,16 +421,20 @@ network's hosting for \num{1.69} years, or \num{3.18} years of third-party hosti
 The split is taken on the specification's \texttt{owner} field --- the ZelID --- and not on the
 address that paid, and the distinction is load-bearing rather than pedantic. Under the custodial path
 of \S\ref{sec:paying-for-capacity} the service holds both the user's ZelID key and their payment key
-and signs on their behalf (C42), so a card-paid customer deployment settles \emph{from a
+and signs on their behalf (C42), so a card-paid customer deployment \rev{R130}{settles \emph{from a
 Foundation-held address while belonging to the customer's ZelID}. Attributing by payer would count
-every such deployment as the Foundation's own and understate third-party demand by however much of it
-arrives that way. \settlednote{attribution is by \texttt{owner} ZelID. Of the four
-Foundation-configured identities, three own nothing or nearly nothing --- \texttt{usersToExtend}
+every such deployment as the Foundation's own}{settles \emph{from an
+InFlux-held address while belonging to the customer's ZelID}. Attributing by payer would count
+every such deployment as the team's own} and understate third-party demand by however much of it
+arrives that way. \settlednote{attribution is by \texttt{owner} ZelID. \rev{R131}{Of the four
+Foundation-configured identities,}{Of the four
+team identities configured in \FluxOS,} three own nothing or nearly nothing --- \texttt{usersToExtend}
 (current) and \texttt{fluxTeamFluxID} own no applications and \texttt{fluxSupportTeamFluxID} owns one
 --- which is what the configuration implies, since \texttt{usersToExtend} confers permission to
 extend an application \emph{on behalf of its owner} rather than ownership
-\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{229}. The entire
-Foundation share therefore rests on one address, \texttt{196GJWyLxzAw\ldots}, holding 246 of the
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{229}. \rev{R132}{The entire
+Foundation share therefore rests on one address,}{The entire
+team share therefore rests on one address,} \texttt{196GJWyLxzAw\ldots}, holding 246 of the
 \num{1195} applications. Its composition supports the attribution --- \texttt{FluxWhitepaper},
 \texttt{FluxWordPress} and \texttt{FluxRosettaServer} alongside \texttt{BitcoinWhitepaper},
 \texttt{Aave}, \texttt{Electrum}, \texttt{EthereumNodeLight}, \texttt{Firod} and the 26 folding
@@ -871,7 +876,10 @@ specification. Table~\ref{tab:pp-classes} gives the partition structure.
 \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}. The tuple partition
 $(\mathrm{cpu},\mathrm{ram},\mathrm{hdd},\ninst,\dur,\mathsf{enterprise},\mathsf{staticip},
 \mathsf{nodes})$ is a lower bound on class size under \emph{any} deterministic price function; the
-period-price partitions are upper bounds up to rare collisions.}
+\rev{R234}{period-price partitions are upper bounds up to rare collisions.}{period-price partitions are upper bounds up to rare collisions. The bold row is the price the paper
+states (Definition~\ref{def:price}); the four price-and-time rows below it are computed on the base-only price, and
+on the bold row's price they give \qty{100}{\percent}, \qty{82.3}{\percent}, \qty{59.0}{\percent} and
+\qty{38.4}{\percent} singletons with the same median and largest classes.}}
 \label{tab:pp-classes}
 \begin{tabular}{@{}lrrrr@{}}
 \toprule
@@ -894,12 +902,13 @@ price and same week                 & --- & 439 (\qty{36.7}{\percent}) & 2 & 35 
 If every application renews on schedule, renewal volume is \num{0.0123} per block, \num{1.48} per
 hour, \textbf{\num{35.4} per day} and \num{248} per week; the next 30 days carry a median of \num{24}
 and a maximum of \num{98} expiries per day. That figure is an upper bound, because churn is unmeasured
-(M2). The median period price is \num{1.13}\flux, the range \numrange{0.02}{79.85}\flux;
+(M2). \rev{R235}{The median period price is \num{1.13}\flux, the range \numrange{0.02}{79.85}\flux;}{The median period price is \num{1.19}\flux, the range \numrange{0.03}{417.24}\flux{}
+(\Cref{def:price} as corrected);}
 \num{459} applications (\qty{38.4}{\percent}) sit at the default \num{88000}-block period and
 \num{107} (\qty{9.0}{\percent}) at the \num{1056000}-block maximum.
 
 The reading is this. \textbf{At \num{35.4} renewals per day a renewal is a singleton within its block
-\qty{100}{\percent} of the time and within its day \qty{56.0}{\percent} of the time.} A payment ``of a
+\qty{100}{\percent} of the time and \rev{R236}{within its day \qty{56.0}{\percent} of the time.}{within its day \qty{59.0}{\percent} of the time.}} A payment ``of a
 distinctive size just before a distinctive deployment'' is not an attack scenario, it is the normal
 case. For shape A that identifies the application, which the \texttt{OP\_RETURN} already does, and
 says nothing about the payer. For any coupon-style or Construction~\ref{con:pp-b} scheme paying exact
@@ -909,7 +918,11 @@ amounts, it identifies the entitlement and defeats the scheme --- which is why s
 \begin{table}[H]
 \centering
 \small
-\caption{Denomination trade-off, computed on Flux's own application population. Overpayment is
+\caption{\rev{R237}{Denomination trade-off, computed on Flux's own application population.}{Denomination trade-off, computed on Flux's own application population from the base-only period
+price (Table~\ref{tab:pp-classes}, row 2). Under \Cref{def:price} as corrected the exact row is the bold row
+of Table~\ref{tab:pp-classes}, and grids of $0.5$, $1$, $2$ and $5$\flux{} give median classes of \num{132},
+\num{262}, \num{824} and \num{996} at \qty{2.7}{\percent}, \qty{5.5}{\percent}, \qty{11.9}{\percent} and
+\qty{36.6}{\percent} overpayment.} Overpayment is
 expressed as a share of list revenue; under \PNR{} it would flow to the Foundation and the fee pool
 by the standard split, i.e.\ a privacy fee paid to the network.}
 \label{tab:pp-denom}
@@ -956,7 +969,7 @@ powers of two     & 13 & \phantom{0}0 & 227 & 268 & \qty{51.4}{\percent} \\
 \end{tikzpicture}
 \caption{The denomination trade-off measured on the \num{1195}-application population. Solid, left
 axis, logarithmic: median price-class size. Dashed, right axis, linear: overpayment as a share of
-list revenue. A \num{1}\flux{} grid buys a median class of \num{227} at \qty{17.3}{\percent}
+\rev{R238}{list revenue. A \num{1}\flux{} grid buys a median class of \num{227} at \qty{17.3}{\percent}}{list revenue. On the base-only price of Table~\ref{tab:pp-denom}, a \num{1}\flux{} grid buys a median class of \num{227} at \qty{17.3}{\percent}}
 overpayment; a \num{0.5}\flux{} grid buys \num{118} at \qty{9.0}{\percent}. This is the classical
 fixed-denomination trade-off, evaluated on Flux's own demand rather than assumed.}
 \label{fig:pp-denom}
@@ -964,8 +977,10 @@ fixed-denomination trade-off, evaluated on Flux's own demand rather than assumed
 
 \settlednote{Conditional --- inapplicable unless a shielded pool exists, and both pools are being retired (\Cref{rem:pp-status}). Q6. Denomination grid $g \in \{\text{none}, 0.5, 1, 2, 5\}$\flux{} or powers of two, plus
 the destination of the overpayment (\PNR{} split, or credited forward to the next period). Trade-off
-is Table~\ref{tab:pp-denom} exactly: median class $7 \to 118 \to 227 \to 786$ against overpayment
-$0 \to \qty{9.0}{\percent} \to \qty{17.3}{\percent} \to \qty{39.0}{\percent}$. Note that denomination
+\rev{R239}{is Table~\ref{tab:pp-denom} exactly: median class $7 \to 118 \to 227 \to 786$ against overpayment
+$0 \to \qty{9.0}{\percent} \to \qty{17.3}{\percent} \to \qty{39.0}{\percent}$.}{is Table~\ref{tab:pp-denom}: under \Cref{def:price} as corrected, median class $8 \to 132 \to 262 \to 824$ against overpayment
+$0 \to \qty{2.7}{\percent} \to \qty{5.5}{\percent} \to \qty{11.9}{\percent}$ (on the base-only price the table
+prints, $7 \to 118 \to 227 \to 786$ against $0 \to \qty{9.0}{\percent} \to \qty{17.3}{\percent} \to \qty{39.0}{\percent}$).} Note that denomination
 buys nothing for shape A, where the workload is named anyway; it is a shape-B and coupon-scheme
 parameter.}
 
@@ -1163,8 +1178,9 @@ The attack lives entirely at the network layer, as above. Against a payer broadc
 vantage it converges in a handful of periods; against one who prepays a year it has a single sample.
 The interaction with \S23 should be stated: a tenant who prepays a year privately --- the cheapest
 mitigation --- carries a larger forfeitable remainder if the application is later removed by the
-moderation quorum. At the median period price that is \num{13.5}\flux{} for a year; at the maximum
-measured period price of \num{79.85}\flux{} it is \num{955}\flux.
+moderation quorum. \rev{R240}{At the median period price that is \num{13.5}\flux{} for a year; at the maximum
+measured period price of \num{79.85}\flux{} it is \num{955}\flux.}{At the median price per \num{88000}-block period that is about \num{9.7}\flux{} for a year; at the
+maximum measured price per \num{88000}-block period, \num{93.60}\flux{}, it is about \num{1119}\flux.}
 
 \paragraph{A node operator who is also the payer.} On chain, no advantage: its own transactions look
 like anyone's. At the FluxOS layer it can submit its own registrations through its own node and
@@ -1182,8 +1198,9 @@ specification set itself, which no payment scheme touches
 
 \begin{itemize}
   \item \textbf{Owner pseudonyms.} \num{659} distinct \texttt{owner} identifiers; \num{588} own
-    exactly one application; the largest owns \num{246} (\qty{20.6}{\percent}) and is a
-    Foundation-operated address. Excluding it, \num{949} applications across \num{658} owners, of whom
+    exactly one application; \rev{R133}{the largest owns \num{246} (\qty{20.6}{\percent}) and is a
+    Foundation-operated address.}{the largest owns \num{246} (\qty{20.6}{\percent}) and is the
+    team ZelID (\S\ref{sec:pp-blocker}).} Excluding it, \num{949} applications across \num{658} owners, of whom
     \num{15} hold five or more (\num{223} applications in total). Owner-key reuse links applications
     across renewals and across deployments \emph{regardless of payment privacy}. The agent-native
     default should be one owner key per application (Q15).
@@ -1235,7 +1252,7 @@ question. \S\ref{sec:feasibility} must class them separately and must not collap
 
 \begin{openproblem}[R1: unlinkable exact-amount payment at low volume]
 \label{op:pp-r1}
-With \num{35.4} renewals per day and \num{349} price classes, the pair (amount, time) is identifying
+\rev{R134}{With \num{35.4} renewals per day and \num{349} price classes,}{With \num{35.4} renewals per day and \num{370} price classes,} the pair (amount, time) is identifying
 (Table~\ref{tab:pp-classes}). The only known remedies are denomination, which costs overpayment
 (Table~\ref{tab:pp-denom}), and batching or delay, which costs latency; both are policies, not
 constructions. Whether a mechanism exists that is simultaneously exact-amount, unlinkable and

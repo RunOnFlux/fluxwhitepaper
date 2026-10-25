@@ -8,8 +8,11 @@ as first-class customers. An AI agent holding a wallet should be able to deploy 
 Flux, pay per second, verify what it bought, and eventually do all of it privately --- no
 account, no card, no human in the loop.'' \srcroadmap{flux-roadmap-public.md:7}
 \end{quote}
-That sentence names four capabilities: provisioning without a human, payment without an
-account, verification of what was purchased, and eventually privacy over all of it. It is a
+\rev{R113}{That sentence names four capabilities: provisioning without a human, payment without an
+account, verification of what was purchased, and eventually privacy over all of it.}{That sentence names four capabilities: provisioning without a human, payment without an
+account, verification of what was purchased, and eventually privacy over all of it. The checklist
+below scores the first three and, in place of privacy (taken up in \S\ref{sec:shielded-value} and
+\S\ref{sec:private-payment}), a fourth the sentence presupposes: bounded spending authority.} It is a
 \vision statement --- the roadmap's own framing, not a description of the deployed system --- and
 this section's job is to take it apart claim by claim rather than repeat it. Two of the four
 capabilities already exist as running code. The other two are specified, not shipped, and this
@@ -17,9 +20,12 @@ paper's answer to each lives in \S14 and \S17 respectively. The distance between
 above and the deployed system is smaller than a skeptical reader would guess, and the missing
 piece is not an interface problem.
 
-\paragraph{What an agent can already do.} A caller that never touches a browser can, today,
+\paragraph{What an agent can already do.} \rev{R114}{A caller that never touches a browser can, today,
 provision Flux capacity, hold a scoped and revocable credential while doing it, and pay for a
-service with no account at all. Three shipped surfaces establish this.
+service with no account at all.}{A caller that never touches a browser can, today,
+provision Flux capacity once a human has issued its credential, hold a scoped and revocable
+credential while doing it, and pay for some services --- \CumulusVPN{} and \FluxCloud{} application
+payments --- with no account at all.} Three shipped surfaces establish this.
 
 First, an MCP (Model Context Protocol) server ships as part of the Deploy-from-Git tooling and
 exposes \texttt{deploy\_app}, \texttt{update\_app} and \texttt{renew\_app} as tool calls an AI
@@ -27,10 +33,21 @@ agent can invoke directly \shipped
 \srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}mcp/\allowbreak{}router.js}{13-44}. These are not read-only
 introspection calls: \texttt{deploy\_app}'s own description is ``Revalidate, Firebase-sign,
 register, and test-install an Orbit app''
-\srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}mcp/\allowbreak{}createServer.js}{174-177}, and given a valid
+\srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}mcp/\allowbreak{}createServer.js}{174-177}, and \rev{R115}{given a valid
 Firebase bearer token an agent can drive a specification from draft to a signed, submitted,
 on-chain registration transaction with no client-side wallet interaction and no human signing
-step \srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}mcp/\allowbreak{}createServer.js}{66-266}.
+step}{given a valid
+Firebase bearer token an agent can drive a specification from draft to a signed, submitted
+registration message with no client-side wallet interaction and no human signing
+step} \srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}mcp/\allowbreak{}createServer.js}{66-266}. \rev{R251}{}{Since publication a second, separate MCP server has been released:
+\texttt{@runonflux/\allowbreak{}flux-cloud-mcp} (first release 2026-09-11, version 0.2.8 on 2026-10-25),
+run locally over stdio or used as the hosted \FluxCloud{} application at
+\texttt{mcp.\allowbreak{}runonflux.\allowbreak{}com}. Its fifteen tools cover the application lifecycle ---
+key generation, pricing, specification building and validation, quotes, deployment, status, logs,
+control and cancellation --- and it is non-custodial: the server holds no key, read-only tools need
+none, write tools take the caller's own keys, and \texttt{flux\_deploy\_app} returns only a plan
+unless called with \texttt{confirm=true} \shipped\
+\srccode{flux-cloud-mcp/\allowbreak{}src/\allowbreak{}server.ts}{697--1411}.}
 
 Second, and separately, \FluxEdge exposes a fully documented OpenAPI 3.1.1 interface branded
 the ``FluxEdge API'' \shipped \srccode{pouwbackend/\allowbreak{}rest\_api/\allowbreak{}v1/\allowbreak{}openapi.yaml}{1-4}, plus a
@@ -67,8 +84,11 @@ roadmap's own sentence, the honest score is two shipped and two not, and the two
 are not symmetric with the two that ship.
 
 \begin{itemize}
-  \item \emph{Provision without a human} --- yes. The MCP tool surface and the \FluxEdge API
-    both accept and act on a request with no human step in between, as above \shipped.
+  \item \emph{Provision without a human} --- yes. \rev{R116}{The MCP tool surface and the \FluxEdge API
+    both accept and act on a request with no human step in between, as above \shipped.}{The MCP tool surface and the \FluxEdge API
+    both accept and act on a request with no human step in between, as above, once a human has
+    issued the credential each requires (a Firebase session; a dashboard-minted \FluxEdge{} key)
+    \shipped.}
   \item \emph{Pay without an account} --- yes. \CumulusVPN's memo-derived entitlement ships, and
     direct per-deployment application payment is the same shape: a signed message and a
     confirmed payment, no account, no stored credential (\S16) \shipped.
@@ -161,13 +181,16 @@ whole GPU by the second. What per-second billing cannot yet mean, on the allocat
 \S15 describes, is fractional-GPU multi-tenancy --- a device is sold whole or not at all
 \srcinferred.
 
-\paragraph{The composite picture.} An agent today can obtain \Flux capacity and pay for it with
+\paragraph{The composite picture.} \rev{R117}{An agent today can obtain \Flux capacity and pay for it with
 no account and no human step; \FluxEdge's scoped bearer tokens and \CumulusVPN's memo-derived
-entitlement are both running code, not proposals. What that same agent cannot do is confirm that
+entitlement are both running code, not proposals.}{An agent today can obtain \Flux capacity with no human step once a human has
+issued its credential, and can pay for \CumulusVPN{} and for \FluxCloud{} applications with no
+account; \FluxEdge's scoped bearer tokens (which require an account and a human-minted key) and
+\CumulusVPN's memo-derived entitlement are both running code, not proposals.} What that same agent cannot do is confirm that
 the host it paid actually booted the image it was promised, and it cannot hold a credential whose
 worst-case loss is anything less than the full balance behind it. Both gaps have specifications
 elsewhere in this paper --- \S14 for the first, \S17 for the second --- and \S\ref{sec:feasibility}
-classes neither as Extension: attested execution is Research$\to$Engineering (row 4), and bounded
+classes neither as Extension: \rev{R118}{attested execution is Research$\to$Engineering (row 4)}{attested execution is Engineering (row 4)}, and bounded
 spending is Research (row 13) because the L1 cannot enforce $\budget$
 (\Cref{prop:budget-balance}, \Cref{tab:two-authorities}). What is deployable today is the funded
 allowance of \Cref{con:allowance} --- a funded key with a swept revocation address, which the

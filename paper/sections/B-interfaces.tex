@@ -83,7 +83,7 @@ Version & Mainnet height & Dev height & Notes \\
 3 & 983{,}000 & 983{,}000 & \specv{1}/\specv{2} still submittable by users; UI allows only \specv{2}/\specv{3} \\
 4 & 1{,}004{,}000 & 1{,}004{,}000 & \texttt{compose} array (composition) \\
 5 & 1{,}142{,}000 & 1{,}142{,}000 & \texttt{contacts}, \texttt{geolocation} \\
-6 & 1{,}300{,}000 & 1{,}300{,}000 & \texttt{expire}, app price change, tier \texttt{t3} \\
+6 & 1{,}300{,}000 & 1{,}300{,}000 & \rev{R213}{\texttt{expire}, app price change, tier \texttt{t3}}{\texttt{expire}, app price change, \texttt{t3} multisig payment address} \\
 7 & 1{,}420{,}000 & 1{,}390{,}000 & \texttt{nodes} targeting, \texttt{secrets}, \texttt{repoauth}, \texttt{staticip} \\
 8 & 1{,}932{,}380 & 1{,}921{,}500 & \texttt{enterprise}/ArcaneOS apps \\
 \bottomrule
@@ -358,8 +358,10 @@ implementation found in the evidence).}
 \inprogress
 \label{app:agentapi}
 
-\textbf{\shipped\ parts of this surface are cited individually below}; the section as a
-whole mixes a shipped API (FluxEdge) with an early-stage one (the MCP server), so the
+\textbf{\shipped\ parts of this surface are cited individually below}; \rev{R214}{the section as a
+whole mixes a shipped API (FluxEdge) with an early-stage one}{the section as a
+whole mixes a shipped API (FluxEdge, a separate, centrally operated product whose machines lock no
+collateral and are not \FluxNodes) with an early-stage one} (the MCP server), so the
 maturity tag is attached per claim rather than once for the section.
 
 \subsubsection{MCP tools: \texttt{deploy\_app}, \texttt{update\_app}, \texttt{renew\_app}}
@@ -407,8 +409,9 @@ Firebase ID token to \texttt{service.\allowbreak{}fluxcore.\allowbreak{}ai/\allo
 signs on the user's behalf, authorized only by that bearer token
 \srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}flux/\allowbreak{}fluxSession.js}{60-73};
 \srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}orbit/\allowbreak{}deploymentService.js}{158-173}. Given a valid
-Firebase bearer token, an MCP client can drive spec construction through signed,
-on-chain registration submission with no client-side wallet interaction at all
+Firebase bearer token, \rev{R215}{an MCP client can drive spec construction through signed,
+on-chain registration submission}{an MCP client can drive spec construction through signed
+registration submission} with no client-side wallet interaction at all
 \srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}mcp/\allowbreak{}createServer.js}{66-266}.
 
 \subsubsection{The FluxEdge OpenAPI surface and \texttt{fluxedge-cli}}

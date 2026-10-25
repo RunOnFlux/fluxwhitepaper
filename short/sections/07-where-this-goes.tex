@@ -26,33 +26,36 @@
 \node[ev,  anchor=south] at (10.1,0.75) {\textbf{PNR activates}\\ parallel-asset\\ mining cut\\ block \num{3787502}};
 %% high row
 \draw[lead] (2.0,0.12) -- (2.0,2.35);
-\node[ev,  anchor=south] at (2.0,2.35) {\textbf{spec v9 enforced}\\ block \num{3050000}\\ inference benchmark};
+\node[ev,  anchor=south] at (2.0,2.35) {\rev{S24}{\textbf{spec v9 enforced}}{\textbf{spec v9}}\\ \rev{S25}{block \num{3050000}}{not yet activated}\\ inference benchmark};
 \draw[lead] (4.9,0.12) -- (4.9,2.35);
 \node[ev,  anchor=south] at (4.9,2.35) {retiring chains one-way\\ no swaps in\\ block \num{3450000}};
 \draw[lead] (12.3,0.12) -- (12.3,2.35);
-\node[ev,  anchor=south] at (12.3,2.35) {retiring chains shut down\\ residue to the Foundation\\ block \num{3880000}};
+\node[ev,  anchor=south] at (12.3,2.35) {retiring chains shut down\\ \rev{S26}{residue to the Foundation}{residue to the team}\\ block \num{3880000}};
 \end{tikzpicture}
-\caption{The dated schedule. Heights are consensus facts and calendar dates assume the thirty-second
-block target holds. Everything to the right of ``now'' is planned.}
+\rev{S27}{\caption{The dated schedule. Heights are consensus facts and calendar dates assume the thirty-second
+block target holds. Everything to the right of ``now'' is planned.}}{\caption{The dated schedule. Heights are planned values and calendar dates assume the thirty-second
+block target holds. Everything to the right of ``now'' is planned.}}
 \label{fig:short:timeline}
 \end{figure}
 
 Three things are true about this schedule and worth stating together. The heights are fixed and
-public, so anyone can check whether they were met. The order is deliberate: the specification
-change lands roughly eight months before the economic change that depends on it, so the fields PNR
+public, so anyone can check whether they were met. The order is deliberate: \rev{S28}{the specification
+change lands roughly eight months before the economic change that depends on it}{the specification
+change is to land well before the economic change that depends on it}, so the fields PNR
 needs have time to prove themselves. And the whole sequence is falsifiable --- the full paper names,
 for each milestone, the public observation that would show it had not happened.
 
 \subsection{How to participate}
 
 \textbf{Run a node.} Lock the collateral for a tier, run the node software on hardware that clears
-that tier's benchmark, and the chain does the rest. Income today is issuance by rotation; from July 2027 it is issuance plus a share of application revenue. What you cannot do is earn more by hosting
+that tier's benchmark, and the chain does the rest. Income today is issuance by rotation; \rev{S29}{from July 2027 it is issuance plus a share of application revenue.}{from July 2027 it is planned to be issuance plus a share of application revenue.} What you cannot do is earn more by hosting
 more --- see \Cref{sec:short:limits} before deciding that is what you want.
 
 \textbf{Deploy an application.} Write a specification, sign it, pay for it. There is no account and
 no approval step. The application runs on several nodes until the paid period ends, and renewing it
-is your act. If you want subscriptions and cards, a third-party service offers them on top; the
-protocol does not.
+is your act. \rev{S30}{If you want subscriptions and cards, a third-party service offers them on top; the
+protocol does not.}{If you want subscriptions and cards, a card-payment service run by InFlux, the company that
+maintains the \Flux{} products, offers them on top; the protocol does not.}
 
 \textbf{Build for machines.} If your tenant is a program --- an agent, a pipeline, a system that
 provisions and releases capacity on its own --- \Flux{} is being built for exactly that caller. Give

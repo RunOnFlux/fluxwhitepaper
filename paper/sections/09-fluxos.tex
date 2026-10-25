@@ -146,7 +146,8 @@ Local-backup cleanup & 25\,min \\
   \texttt{apprunning}\slash\texttt{sigterm}\slash\texttt{appremoved}\slash\texttt{evicted} transitions),
   \texttt{fluxappinstallingbroadcasts}, \texttt{fluxappinstallingerrorsbroadcasts}.
 \item \texttt{chainparams} — \texttt{chainmessages}: soft-fork price/parameter messages posted
-  on-chain by the Foundation multisig, active from their occurrence height (\S\ref{sec:fluxos-pricing}).
+  \rev{R055}{on-chain by the Foundation multisig, active from their occurrence height}{on-chain by the multisig whose keys the four co-founders hold personally (K8 in
+  Definition~\ref{def:foundation}), active from their occurrence height} (\S\ref{sec:fluxos-pricing}).
 \end{itemize}
 
 \subsubsection{HTTP API surface and the privilege model}
@@ -735,7 +736,8 @@ Price is computed from a per-component resource vector $\resvec$, the requested 
 $\ninst$, and the requested duration $\dur$ (in blocks, against $\blockslasting$), evaluated at the
 transaction's block height $\hgt$ against a height-scheduled price table
 (\texttt{config.\allowbreak{}fluxapps.\allowbreak{}price[]}, overridable by \texttt{chainmessages} of type \texttt{p} posted
-on-chain by the Foundation multisig) \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}chainUtilities.js}{9--52}.
+\rev{R056}{on-chain by the Foundation multisig)}{on-chain by the multisig whose keys the four co-founders hold personally, K8 in
+Definition~\ref{def:foundation})} \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}chainUtilities.js}{9--52}.
 Concretely, for a \specv{4}-or-later (composed) app, \texttt{cpuPrice} $= \sum$(CPU units)
 $\times\,\text{table.cpu}\times 10$; \texttt{ramPrice} $=\sum$(RAM units)
 $\times\,\text{table.ram}/100$; \texttt{hddPrice} $=\sum$(HDD units) $\times\,\text{table.hdd}$;

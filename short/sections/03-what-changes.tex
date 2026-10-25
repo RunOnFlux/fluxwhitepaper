@@ -11,8 +11,9 @@ This is the change the others serve. Today an operator's income is new \flux{} m
 the applications running on the network contribute nothing to it. Under \emph{Progressive Node
 Rewards} that reverses: consensus takes \SI{20}{\percent} of every application payment on arrival
 and pays it into a pool, and the pool drips into operator rewards over a rolling window of
-\num{86400} blocks --- thirty days. The other \SI{80}{\percent} goes to the Foundation address that
-already receives application payments today.
+\num{86400} blocks --- thirty days. \rev{S12}{The other \SI{80}{\percent} goes to the Foundation address that
+already receives application payments today.}{The other \SI{80}{\percent} goes to the application-payment address, held personally by the four
+co-founders, that already receives application payments today.}
 
 The split is applied by consensus at the address, not by any software a tenant or a node runs. The
 pool balance is committed in every block and recomputed by every validator, so it cannot be
@@ -36,8 +37,9 @@ nothing. The other eight --- Base, Polygon, Avalanche, Ergo, Algorand, Solana, T
 are retired in stages: from March 2027 (block \num{3450000}) they become one-directional, with balances redeemable back to
 the main chain and mining claims still collectable, but nothing swappable into them; the allocation
 is cut in July, at the block where
-it is exhausted and PNR activates; and in August (block \num{3880000}) the chains shut down, after which
-unclaimed balances go to the Foundation. Ethereum and BNB Chain move to their new contracts earlier. What the height does
+it is exhausted and PNR activates; and in August (block \num{3880000}) the chains shut down, \rev{S13}{after which
+unclaimed balances go to the Foundation.}{after which
+unclaimed balances go to the team.} Ethereum and BNB Chain move to their new contracts earlier. What the height does
 not settle is the balance already earned: roughly a quarter of what operators have accrued on these
 chains has never been claimed, and the forfeiture rule is what closes that.
 
@@ -59,9 +61,12 @@ and the paper says so.
 Version 9 of the specification adds what the rest of this section needs: a duration expressed in
 seconds rather than blocks, so lifetimes stop moving when block timing changes; a payment memo that
 binds a payment to the application it funds, which is what lets PNR attribute revenue; and a
-machine-type field that lets a specification ask for accelerated hardware. Enforcement is at block
+\rev{S14}{machine-type field that lets a specification ask for accelerated hardware. Enforcement is at block
 \textbf{\num{3050000}}, expected in \textbf{late October 2026}, with existing applications migrated
-automatically in the same quarter.
+automatically in the same quarter.}{machine-type field that lets a specification ask for accelerated hardware. \textbf{Version 9 is still
+in development and has not been activated}; the enforcement height first planned, block
+\num{3050000} in late October 2026, was not used, and existing applications are to be migrated
+automatically once it activates.}
 
 \limitnote{The fields are in the schema and not yet in the code that would act on them: as of the
 survey, the payment memo, referral code and machine-type fields appear nowhere in the placement
@@ -72,8 +77,9 @@ path. The enforcement height is constrained to follow the implementation, not pr
 A collateral-weighted vote. Any node operator can file a report against an application on chain;
 other operators vote by signing a transaction with their collateral key; if votes reach
 \SI{25}{\percent} of the network's weight within a day, the next block carries a ban memo and every
-node stops the application. The ban is final, the unused prepaid balance is burned, and the deployer
-may return only as a new application. There is no appeal.
+node stops the application. \rev{S15}{The ban is final, the unused prepaid balance is burned, and the deployer
+may return only as a new application.}{The ban is final, the unearned part of the application's payment still held in the operator pool is
+burned, and the deployer may return only as a new application.} There is no appeal.
 
 The team's stated position is that this is a network-level veto over content, not merely over
 behaviour. That is a stronger power than any comparable network exercises, chosen knowingly, and its
@@ -83,9 +89,12 @@ principal risk is measured rather than hypothetical --- see \Cref{sec:short:limi
 
 Two layers. The first is shipped: \ArcaneOS{}, the operating image nodes run, boots through a
 measured chain --- Secure Boot, a pinned platform key, a hardware root, encrypted storage --- and
-refuses to come up if any link fails. The second is planned: a bonded attestation network in which
+refuses to come up if any link fails. \rev{S16}{The second is planned: a bonded attestation network in which
 nodes stake collateral on claims about what they serve, and lose it if a challenger proves them
-wrong. Its parameters are set; its slashing construction, the paper is candid, is unsolved.
+wrong. Its parameters are set; its slashing construction, the paper is candid, is unsolved.}{The second is planned: an attestation network in which
+nodes sign claims about what they serve. Its parameters are set, but the paper records a decision
+that nothing in \Flux{} is ever slashed or forfeited, so the network is registered rather than
+bonded: a node proved wrong loses future participation, not its collateral.}
 
 \subsection{The shielded pool is retired, and what that costs}
 

@@ -299,8 +299,10 @@ removal path is the ordinary one. That is a consequence of the design rather tha
 Property ``No standing obligation'' in \S16 shows that any grace state would have to be a function of
 information not in the chain prefix --- but it is a real difference from what a tenant used to
 hyperscaler billing expects. The only automatic renewal that exists is
-\texttt{appsmonitor}, a Foundation-operated daemon that renews applications whose owner keys the
-Foundation itself holds, alongside a hardcoded single-address \texttt{usersToExtend} allow-list
+\rev{R169}{\texttt{appsmonitor}, a Foundation-operated daemon that renews applications whose owner keys the
+Foundation itself holds}{\texttt{appsmonitor}, a centrally operated daemon run by InFlux that renews the team's own applications with
+owner keys it holds and extends card-paid and free-tier applications through the single
+\texttt{usersToExtend} key that \FluxOS{} allows to extend any application}, alongside a hardcoded single-address \texttt{usersToExtend} allow-list
 permitted to submit expire-only extensions on any owner's behalf (\S16).
 
 \paragraph{11. It may be reported and evicted.}
@@ -363,9 +365,11 @@ emergency-block keys, and which the team's decision bounds as single-use, migrat
 hardcoded --- with no opt-out for an owner who would rather remain on the document they signed
 (\S10, C40).
 
-Five things are undecided or unbuilt at this step and each is load-bearing. \specv{9} has no
+Five things are undecided or unbuilt at this step and each is load-bearing. \rev{R170}{\specv{9} has no
 enforcement height in shipped configuration or on the live pricing endpoint --- the height itself is
-now settled at $\hstar = \num{3050000}$ (\S10) but is not yet shipped --- and \S10 states the
+now settled at $\hstar = \num{3050000}$ (\S10) but is not yet shipped --- and}{\specv{9} has no
+enforcement height in shipped configuration or on the live pricing endpoint --- a height of
+$\hstar = \num{3050000}$ was proposed in the design intake (\S10), but \specv{9} remains in development and has not activated --- and} \S10 states the
 ordering constraint that the height must \emph{follow} implementation of the three economic fields
 rather than precede it. \texttt{paymentMemo}, \texttt{referralCode} and \texttt{machineType} have
 \textbf{zero consumer code anywhere in \FluxOS} (\S10) --- they are exactly the fields \PNR,
@@ -540,9 +544,11 @@ including \texttt{appLifecycle}, \texttt{appMesh} and \texttt{appPlacement}, a d
 \texttt{drain\_app}\slash\texttt{stop\_app} over a UNIX-socket JSON-RPC endpoint, and per-application-CA
 backend TLS under which a node generates a local Ed25519 keypair and obtains a \SI{30}{\day} host
 certificate signed by the application's own certificate authority through \fluxbench, renewed
-automatically (\S10). That substrate is built and tested --- \num{289} unit-test files with
+automatically (\S10). \rev{R173}{That substrate is built and tested --- \num{289} unit-test files with
 \num{7763} test cases run on every push --- and it lives on an individual contributor's fork rather
-than in the organisation repository, which \S10 and \S23 both record as a fact about where
+than in the organisation repository}{That substrate is in development and under test --- \num{289} unit-test files with
+\num{7763} test cases run on every push --- but it is not merged or shipped, and it lives on an individual contributor's fork rather
+than in the organisation repository}, which \S10 and \S23 both record as a fact about where
 development authority sits (\S10). Two things are inert. \texttt{quorum\allowbreak{}Grant\allowbreak{}Activation\allowbreak{}Height}, the
 height gate for the fork's mastership and active-standby quorum plane, is read by production code but
 set only in integration-test fixtures and is absent from shipped configuration (\S10). And the
@@ -585,8 +591,9 @@ general computation-integrity claims.
 
 \paragraph{8. \FDM and \PDNS would make the application reachable.}
 This is the step where the target is least specified, and the paper should not pretend otherwise. The
-requirement is legible from \S12's centralization inventory: \texttt{api.\allowbreak{}runonflux.\allowbreak{}io} is the sole
-application-discovery source with no on-chain or peer-to-peer fallback coded anywhere, so any
+\rev{R174}{requirement is legible from \S12's centralization inventory: \texttt{api.\allowbreak{}runonflux.\allowbreak{}io} is the sole
+application-discovery source with no on-chain or peer-to-peer fallback coded anywhere, so any}{requirement is legible from \S12's centralization inventory: \texttt{api.\allowbreak{}runonflux.\allowbreak{}io} is the routing layer's (\FDM{}'s) sole
+application-discovery source, with no on-chain or peer-to-peer fallback coded in \FDM{} (the nodes themselves replicate specifications and locations by peer-to-peer gossip, \S9), so any}
 decentralization of reachability starts with a discovery fallback that does not exist. Two further
 interfaces would be needed and neither is designed. First, \S23 records as open whether \FDM and
 \PDNS honour a ban by dropping routes at $\hgt_b + \Delta_{\mathrm{exec}}$, where $\hgt_b$ is the
@@ -724,8 +731,9 @@ than inventing one. Two questions could not be settled by choosing a parameter a
 verified in \fluxd, because the mechanism rests on them: whether the emergency-block path is subject
 to the coinbase rules the ban memo would rely on --- if it were not, two of four hardcoded keys could
 ban an application with no report, no votes and no threshold; it is, checked against source
-(\Cref{rem:emergency-coinbase}) --- and whether re-addressing a node resets its recorded age, which
-decides whether the tenure gate does any work and remains unverified. And one requirement crosses
+(\Cref{rem:emergency-coinbase}) \rev{R176}{--- and whether re-addressing a node resets its recorded age, which
+decides whether the tenure gate does any work and remains unverified.}{--- and whether re-addressing a node resets its recorded age, which
+decides whether the tenure gate does any work; it does, also checked against source (\S23).} And one requirement crosses
 back to \S7: forfeited tenant balances must never enter $\pool$, or
 evicting an application would pay the fleet that voted to evict it.
 
@@ -881,8 +889,9 @@ Read the table down the ``target'' column and the mechanisms look independent; r
 column and one edge dominates all the others. \PNR would pay every confirmed node through the \PoN
 rotation regardless of \emph{which} applications that node hosts, so the private stake any single
 node has in aggregate network demand would be between $0.001\flux$ and $0.018\flux$ per year at
-activation scale (\S7). That is not a free-riding opportunity --- placement is the network's choice
-and an operator cannot decline it (\S7) --- but it does mean \PNR{} supplies no gradient rewarding
+activation scale (\S7). \rev{R177}{That is not a free-riding opportunity --- placement is the network's choice
+and an operator cannot decline it (\S7) --- but}{That is not a free-riding opportunity --- nodes self-select applications at random from the
+network-wide list, so an operator does not choose what its node hosts (\S7, \S9) --- but} it does mean \PNR{} supplies no gradient rewarding
 good hosting, and this is structural to the settled decision to pay all nodes rather than a tuning
 error. What actually compels performance is not the payment but the \emph{eligibility gate}: a node
 is a \PoN payee, and hence a \PNR payee, only if it is confirmed with a \fluxbench-signed transaction
@@ -933,7 +942,7 @@ exposure.
 \paragraph{What the reader should notice about the two passes.}
 Read as one document, the two passes make a single claim, and it is the thesis this paper has been
 earning for twenty-three sections. \Flux today is a working decentralized cloud --- several thousand
-independently operated machines, in dozens of countries, running \num{1195} tenants' containers, paid
+independently operated machines, in dozens of countries, \rev{R178}{running \num{1195} tenants' containers}{running the containers of \num{1195} deployed application specifications}, paid
 for on-chain, with a consensus layer that produces a block every thirty seconds without a miner ---
 whose \emph{trust}, as opposed to whose compute, is concentrated in operated infrastructure and
 shared keys: one discovery API with no fallback, sixteen Foundation-run reachability hosts, one

@@ -16,18 +16,20 @@ ordinary keys, and nothing in \fluxd or \FluxOS is aware that a custodian is inv
 (Property~\ref{prop:chainindifferent}). Last, and separately, it specifies --- explicitly as unimplemented --- the deposited-balance layer
 such a service would need in order to become a credit account. The three are kept apart throughout,
 because they belong to different systems, carry different maturities, and fail in different ways.
-The claim the section defends is narrow and falsifiable: \textbf{\Flux's settlement path is trustless
+\rev{R082}{The claim the section defends is narrow and falsifiable: \textbf{\Flux's settlement path is trustless
 and ships today in two independent forms; a third party has built a convenience layer over it for
-people who want to pay by card, and the protocol neither knows about that layer nor depends on it.}
+people who want to pay by card, and the protocol neither knows about that layer nor depends on it.}}{The claim the section defends is narrow and falsifiable: \textbf{\Flux's settlement path is trustless
+and ships today in two independent forms; InFlux, the company that maintains the Flux products, has built a centralized convenience layer over it for
+people who want to pay by card, and the protocol neither knows about that layer nor depends on it.}}
 
 \paragraph{Symbols introduced here.}
 Not in \texttt{notation.tex}, used only in this section: $e_\app$ the paid-through height of
 application $\app$; $L^{\ast}(\hgt)$ the effective default lifetime; $\iota(\hgt)$ the active
 rate-table row; $\varpi$ the unused fraction of a previous term; $v^{\mathrm{obs}}$ an observed
-on-chain payment. For the third-party service of Section~\ref{sec:paying:facilitator}: $\mathcal{F}$
+on-chain payment. \rev{R083}{For the third-party service of Section~\ref{sec:paying:facilitator}:}{For the card-payment service of Section~\ref{sec:paying:facilitator}:} $\mathcal{F}$
 the operator's facilitator service; $K_u$ the pair of private keys it holds in trust for user $u$ and
 never discloses to $u$; $\mathcal{H}$ its set
-of operator hot wallets; $T_{\mathrm{rec}}$ its record retention time; $\Delta_{\mathrm{adv}}$ its
+of operator hot wallets; \rev{R084}{$T_{\mathrm{rec}}$ its record retention time;}{$T_{\mathrm{rec}}$ the retention time of its notification logs;} $\Delta_{\mathrm{adv}}$ its
 early-renewal advance window in blocks; $\mathsf{A}_{\mathrm{orb}}, \mathsf{A}_{\mathrm{ren}},
 \mathsf{A}_{\mathrm{paid}}$ its three hardcoded allowlists. For the unimplemented credits layer of
 Section~\ref{sec:paying:creditspec}: $b_u$ a tenant's deposited balance in $\sat$;
@@ -53,13 +55,15 @@ neither maintains any forward-looking claim against the payer.
 \label{asm:settle}
 As stated in the system model of Section~2: (i) every node holds the same confirmed chain prefix up
 to the reorg bound (\texttt{MAX\_REORG\_LENGTH} $=40$ outside the PoN stabilisation window);
-(ii) every node runs \FluxOS with the same compiled rate table, subject to on-chain
-\texttt{chainparams} price messages of version \texttt{p} posted by the Foundation multisig, which
+(ii) every node runs \FluxOS with the same compiled rate table, \rev{R085}{subject to on-chain
+\texttt{chainparams} price messages of version \texttt{p} posted by the Foundation multisig, which}{subject to on-chain
+\texttt{chainparams} price messages of version \texttt{p} posted under the network's administrative multisig, whose keys are held by the four co-founders, which}
 take effect from their occurrence height \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}chainUtilities.js}{9--52};
 (iii) application payments are recognised by output address plus an \texttt{OP\_RETURN} message
 carrying the temporary-message hash \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}explorerService.js}{309--345}.
-Assumption (ii) is a trust assumption on the Foundation and is carried as such in Section~7
-(the price table is the base; consensus fixes only the split).
+\rev{R086}{Assumption (ii) is a trust assumption on the Foundation and is carried as such in Section~7
+(the price table is the base; consensus fixes only the split).}{Assumption (ii) is a trust assumption on the holders of that multisig and is carried as such in Section~7
+(the price table is the base; under the planned PNR, consensus would fix only the split).}
 \end{assumption}
 
 \begin{definition}[Height-scheduled rate table]
@@ -178,10 +182,12 @@ while the live endpoint still reports \num{5000}
 The payment sink is the transparent address \texttt{t3Nryf\allowbreak{}AQLGe\allowbreak{}Fs9j\allowbreak{}Eoeqsxm\allowbreak{}BN2QLRa\allowbreak{}RKFLUX} from height
 \num{1670000}, preceded by \texttt{t3a\allowbreak{}GJvdtd8NR6Grnqn\allowbreak{}Ru\allowbreak{}VEz\allowbreak{}H6Mbr\allowbreak{}Xu\allowbreak{}JFLUX} and, at any height, the
 legacy \texttt{t1LUs6quf7TB2z\allowbreak{}VZmexq\allowbreak{}PQdnqmr\allowbreak{}FMGZGj\allowbreak{}V6}
-\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{241--245}. All application revenue therefore lands at a
+\srccode{flux/\allowbreak{}ZelBack/\allowbreak{}config/\allowbreak{}default.js}{241--245}. \rev{R088}{All application revenue therefore lands at a
 single transparent address by policy, which Section~2 records as a centralization surface and
-Section~7 replaces with a consensus-enforced split. Measured, \num{439} of \num{1195} deployed
-applications (\qty{36.7}{\percent}) sit at the three-instance floor and the maximum observed instance
+Section~7 replaces with a consensus-enforced split.}{All application revenue therefore lands at a
+single transparent address by policy, which Section~2 records as a centralization surface and
+Section~7 proposes to replace with a consensus-enforced split (\planned).} Measured, \num{439} of \num{1195} deployed
+\rev{R233}{applications (\qty{36.7}{\percent}) sit at the three-instance floor and the maximum observed instance}{applications (\qty{36.7}{\percent}) sit at three instances, the floor for specifications below \specv{8} (\specv{8} allows one), and the maximum observed instance}
 count is exactly $k_{\max}$ \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}.
 The minimum is re-applied \emph{after} the duration
 scaling \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appMessaging/\allowbreak{}messageVerifier.js}{740--745},
@@ -397,8 +403,8 @@ part of \Flux}. Section~\ref{sec:paying:facilitator} is \shipped and is written 
 because it runs: a centralized payment service, operated by InFlux Technologies
 \srcintent{design intake}, through which a person signs in with an email address,
 pays by card, and has a deployment registered, funded and renewed for them. It is not a credit
-account. It holds no user balance, offers no withdrawal, and keeps no record for longer than six
-days; what it does hold is both of the user's private keys, which the user never sees
+account. \rev{R089}{It holds no user balance, offers no withdrawal, and keeps no record for longer than six
+days;}{It holds no user balance and offers no withdrawal;} what it does hold is both of the user's private keys, which the user never sees
 \srcintent{design intake}, and that is the subject of the subsection. Nearly every
 fact stated there carries code provenance and the one that does not says so; and every one of them is
 a fact about the operator's service rather than about the network, because the chain cannot observe
@@ -425,10 +431,10 @@ from any service built over it; the requirement binds the settlement shape, and 
 violates it simply fails to produce a funded deployment.
 \end{remark}
 
-\subsubsection{What runs on top: a third-party prepay-and-forward payment facilitator}
+\rev{R090}{\subsubsection{What runs on top: a third-party prepay-and-forward payment facilitator}}{\subsubsection{What runs on top: InFlux's prepay-and-forward payment facilitator}}
 \label{sec:paying:facilitator}
 
-\begin{assumption}[Environment of a third-party payment service]
+\begin{assumption}[Environment of a \rev{R091}{third-party}{custodial} payment service]
 \label{asm:custodial}
 In addition to Assumption~\ref{asm:settle}: (i) the facilitator is a single administrative party
 operating server-side infrastructure outside the \FluxNode set, so Section~2's adversary model does
@@ -446,7 +452,7 @@ Section~23 as a centralization surface \emph{of this service}; clause (iv) is wh
 centralization surface of the network.
 \end{assumption}
 
-\begin{definition}[Third-party custodial payment facilitator]
+\begin{definition}[\rev{R092}{Third-party custodial}{Custodial} payment facilitator]
 \label{def:facilitator}
 Write $\mathrm{addr}(\cdot)$ for the address derived from a public key and $\mathrm{owner}(\app)$ for
 the address carried in $\app$'s \texttt{owner} field. A \emph{facilitator} $\mathcal{F}$ is a
@@ -477,11 +483,17 @@ performs is funded. Its durable per-payment record is
 r \;=\; \bigl(H(m_\app),\; v^{\mathrm{sat}},\; v^{\mathrm{usd}},\; t\bigr)
 \;\in\; \{0,1\}^{256} \times \mathbb{Z}_{\ge 0} \times \mathbb{Q}_{\ge 0} \times \mathbb{N},
 \]
-keyed by \emph{application-message hash} rather than by user, carrying the satoshi amount settled on
+\rev{R093}{keyed by \emph{application-message hash} rather than by user, carrying the satoshi amount settled on
 chain and the USD amount charged to the card, and subject to a time-to-live index
 $T_{\mathrm{rec}} = \qty{518400}{\second} = \qty{6}{\day}$ on every collection
 \srccode{appsmonitor/\allowbreak{}config/\allowbreak{}default.js}{33}
-\srccode{appsmonitor/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appsFreeUpdatesMonitor.js}{67--71}. \textbf{There is no further
+\srccode{appsmonitor/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appsFreeUpdatesMonitor.js}{67--71}.}{keyed by \emph{application-message hash} rather than by user, carrying the satoshi amount settled on
+chain and the USD amount charged to the card. The payment record carries no time-to-live index and is
+not auto-deleted \srccode{appsmonitor/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appsPaidWithFiatMonitor.js}{150--153}; a time-to-live index
+$T_{\mathrm{rec}} = \qty{518400}{\second} = \qty{6}{\day}$ applies only to the service's logs of
+payment-reminder notifications and similar processing logs
+\srccode{appsmonitor/\allowbreak{}config/\allowbreak{}default.js}{36--58}
+\srccode{appsmonitor/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appsMonitor.js}{234--252}.} \textbf{There is no further
 state.} In particular the record carries no user-held quantity, and the balance $b_u$ and lifecycle
 label of Definition~\ref{def:creditstate} below have no referent here
 (Property~\ref{prop:nobalance}).
@@ -544,8 +556,8 @@ appeal path exists.
 \emph{Inputs.} A user $u$ authenticated to $\mathcal{F}$ under Assumption~\ref{asm:custodial}(ii); a
 specification $\app$; a card instrument, either a one-off checkout session or a stored
 subscription.\quad
-\emph{State.} $K_u$ and $\mathcal{H}$ as in Definition~\ref{def:facilitator}; the per-payment records
-under $T_{\mathrm{rec}}$; the chain.
+\emph{State.} $K_u$ and $\mathcal{H}$ as in Definition~\ref{def:facilitator}; \rev{R094}{the per-payment records
+under $T_{\mathrm{rec}}$; the chain.}{the per-payment records; the chain.}
 \begin{enumerate}\setlength{\itemsep}{1pt}
 \item $\mathcal{F}$ decrypts $sk^{\mathrm{id}}_u$ in process and signs $m_\app$, whose \texttt{owner}
       field is $\mathrm{addr}(pk^{\mathrm{id}}_u)$
@@ -584,8 +596,9 @@ application's contact address; that is the entire remedy, and no code path reviv
 once expired \srccode{appsmonitor/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appsSubscriptionRenewalMonitor.js}{19,463--575}.
 (b) A renewal loop stops or is stopped: it fails closed to \emph{unrenewed}, and the application
 expires by Definition~\ref{def:expiry} exactly as an unfunded direct-settlement one would.
-(c) $t > T_{\mathrm{rec}}$: the on-chain payment persists and is public, but the operator-side
-association between a card charge and an application ceases to exist.
+\rev{R095}{(c) $t > T_{\mathrm{rec}}$: the on-chain payment persists and is public, but the operator-side
+association between a card charge and an application ceases to exist.}{(c) Records: the on-chain payment persists and is public, and the operator-side payment record
+linking a card charge to an application is not auto-deleted; only the notification logs expire after $T_{\mathrm{rec}}$.}
 (d) Underpayment: Property~\ref{prop:silentunderpay} applies unchanged, with the loss falling on
 $h_{\mathrm{fiat}}$ rather than on the user \srcinferred.
 \end{construction}
@@ -633,13 +646,16 @@ user's own device --- is the path Section~17 is written for, and every property 
 continues to hold there.
 \end{corollary}
 
-\begin{property}[No balance, no withdrawal, no durable record]
+\begin{property}[No balance, no \rev{R096}{withdrawal, no durable record}{withdrawal}]
 \label{prop:nobalance}
 \shipped. In the deployed facilitator: (i) no field of the data model denotes a user-held quantity
 of FLUX or of fiat, the record being keyed per application-message hash rather than per user
-(Definition~\ref{def:facilitator}); (ii) every collection carries a TTL index of
+(Definition~\ref{def:facilitator}); \rev{R097}{(ii) every collection carries a TTL index of
 $T_{\mathrm{rec}} = \qty{6}{\day}$, so no payment record older than six days exists
-\srccode{appsmonitor/\allowbreak{}config/\allowbreak{}default.js}{33}; (iii) a targeted search of the three repositories that
+\srccode{appsmonitor/\allowbreak{}config/\allowbreak{}default.js}{33};}{(ii) the payment records carry no TTL index and are not auto-deleted; the TTL of
+$T_{\mathrm{rec}} = \qty{6}{\day}$ applies only to payment-reminder notification and processing logs
+\srccode{appsmonitor/\allowbreak{}config/\allowbreak{}default.js}{36--58}
+\srccode{appsmonitor/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appsPaidWithFiatMonitor.js}{150--153};} (iii) a targeted search of the three repositories that
 implement the path found no code path returning FLUX or fiat to a user, hence no withdrawal
 \srccode{appsmonitor, fluxos-frontend, console-api}{targeted search, no match}; (iv) the newer
 stack's billing endpoint aggregates an on-chain wallet balance with two read-only legacy sources and
@@ -650,13 +666,18 @@ Definition~\ref{def:creditstate} has no deployed referent, and neither has any s
 $\{\textsf{funded},\textsf{grace},\textsf{suspended},\textsf{evicted}\}$.
 \end{property}
 
-\unsupported{A repository named \texttt{withdrawalservice} exists, with a generic claim-intake schema
+\rev{R098}{\unsupported{A repository named \texttt{withdrawalservice} exists, with a generic claim-intake schema
 (\texttt{coin}, \texttt{network}, \texttt{address}, optional \texttt{fluxid}) that reads as a
 multi-product claim path rather than as this layer's ledger
 \srccode{withdrawalservice/\allowbreak{}src/\allowbreak{}controllers/\allowbreak{}claimController.js}{1--58}. Whether it is wired to the
 facilitator at all was not determined. Property~\ref{prop:nobalance}(iii) is the result of a negative
 search across the three implementing repositories and must be re-checked against that service before
-publication.}
+publication.}}{\unsupported{A repository named \texttt{withdrawalservice} exists, with a generic claim-intake schema
+(\texttt{coin}, \texttt{network}, \texttt{address}, optional \texttt{fluxid}) that reads as a
+multi-product claim path rather than as this layer's ledger
+\srccode{withdrawalservice/\allowbreak{}src/\allowbreak{}controllers/\allowbreak{}claimController.js}{1--58}. Whether it is wired to the
+facilitator at all was not determined. Property~\ref{prop:nobalance}(iii) is the result of a negative
+search across the three implementing repositories.}}
 
 \begin{property}[Payer and owner are independent]
 \label{prop:payersep}
@@ -750,9 +771,12 @@ mode (a): a message to the application's contact address, rate-limited to one pe
 subscription, with no in-band signal, no user override, and no path that revives an expired
 application \srccode{appsmonitor/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appsSubscriptionRenewalMonitor.js}{19,463--575}.
 
-\item \textbf{The record of what was paid does not survive a week.}
-$T_{\mathrm{rec}} = \qty{6}{\day}$ on every collection \srccode{appsmonitor/\allowbreak{}config/\allowbreak{}default.js}{33}.
-The on-chain leg is permanent and public; the association between it and a card charge is neither.
+\item \textbf{\rev{R099}{The record of what was paid does not survive a week.}{The record linking a payment to a card charge is held by the operator alone.}}
+\rev{R100}{$T_{\mathrm{rec}} = \qty{6}{\day}$ on every collection \srccode{appsmonitor/\allowbreak{}config/\allowbreak{}default.js}{33}.
+The on-chain leg is permanent and public; the association between it and a card charge is neither.}{The payment record is kept in the operator's database and is not auto-deleted; only its
+payment-reminder notification logs expire after $T_{\mathrm{rec}} = \qty{6}{\day}$
+\srccode{appsmonitor/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appsPaidWithFiatMonitor.js}{150--153}.
+The on-chain leg is permanent and public; the association between it and a card charge is not public.}
 
 \item \textbf{Every owner-keyed capability runs through the custodian.} Because
 $\mathrm{addr}(pk^{\mathrm{id}}_u)$ is the specification's \texttt{owner}
@@ -781,24 +805,32 @@ every deployed path, expiry deletes.
 \paragraph{A consequence for Section~23.}
 This is the one place where a service outside the protocol leaves a mark inside it. Because
 $\mathrm{addr}(pk^{\mathrm{id}}_u)$ is written into the specification's \texttt{owner} field
-(Definition~\ref{def:facilitator}), some fraction of the network's nominal application owners are
+(Definition~\ref{def:facilitator}), \rev{R101}{some fraction of the network's nominal application owners are
 operator-held keys standing for many unrelated users rather than end users. The measured owner
 distribution is consistent with this: one owner identity holds \num{246} of the \num{1195} deployed
 applications, \qty{20.6}{\percent} of the set
 \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}. The measurement cannot
-distinguish a custodian from a single large tenant, and this paper does not claim which it is. What
+distinguish a custodian from a single large tenant, and this paper does not claim which it is.}{some of the network's nominal application owners are
+operator-held keys: each card-paying user has a ZelID of their own, but it is generated and held by the
+operator rather than by the user. The largest owner identity, which holds \num{246} of the \num{1195} deployed
+applications, \qty{20.6}{\percent} of the set
+\srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}, is not such a key:
+it is the team's own ZelID (\S\ref{sec:private-payment}).} What
 follows regardless is a constraint on every mechanism keyed on ``the owner'': the
 owner-concentration statistics of Section~23, moderation standing, and the delegation object of
-Section~17 all read a field that may name a service rather than a party, and each must say which it
-means. For Section~17 the resolution is already fixed by Corollary~\ref{cor:nodelegation}: wherever
+Section~17 \rev{R102}{all read a field that may name a service rather than a party, and each must say which it
+means.}{all read a field that may name an operator-held key rather than a key the party holds, and each must say which it
+means.} For Section~17 the resolution is already fixed by Corollary~\ref{cor:nodelegation}: wherever
 that field names an operator, there is no principal-held key, and the delegation object does not
 apply rather than applying weakly.
 
 \paragraph{Whose service this is.}
 The framing used throughout this subsection is the team's own, and it is both cleaner and more
-accurate than treating custody as a \Flux option with a caveat: \textbf{the user never sees the key;
+accurate than treating custody as a \Flux option with a caveat: \rev{R103}{\textbf{the user never sees the key;
 it is server-held in trust; and this is a centralized service run by a third-party operator, not a
-feature of the chain} \srcintent{design intake}. The paper adopts it without apology
+feature of the chain}}{\textbf{the user never sees the key;
+it is server-held in trust; and this is a centralized service run by InFlux, outside the protocol, not a
+feature of the chain}} \srcintent{design intake}. The paper adopts it without apology
 and without criticism, because it is what makes the central claim precise rather than defensive.
 Part~A is the protocol's settlement path: trustless, shipping today in two independent forms, and an
 autonomous agent uses it and meets none of the trust surface above --- no account, no card, no email
@@ -836,8 +868,9 @@ capability (Property~\ref{prop:chainindifferent}).}
 \subsubsection{The credits layer, and why it is a service object rather than a protocol one}
 \label{sec:paying:creditspec}
 
-\textbf{Nothing in this subsection is a consensus mechanism.} By \Cref{rem:balance-location} the
-deposited balance lives in a third-party operator's backend, and by \Cref{rem:no-protocol-renewal}
+\textbf{Nothing in this subsection is a consensus mechanism.} \rev{R104}{By \Cref{rem:balance-location} the
+deposited balance lives in a third-party operator's backend,}{By \Cref{rem:balance-location} the
+deposited balance would live in an operator's backend, outside the protocol,} and by \Cref{rem:no-protocol-renewal}
 the protocol offers no automatic renewal to attach it to. What follows is therefore the
 specification an \emph{operator} would implement --- the state it carries, the transitions it takes,
 and the cost of the one guarantee that distinguishes a credit balance from plain expiry --- and not
@@ -944,7 +977,7 @@ A recurring charge needs an authority that outlives the tenant's presence. Three
 available and their costs differ sharply.
 
 \begin{enumerate}\setlength{\itemsep}{2pt}
-\item \textbf{Custody.} The simplest construction, and the one the third-party service uses today ---
+\item \textbf{Custody.} \rev{R105}{The simplest construction, and the one the third-party service uses today ---}{The simplest construction, and the one InFlux's card-payment service uses today ---}
 in a form that does not even require a balance. It is not a protocol mechanism and the network takes
 no part in it (Property~\ref{prop:chainindifferent}): the operator holds the tenant's identity and
 payment keys and fronts the on-chain payment (Section~\ref{sec:paying:facilitator}), so no
@@ -995,9 +1028,11 @@ The central design fact is easy to state and easy to underrate: \textbf{\Flux pr
 consumption.} The charge of Definition~\ref{def:price} is a function of the \emph{requested} resource
 vector and duration, never of what the workload actually used. There is consequently no metering on
 the application path at all --- no counter to read, no counter to attest, and no counter to dispute.
-This is the same reasoning that Section~7 applies one layer down: PNR pays all nodes through the PoN
+\rev{R106}{This is the same reasoning that Section~7 applies one layer down: PNR pays all nodes through the PoN
 rotation rather than the hosting node precisely so that settlement carries no metering or attestation
-dependency (requirement P7 there). The two choices are the same choice made twice, and the
+dependency (requirement P7 there).}{This is the same reasoning that Section~7 applies one layer down: PNR, as planned, would pay all nodes through the PoN
+rotation rather than the hosting node precisely so that settlement carries no metering or attestation
+dependency (requirement P7 there).} The two choices are the same choice made twice, and the
 consequence is worth stating plainly: reservation pricing eliminates an entire class of
 operator-versus-tenant dispute, because there is no usage record for the two parties to disagree
 about.
@@ -1064,9 +1099,11 @@ Any such remedy is a service-layer product, offered commercially by an operator 
 This is the consistent choice rather than a gap, and it follows from a fact this section already
 establishes: \Flux{} prices \emph{reservation}, not consumption (\S\ref{sec:paying:open}). A
 tenant buys reserved capacity, so there is no delivered-uptime quantity for a remedy to be computed
-against, and no third-party-observable availability signal exists from which one could be. Building
+against, and no third-party-observable availability signal exists from which one could be. \rev{R107}{Building
 that signal would mean building the attestation network first --- which \S\ref{sec:feasibility}
-classes as Research --- and then defining an oracle that decides when a deployment was unserved.
+classes as Research ---}{Building
+that signal would mean building the attestation network first --- which \S\ref{sec:feasibility}
+classes as Engineering, and only for the TPM population ---} and then defining an oracle that decides when a deployment was unserved.
 Deciding not to have a protocol remedy avoids inventing both.
 
 It composes with the settled positions on credits and renewal (\Cref{rem:balance-location},
@@ -1135,9 +1172,11 @@ defence.
 
 \item\label{inv:monotone} \textbf{Monotone expiry.} $e_\app$ is non-decreasing while
 $\mathrm{st}(\app,\hgt) \ne \textsf{evicted}$. Immediate from Table~\ref{tab:transitions}, in which
-the only writes to $e_\app$ are increments. Note that the deployed system does \emph{not} satisfy the
+the only writes to $e_\app$ are increments. \rev{R108}{Note that the deployed system does \emph{not} satisfy the
 analogous property under the expire-only update path, where a Foundation-held key can submit a
-\emph{reducing} expire value with no ``new expire must be larger'' check
+\emph{reducing} expire value}{Note that the deployed system does \emph{not} satisfy the
+analogous property under the expire-only update path, where the \texttt{usersToExtend} key, held by the operator of \texttt{appsmonitor}, can submit a
+\emph{reducing} expire value} with no ``new expire must be larger'' check
 \srccode{appsmonitor/\allowbreak{}fixOverExtendedAppExpiry.js}{1--24}; that is an operational tool, and any
 credits implementation must not inherit the exemption.
 \end{enumerate}
@@ -1208,12 +1247,16 @@ applications in opposite directions.
 \begin{remark}[Where a deposited balance lives --- settled: nowhere on the chain]
 \label{rem:balance-location}
 The location of a deposited balance was the architectural choice this section could not make. It is
-now settled, and the answer is that the object is not a protocol object at all. Credit balances are
+now settled, and the answer is that the object is not a protocol object at all. \rev{R109}{Credit balances are
 held \textbf{off-chain, per user, in the backend of a third-party operator} --- the team names InFlux
-Technologies, building on Flux Cloud, as such an operator. That service is account-based: a user may
-sign in with SSO or email, the backend derives a ZelID for them, they are logged in under it, and the
+Technologies, building on Flux Cloud, as such an operator.}{Credit balances would be
+held \textbf{off-chain, per user, in the backend of an operator outside the protocol} --- the team names InFlux
+Technologies, the company that maintains the Flux products, as such an operator.} That service is account-based: a user may
+sign in with SSO or email, the backend derives a ZelID for them, they are logged in under it, \rev{R110}{and the
 operator holds a per-user balance which the user tops up and authorises spend from
-\srcintent{design intake} (\planned).
+\srcintent{design intake} (\planned).}{and a
+planned credits layer would add a per-user balance which the user tops up and authorises spend from
+\srcintent{design intake} (\planned).}
 
 Three consequences follow, and the paper states them rather than the convenience.
 \begin{enumerate}

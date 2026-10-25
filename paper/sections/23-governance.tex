@@ -143,7 +143,8 @@ than hosting for placement and enforcement purposes
 \srccode{fluxos-network-policy/\allowbreak{}README.md}{99--196,320--326}. The documents are unsigned; the
 repository states the position plainly — ``their authenticity rests on GitHub and on who can merge
 to this repo'' — and records signed documents with a rollback-resistant sequence number as the
-intended next step rather than a finished one \srccode{fluxos-network-policy/\allowbreak{}README.md}{320--326}.
+intended next step rather than a finished one \srccode{fluxos-network-policy/\allowbreak{}README.md}{320--326}. \rev{R242}{}{Signed documents with a sequence number were published on 2026-09-11, and \FluxOS{} verifies them
+from v8.19.0 (2026-09-23).}
 
 A second lever sits in the reachability plane. The Foundation-operated \FDM{} fleet carries a
 configuration-level wildcard blacklist and whitelist by application name, plus an
@@ -158,10 +159,10 @@ with no time gating and no stall detection, despite a source comment saying gati
 \srccode{fluxd/\allowbreak{}src/\allowbreak{}emergencyblock.cpp}{24--30,183--190}
 \srccode{fluxd/\allowbreak{}src/\allowbreak{}emergencyblock.h}{40--44}; the deployed threshold is
 \texttt{n\allowbreak{}Emergency\allowbreak{}Min\allowbreak{}Signatures} $=2$ against a four-key set
-\srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{253,522}, and the team states 3-of-4 with a newly generated key
+\srccode{fluxd/\allowbreak{}src/\allowbreak{}chainparams.cpp}{253,522}, \rev{R243}{and the team states 3-of-4 with a newly generated key
 set as the intended configuration, aligning consensus emergency-key governance with the bridge's
 3-of-4 quorum (\S22), with no activation scheduled
-\srcintent{design intake} (\planned). That key set is not a
+\srcintent{design intake} (\planned).}{and the team does not intend to change that threshold.} That key set is not a
 content lever, but it is a governance lever, and a section on who
 can do what to this network must list it. Under the mechanism specified below it acquires a second
 significance, because that mechanism's enforcement rides in the coinbase
@@ -262,7 +263,7 @@ Two consequences, and the second is the one that decides how the whole section s
   a workload, in exactly the sense that miners in a proof-of-work system can already refuse to
   include a transaction; nothing a specification says removes that. What the quorum changes is not
   \emph{whether} operators can collectively remove an application but \emph{how}: today the decision
-  is one Foundation pull request that every node obeys without checking
+  \rev{R155}{is one Foundation pull request that every node obeys without checking}{is one pull request by a single organisation owner that every node obeys without checking}
   (\Cref{prop:23:kappa-today}); under the quorum it is a signed, weighted, on-chain vote that names
   every participating key and is verifiable by anyone
   (\Cref{thm:23:verifiable}). Read that way the mechanism is a transfer of an existing capability
@@ -1306,9 +1307,11 @@ specifying their effects.}
 
 \begin{corollary}[Raising the threshold does not rescue the property]
 \label{cor:23:threshold}
-$\kappa \ge 10$ requires $\vthresh \ge 0.40$; $\kappa \ge 16$ requires $\vthresh \ge 0.50$. Even
+\rev{R156}{$\kappa \ge 10$ requires $\vthresh \ge 0.40$; $\kappa \ge 16$ requires $\vthresh \ge 0.50$. Even
 $\vthresh = 0.51$, the value the design rejected as unreachable in practice, corresponds to
-seventeen identities.
+seventeen identities.}{By node key, $\kappa \ge 10$ requires $\vthresh \ge 0.40$ and $\kappa \ge 16$ requires $\vthresh \ge 0.50$. Even
+$\vthresh = 0.51$, the value the design rejected as unreachable in practice, corresponds to
+seventeen identities by node key and twenty by owner identity.}
 \end{corollary}
 
 Raising $\vthresh$ trades liveness (\Cref{prop:23:liveness}) for a larger but still small coalition.
@@ -1534,14 +1537,15 @@ moderation pull on the same rope in opposite directions.}
 \begin{proposition}[Launch-time deterrent]
 \label{prop:23:launch}
 At \PNR{} activation, with $\nodeshare = 0.20$, operator emission of \num{6386040}\flux\ per year
-and application revenue at approximately \SI{4.3}{\percent} of operator income, the expected future
+\rev{R159}{and application revenue at approximately \SI{4.3}{\percent} of operator income}{and the planned operator share of an assumed application revenue at approximately \SI{4.3}{\percent} of operator income}, the expected future
 revenue a Stratus operator forgoes by destroying one average application is approximately
 \num{0.10}\flux\ per year.
 \end{proposition}
 
 \begin{proof}[Proof sketch]
-Application revenue at \SI{4.3}{\percent} of total operator income against \num{6386040}\flux\ of
-emission gives \num{286320}\flux\ per year from all applications (\Cref{sec:07-pnr}). The Stratus
+\rev{R160}{Application revenue at \SI{4.3}{\percent} of total operator income against \num{6386040}\flux\ of
+emission gives \num{286320}\flux\ per year from all applications (\Cref{sec:07-pnr}).}{The planned operator share of application revenue, at \SI{4.3}{\percent} of total operator income against \num{6386040}\flux\ of
+emission, is \num{286320}\flux\ per year from all applications: the \SI{20}{\percent} operator share of an assumed, not measured, \num{1431600}\flux\ per year of application revenue (\Cref{sec:07-pnr}).} The Stratus
 tier receives $9/13.5$ of the operator share, i.e.\ about \num{190880}\flux\ per year, spread over
 \num{1627} nodes, i.e.\ about \num{117.3}\flux\ per node per year. Divided across the \num{1193} priced
 applications in the \PNR{} demand baseline \srcintent{mechanism specification} — the registry returns
@@ -1901,8 +1905,9 @@ also the only route the specified design leaves for undoing a wrongful ban, whic
 
 A section on governance owes the reader an inventory of what is team-operated today and must not be
 at target. Drawing on the networking and addressing section's centralization table and on the
-node-services extraction, the components are: \texttt{api.\allowbreak{}runonflux.\allowbreak{}io} as the sole
-application-discovery source, with no on-chain fallback and no independent replica
+node-services extraction, the components are: \rev{R161}{\texttt{api.\allowbreak{}runonflux.\allowbreak{}io} as the sole
+application-discovery source, with no on-chain fallback and no independent replica}{\texttt{api.\allowbreak{}runonflux.\allowbreak{}io} as \FDM{}'s single default
+application-discovery endpoint, with no automatic failover (the \texttt{/apps} routes themselves are served by every node, which replicate application specifications by gossip)}
 \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}flux/\allowbreak{}dataFetcher.js}{47--91}; the Foundation-operated
 private \texttt{10.100.0.0/24} carrying the WireGuard hub, the DNS gateway, the Arcane load
 balancers and both PowerDNS masters
@@ -1912,14 +1917,14 @@ none of which runs on a node operator's machine; the \texttt{fluxos-\allowbreak{
 \Cref{def:23:policy-channel}; the single-instance \texttt{fluxstorage} service, which holds
 oversized environment variables and commands unencrypted at rest with no write-side protection at
 all \srccode{fluxstorage/\allowbreak{}src/\allowbreak{}routes.js}{17--67}; the release API, which performs no cryptographic
-verification of what it serves as the latest release \shipped~\srcprivate{release API}; the
-Foundation-held application owner keys used for auto-renewal \shipped~\srcprivate{renewal service};
+verification of what it serves as the latest release \shipped~\srcprivate{release API}; \rev{R163}{the
+Foundation-held application owner keys used for auto-renewal}{the team-held application owner keys and the \texttt{usersToExtend} extension key used for auto-renewal} \shipped~\srcprivate{renewal service};
 and a
 \texttt{fluxteam} privilege level in the node UI strictly above a node owner's own \texttt{admin}
 \srccode{fluxos-frontend/\allowbreak{}src/\allowbreak{}navigation/\allowbreak{}vertical/\allowbreak{}fluxadmin.js}{39--43}. To that list the consensus
-layer adds the 2-of-4 emergency-block key set \srccode{fluxd/\allowbreak{}src/\allowbreak{}emergencyblock.cpp}{24--30,183--190} —
+layer adds the 2-of-4 emergency-block key set \srccode{fluxd/\allowbreak{}src/\allowbreak{}emergencyblock.cpp}{24--30,183--190} \rev{R244}{—
 3-of-4 with fresh keys intended, aligning with the bridge quorum (\S22), unscheduled, \planned
-\srcintent{design intake} — the
+\srcintent{design intake} —}{,} the
 consensus-enforced dev-fund remainder paid to a hardcoded address
 \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{2877--2884}, and the single transparent address to which all
 application payments land today by policy
@@ -1950,9 +1955,10 @@ removes any application fleet-wide within the \SIrange{7}{13}{\hour} bound of
 \Cref{prop:23:kappa-today}, and no node can tell that from a legitimate merge. The quorum specified
 in this section is a network upgrade with two new transaction types, new chain-derived state and a
 new coinbase rule; document signing is a week of work in a repository that has already written down
-what to do. \textbf{As with the attested-execution findings
+what to do. \rev{R164}{\textbf{As with the attested-execution findings
 (\S\ref{sec:14-disposition}), the team's disposition is to close the cheap items ahead of
-publication} \srcintent{design intake} --- document signing here, and the deployed-service items
+publication}}{\textbf{As with the attested-execution findings
+(\S\ref{sec:14-disposition}), the team's disposition is to close the cheap items}} \srcintent{design intake} --- document signing here, and the deployed-service items
 listed above that are security tickets rather than governance design: \texttt{fluxstorage} holding
 environment variables and commands unencrypted with no write-side protection, a \texttt{fluxteam}
 privilege standing above a node owner's own administrative rights on that owner's machine, and the
@@ -2130,8 +2136,9 @@ them here so that a reader can disagree with one without inheriting the other.
 The on-chain shape settles six things the earlier specification carried as parameters, and it is
 worth listing them as gains: the voting window ($\Delta_{\mathrm{vote}} = \num{2880}$ blocks), the
 per-application cooldown after an unmet report (zero), reporter eligibility
-($\reporters = I(\hgt_0)$, by \Cref{def:23:capacity}), the network-wide cap on concurrently open
-reports ($\lvert N(\hgt) \rvert$, by \Cref{cor:23:capacity}), the entire bond question, which
+($\reporters = I(\hgt_0)$, by \Cref{def:23:capacity}), \rev{R165}{the network-wide cap on concurrently open
+reports ($\lvert N(\hgt) \rvert$, by \Cref{cor:23:capacity})}{the network-wide cap on concurrently open
+reports (bounded at $\lvert N(\hgt) \rvert$ by \Cref{cor:23:capacity}, and set lower, at \num{64} with queueing, in \Cref{tab:23-recommended})}, the entire bond question, which
 disappears with the bond, and producer obligation --- ban-memo inclusion, over the first unbanned
 carried report in the settled order, is consensus-required rather than discretionary
 (\Cref{prop:23:inclusion-required}). Eleven

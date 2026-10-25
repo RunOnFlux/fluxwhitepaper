@@ -16,7 +16,7 @@
 \vspace{2.2em}
 {\large Tadeas Kmenta\par}
 \vspace{0.45em}
-{\color{FluxSlate}\today\par}
+{\color{FluxSlate}Version 1.0.1\ \textperiodcentered\ \today\par}
 
 \vspace{3em}
 \begin{minipage}{0.88\linewidth}
@@ -50,7 +50,7 @@ anyone.
 
 \textbf{What already runs on it.} Not a proposal. By census: web services, blockchain
 infrastructure, and \num{27} scientific-simulation deployments doing real protein-folding work on
-about \SI{9}{\percent} of the fleet's committed CPU. A general-purpose cloud with science on it, into
+\rev{S33}{about \SI{9}{\percent} of the fleet's committed CPU.}{about \SI{5}{\percent} of the fleet's CPU capacity.} A general-purpose cloud with science on it, into
 which AI is one arriving workload among several.
 
 \textbf{The bet.} The next tenant is software, not a person. Every major cloud is built for a human
@@ -72,8 +72,9 @@ an application. Each has a date, and each is planned rather than shipped until i
 \textbf{What does not work yet.} Hosting an application earns a node nothing extra, by design --- so
 the whole hosting guarantee rests on an eligibility gate that today is bound to neither the operator
 nor the machine. Four owner identities together hold enough weight to remove any application. There
-will be no chain-level privacy. One Foundation-run API is the sole source of where applications
-live. The bridge is administered by four people from one organisation. None of this is hidden in the
+will be no chain-level privacy. \rev{S01}{One Foundation-run API is the sole source of where applications
+live.}{The routing layer that makes applications reachable by name is centrally operated and, by default,
+reads where applications live from one API endpoint with no automatic failover.} The bridge is administered by four people from one organisation. None of this is hidden in the
 long paper, and none is hidden here.
 
 \clearpage
