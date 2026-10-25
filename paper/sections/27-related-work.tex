@@ -2,8 +2,9 @@
 
 \Flux's claim in this paper is architectural, not comparative marketing: a network in which an
 autonomous agent can rent capacity, pay for it, and leave, without an account, a payment card, or a
-human in the loop, using an operator set that is capital-bonded and enumerable rather than merely
-reputational. Positioning that claim requires comparing mechanisms, not brands. This section takes
+human in the loop, \rev{R203}{using an operator set that is capital-bonded and enumerable rather than merely
+reputational.}{using, on \FluxCloud{}, an operator set (the \FluxNodes) that is capital-bonded and enumerable rather than merely
+reputational.} Positioning that claim requires comparing mechanisms, not brands. This section takes
 each mechanism the paper specifies elsewhere — a decentralized resource market, a consensus protocol,
 a bridge, an attestation root, a shielded payment pool, a delegation primitive, and a machine-facing
 interface — and states the prior art for that mechanism specifically, what \Flux inherits from it, and
@@ -54,8 +55,9 @@ hyperscaler does not is orthogonal rather than superior: no account, no payment 
 approval step stand between a payment and a running deployment — already true, concretely, of
 \CumulusVPN's entitlement path, where a WireGuard public key is itself the credential and no
 server-issued account exists \shipped\ \srccode{cumulusvpn/\allowbreak{}gateway/\allowbreak{}internal/\allowbreak{}entitle/\allowbreak{}entitle.go}{218--287}
-— and the operator fulfilling the deployment is drawn from the capital-bonded, enumerable set described
-above rather than an opaque corporate fleet. Concretely, \Flux prices a reservation: a deployment's
+\rev{R204}{— and the operator fulfilling the deployment is drawn from the capital-bonded, enumerable set described
+above rather than an opaque corporate fleet.}{— and, on \FluxCloud{}, the operator fulfilling the deployment is a \FluxNode{} drawn from the capital-bonded, enumerable set described
+above rather than an opaque corporate fleet (\FluxEdge{}, a separate, centrally operated product, does not draw on that set).} Concretely, \Flux prices a reservation: a deployment's
 price is a function $\price(\resvec,\ninst,\dur)$ of a resource vector, an instance count and a duration fixed at request time,
 not a metered function of realized usage \shipped\
 \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}utils/\allowbreak{}appUtilities.js}{89--134}
@@ -242,8 +244,10 @@ caveats are checked by whoever verifies the credential, not by a ledger, which m
 specifications are already validated off-chain against owner signatures on every node (§19;
 \srcintent{feasibility assessment}). That correspondence is the basis for §17's specification of bounded
 deployment authority \planned\ \srcintent{§17}. It is worth stating precisely what already exists and
-what does not: a scoped, revocable, rate-limited bearer token already governs \emph{actions} — start,
-stop, deploy, renew — through the FluxEdge API (§17; \srcintent{feasibility assessment}), and an
+what does not: \rev{R205}{a scoped, revocable, rate-limited bearer token already governs \emph{actions} — start,
+stop, deploy, renew — through the FluxEdge API}{a scoped, revocable, rate-limited bearer token already governs \emph{actions} — starting and
+stopping rentals, starting and stopping deployments, and reading the balance — through the API of
+\FluxEdge{}, Flux's separate, centralized GPU-rental product} (§17; \srcintent{feasibility assessment}), and an
 MCP-exposed tool set can already sign and submit a deployment end to end on a custodial path with no
 bound on \emph{value} at all \shipped\
 \srccode{deploy-with-git-frontend/\allowbreak{}server/\allowbreak{}mcp/\allowbreak{}createServer.js}{174--266}. §17 is therefore not inventing

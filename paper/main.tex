@@ -166,8 +166,9 @@
 \usepackage{placeins}
 
 \input{notation}
+\input{revision}
 %% Bump this when the paper is revised.
-\newcommand{\paperversion}{1.0}
+\newcommand{\paperversion}{1.0.1}
 
 \title{\textbf{Flux v9: A Decentralized Cloud for Autonomous Compute}}
 \author{Tadeas Kmenta}
@@ -225,6 +226,17 @@ One label marks what this paper could not establish:\\[0.35em]
 \thispagestyle{plain}
 \section*{Abstract}
 \input{sections/00-abstract}
+
+\vspace{1.5em}
+\subsection*{Revision history}
+\begin{description}[leftmargin=4.2em,style=sameline,itemsep=0.2em]
+  \item[1.0] 2026-09-07. First publication.
+  \item[1.0.1] \today. Corrections to the 1.0 text: factual errors, contradictions between sections,
+    figures that did not match their sources, statements of planned work that read as shipped, and the
+    description of who operates which service and holds which keys. No section was added or removed.
+    Every change keeps the 1.0 wording beside the correction in the source, and a marked-up edition
+    shows both.
+\end{description}
 
 \clearpage
 \pdfbookmark[0]{Contents}{toc}

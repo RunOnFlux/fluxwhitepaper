@@ -1,0 +1,38 @@
+%% Revision markup for version 1.0.1.
+%%
+%% Every change to the 1.0 text is written as \rev{ID}{old text}{new text}, so the
+%% original wording stays in the source next to its correction.
+%%
+%%   \revmode = final     (default) the corrected text only
+%%   \revmode = markup    both texts, old in red and new in blue, tagged with the ID
+%%   \revmode = original  the 1.0 text only
+%%
+%% Select the mode before \input{main}, e.g.
+%%   pdflatex '\def\revmode{markup}\input{main}'
+%% A change listed with \revreject{ID} keeps its old text in final mode.
+\providecommand{\revmode}{final}
+\definecolor{RevOld}{HTML}{C62828}
+\definecolor{RevNew}{HTML}{1565C0}
+\makeatletter
+\def\rev@markup{markup}
+\def\rev@final{final}
+\edef\rev@mode{\revmode}
+\newcommand{\revreject}[1]{\expandafter\def\csname rev@rej@#1\endcsname{}}
+\DeclareRobustCommand{\rev}[3]{%
+  \ifx\rev@mode\rev@markup
+    \phantomsection\label{rev:#1}%
+    {\color{RevOld}\textsf{\bfseries\footnotesize[#1\,$-$]}\,#2}%
+    {\color{RevNew}\textsf{\bfseries\footnotesize[#1\,$+$]}\,#3\textsf{\bfseries\footnotesize]}}%
+  \else\ifx\rev@mode\rev@final
+    \ifcsname rev@rej@#1\endcsname #2\else #3\fi
+  \else
+    #2%
+  \fi\fi}
+\newcommand{\ifrevmarkup}[1]{\ifx\rev@mode\rev@markup #1\fi}
+%% Plot data cannot carry markup, so a corrected figure is flagged in its caption instead.
+\DeclareRobustCommand{\revnote}[2]{%
+  \ifx\rev@mode\rev@markup
+    \phantomsection\label{rev:#1}%
+    {\color{RevNew}\textsf{\bfseries\footnotesize[#1: #2]}}\space
+  \fi}
+\makeatother

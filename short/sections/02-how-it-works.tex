@@ -7,16 +7,20 @@ understood.
 
 \subsection{The chain: a rotation, not a race}
 
-Every collateralised node is in a queue. Producing a block moves a node from the front of the queue
+\rev{S04}{Every collateralised node is in a queue. Producing a block moves a node from the front of the queue
 to the back, and the block reward goes to whoever produced it, split by tier according to a fixed
-schedule. There is no difficulty to grind and nothing to mine; a node's expected income is a function
+schedule.}{Every collateralised node is in its tier's payment queue. Each block pays the node at the front of
+each tier's queue --- the one unpaid longest --- and moves it to the back, alongside a fixed
+development-fund amount, split according to a fixed schedule. The right to produce the block is drawn
+separately, and the producer is not the payee.} There is no difficulty to grind and nothing to mine; a node's expected income is a function
 of how many nodes are in its tier and how long the rotation takes to come round.
 
 Because every block carries the same fixed weight, the chain does not have a longest-chain rule in
 the Bitcoin sense. Fork choice is a block-count race resolved by which block was seen first, and
 reorganisations are capped at forty blocks by consensus. That is a deliberate simplification, and it
-has a cost the full paper treats at length: with no cumulative-work signal in the header, a
-lightweight client that verifies without a full node cannot be built on today's format.
+has a cost the full paper treats at length: \rev{S05}{with no cumulative-work signal in the header, a
+lightweight client that verifies without a full node cannot be built on today's format.}{with no cumulative-work signal and no commitment to the node set in the header, a
+lightweight client that verifies without a full node cannot be built on today's format.}
 
 \subsection{Where new \flux{} comes from}
 
@@ -25,8 +29,9 @@ rate is \num{14.0}~\flux{} per block, split across the three tiers and a develop
 shares. It falls by ten percent each October --- to \num{12.6} at block \num{3071200} in 2026, then
 \num{11.34}, and so on for twenty annual steps --- and then \emph{freezes} rather than continuing
 toward zero: from the twentieth reduction onward the chain issues a constant tail of roughly
-\num{1789219}~\flux{} a year. Total issued supply reaches \num{548043625.86}~\flux{} by 2045 and
-crosses \num{560000000} around 2052.
+\num{1789219}~\flux{} a year. \rev{S06}{Total issued supply reaches \num{548043625.86}~\flux{} by 2045 and
+crosses \num{560000000} around 2052.}{Total issued supply reaches \num{548043625.86}~\flux{} by late 2046 and
+crosses \num{560000000} around 2053.}
 
 Two things follow for a holder. There is no hard cap that issuance approaches and stops at --- the
 tail is perpetual by design. And the emission curve is what v9 is built to \emph{replace} as the
@@ -48,8 +53,10 @@ whoever was fast rather than by any scheduler.
 This is unusual, and the paper says so plainly. There is no placement algorithm in the sense a
 cloud engineer would expect --- no bin-packing, no affinity, no capacity model. What there is
 instead is an incentive: nodes want to be full, applications want to be replicated, and the ninety-
-second collision rule keeps them from tripping over each other. It works at the current scale. What
-it does not do is give a tenant any say over \emph{where} the application lands.
+second collision rule keeps them from tripping over each other. It works at the current scale. \rev{S07}{What
+it does not do is give a tenant any say over \emph{where} the application lands.}{What
+it does not do is let a tenant choose which node runs the application: the tenant can only set
+constraints, such as allowed or banned countries, that each node checks for itself before installing.}
 
 \emph{How you reach it.} A running application gets a name under \texttt{app.runonflux.io} (and
 \texttt{app2.runonflux.io}), resolved by the network's own DNS and fronted by load balancers that
@@ -78,16 +85,20 @@ and no scheduler decides placement: nodes claim work, and a fixed wait resolves 
 
 \subsection{Paying: a transaction, not a relationship}
 
-Today, paying for a deployment means one thing: a single signed transaction, for the full price of
-the period, to an address the chain knows. The price is a function of the resources reserved and the
+Today, paying for a deployment means one thing: a single signed transaction, \rev{S09}{for the full price of
+the period, to an address the chain knows.}{for the full price of
+the period, to a known payment address.} The price is a function of the resources reserved and the
 duration --- CPU, memory, disk, instances, blocks --- and it is a \emph{reservation} price. You pay
 for what you asked to hold, not for what you used. There is no metering, and therefore nothing to
 meter, dispute, or attest.
 
 When the paid period ends, the application stops. Renewing it is the owner's act, done the same way.
-The protocol offers no subscriptions and no automatic renewal; operators who want that convenience
+The protocol offers no subscriptions and no automatic renewal; \rev{S10}{operators who want that convenience
 can buy it from a third-party service that holds a balance on their behalf, and the paper is
-explicit that such a service is a business built on \Flux{}, not a feature of it.
+explicit}{owners who want that convenience
+can buy it from a card-payment service run by InFlux, the company that maintains the \Flux{}
+products, which pays and renews on their behalf, and the paper is
+explicit} that such a service is a business built on \Flux{}, not a feature of it.
 
 \begin{figure}[H]
 \centering
@@ -116,8 +127,13 @@ rebuilt.}
 \label{fig:short:payment}
 \end{figure}
 
-\limitnote{The payment address is a single consensus-known address, and the split is applied by
+\rev{S11}{\limitnote{The payment address is a single consensus-known address, and the split is applied by
 consensus, not by the node software --- so a software release cannot change the distribution. What
 the protocol does \emph{not} give a tenant is any remedy if a node fails to serve what was paid for.
 Reservation pricing has no delivered-uptime quantity to compute a refund against, and the paper
-records the decision that any such guarantee lives in the service layer, not the protocol.}
+records the decision that any such guarantee lives in the service layer, not the protocol.}}{\limitnote{Today the payment address is set in the node software's configuration and there is no
+split. Under PNR the split would be applied by consensus, not by the node software --- so a software
+release could not change the distribution. What
+the protocol does \emph{not} give a tenant is any remedy if a node fails to serve what was paid for.
+Reservation pricing has no delivered-uptime quantity to compute a refund against, and the paper
+records the decision that any such guarantee lives in the service layer, not the protocol.}}

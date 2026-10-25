@@ -88,9 +88,13 @@ concentrates in single datacentres, and it is a topology constraint rather than 
 that fits on one device exercises no such interconnect, and concurrent requests to it are mutually
 independent. \textbf{For that class of work the structural advantage of centralisation is not reduced
 --- it is absent}, and a dispersed fleet of collateralised commodity machines becomes an appropriate
-substrate rather than a compromised one. \S\ref{sec:ac-workload-fit} argues this properly, including
+substrate rather than a compromised one. \rev{R004}{\S\ref{sec:ac-workload-fit} argues this properly, including
 the part that cuts the other way: \Flux allocates accelerators whole, and serving many small models
-economically requires subdividing them, which is the one thing the current allocation model cannot do.
+economically requires subdividing them, which is the one thing the current allocation model cannot do.}{\S\ref{sec:ac-workload-fit} argues this properly, including
+the part that cuts the other way: the only accelerator allocation \Flux{} runs today is \FluxEdge{}'s,
+on separate, centrally managed machines that are not \FluxNode{}s, and it allocates accelerators
+whole; serving many small models
+economically requires subdividing them, which is the one thing the current allocation model cannot do.}
 
 \subsection{\Flux today, measured}
 \label{sec:intro-today}
@@ -138,12 +142,19 @@ signed claim about what a node has booted. That boot chain and that service run 
 \shipped (\S\ref{sec:attested-execution}). What they do not yet provide is named precisely in that
 section rather than left implicit: the resulting signature is not bound to the specific machine that
 produced it, so a bond placed against it would secure a claim any operator's own software could
-reproduce, not a claim about a particular piece of hardware. The bonded attestation network proposed
+reproduce, not a claim about a particular piece of hardware. \rev{R005}{The bonded attestation network proposed
 to close that gap — committee sampling, a challenge protocol, slashing against a separate bond — is
 \planned and, as \S\ref{sec:feasibility} argues at length, is a precondition for the first change
 above rather than an independent workstream, because a compensation mechanism that pays every
 eligible node raises the payoff to passing an eligibility gate that is not yet machine-bound by
-exactly what it pays.
+exactly what it pays.}{The attestation network proposed
+to close that gap — committee sampling and a challenge protocol, with no slashing, since the paper
+records a decision that nothing in \Flux{} is ever forfeited (\S\ref{sec:attested-execution}) — is
+\planned and, as \S\ref{sec:feasibility} argues at length, is the highest-priority security work on
+its own merits rather than a precondition for the first change above: the eligibility gate it would
+bind already guards all issuance today, and a compensation mechanism that pays every eligible node
+raises the payoff to passing that not-yet-machine-bound gate by exactly what it pays, so \PNR's ramp
+should track it.}
 
 \paragraph{Value settled transparently, on rails whose privacy layer is being withdrawn.}
 \fluxd is a Zcash fork, and its shielded-transaction machinery — Sprout and Sapling notes, encrypted
@@ -160,8 +171,10 @@ argument: a mechanism holding \SI{0.0225}{\percent} of supply, unable to grow, a
 proving stack in the consensus path is a poor trade against a stated goal of less code and a more
 thorough audit (\S\ref{sec:shielded-retirement}). The decisive argument is narrower and is worth
 stating here rather than only in \S20: a shielded pool would not hide what a tenant most plausibly
-wants hidden, because a \Flux{} application specification is a public on-chain message and the
-control plane serves the global specification set over a public endpoint. The workload is public by
+wants hidden, \rev{R006}{because a \Flux{} application specification is a public on-chain message and the
+control plane serves the global specification set over a public endpoint.}{because a \Flux{} application specification is a public message, gossiped to every node and
+committed on chain by hash in its payment transaction, and the
+control plane serves the global specification set over a public endpoint.} The workload is public by
 construction; shielding the payment hides the funding source, not the workload graph.
 
 So the honest statement of this pillar is the one the paper makes and defends rather than the one an

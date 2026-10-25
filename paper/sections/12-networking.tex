@@ -3,12 +3,16 @@
 
 An operator can point a browser or an API client at an application running somewhere on the
 several-thousand-node \Flux fleet and get an answer. That works today, and the path by which it
-works is worth naming precisely, because every hop on it is presently operated by the \Flux
-Foundation. This is not a claim about node operators: the compute itself is dispersed across
+works is worth naming precisely, \rev{R064}{because every hop on it is presently operated by the \Flux
+Foundation.}{because every hop on it is presently operated by the \Flux
+Foundation (the informal name this paper uses for the people behind the project,
+Definition~\ref{def:foundation}; it is not a legal entity).} This is not a claim about node operators: the compute itself is dispersed across
 independent Cumulus, Nimbus and Stratus operators exactly as advertised. It is a claim about
 \emph{reachability} — DNS resolution, TLS termination, and the reverse proxy that decides which
-container answers a given hostname all run on Foundation-controlled infrastructure, discovered
-through a single Foundation-operated API with no on-chain or peer-to-peer fallback. Naming this
+container answers a given hostname all run on Foundation-controlled infrastructure, \rev{R065}{discovered
+through a single Foundation-operated API with no on-chain or peer-to-peer fallback.}{discovered
+through one configured discovery endpoint, by default the Foundation-operated
+\texttt{api.\allowbreak{}runonflux.\allowbreak{}io}, with no automatic fallback to another node.} Naming this
 path precisely, hop by hop, is what makes the decentralization roadmap in \S\ref{sec:governance}
 and elsewhere legible: a reader cannot evaluate a plan to decentralize a system without first
 knowing exactly what is centralized in it today.
@@ -22,8 +26,11 @@ finds the IP:port that \FluxOS placed it on. \shipped
 
 \begin{enumerate}
   \item \textbf{Discovery.} \FDM (\texttt{flux-\allowbreak{}domain-\allowbreak{}manager}) does not talk to \fluxd or to any
-  peer-to-peer layer to learn what applications exist or where they run. It polls a single
-  Flux-Foundation-operated REST API, \texttt{https:/\allowbreak{}/\allowbreak{}api.\allowbreak{}runonflux.\allowbreak{}io}, for
+  peer-to-peer layer to learn what applications exist or where they run. \rev{R066}{It polls a single
+  Flux-Foundation-operated REST API, \texttt{https:/\allowbreak{}/\allowbreak{}api.\allowbreak{}runonflux.\allowbreak{}io}, for}{It polls a single
+  configured REST API base URL, by default the Foundation-operated
+  \texttt{https:/\allowbreak{}/\allowbreak{}api.\allowbreak{}runonflux.\allowbreak{}io} (the routes it reads are served by every
+  \FluxOS node, see below), for}
   \texttt{apps/\allowbreak{}globalappsspecifications} and \texttt{apps/locations}
   \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}flux/\allowbreak{}dataFetcher.js}{47-71}. This is FDM's only
   source for "what apps exist and where"; no fallback source exists in the codebase
@@ -328,8 +335,10 @@ Concretely, a single merged pull request can: block or unblock any container ima
 owner address, or 64-hex application hash network-wide (\texttt{blockedrepositories.\allowbreak{}json},
 \texttt{vettedrepositories.\allowbreak{}json}); grant or revoke which owner addresses may install applications
 on which enterprise-designated nodes (\texttt{enterprisenodes.\allowbreak{}json}); mark a node's collateral
-transaction hash as blocked for tampering (\texttt{tamperingblockednodes.\allowbreak{}json}), a mechanism the
-evidence describes as able to DOS a node's collateral for that offense; and, via the monthly
+transaction hash as blocked for tampering (\texttt{tamperingblockednodes.\allowbreak{}json}), \rev{R067}{a mechanism the
+evidence describes as able to DOS a node's collateral for that offense;}{a mechanism that
+holds the node registered with that collateral out of service (a DOS state) for that offense,
+without slashing or forfeiting the collateral itself;} and, via the monthly
 geolocation-baseline pull request, reclassify which organisations or regions count as residential
 versus hosting for placement fault-domain counting and enforcement purposes
 \srcdoc{fluxos-network-policy/README.md:320-326,99-172}. This is, by the component's own

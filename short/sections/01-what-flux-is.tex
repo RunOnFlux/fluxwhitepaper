@@ -14,7 +14,8 @@ applications}.
 What makes a machine a node is not an agreement with anyone. It is a lock. An operator locks a
 fixed amount of \flux{} as collateral, runs the node software, and from then on the chain itself
 decides whether that machine is eligible to host and to be paid. Leave, and the collateral unlocks.
-Misbehave in ways the chain can see, and it does not.
+\rev{S02}{Misbehave in ways the chain can see, and it does not.}{Misbehave in ways the chain can see, and the node drops out of the eligible set and stops being paid;
+the collateral itself is never slashed or forfeited.}
 
 Three tiers, three collateral sizes, three hardware floors:
 
@@ -50,13 +51,15 @@ collateral at stake}, which is exactly the thing a cloud needs its machines to b
 
 \subsection{What actually runs on it}
 
-Applications are containers, described by a specification the owner publishes to the chain and pays
-for by the block. Three-quarters of deployed applications (\num{873} of \num{1195}) are on the
+Applications are containers, \rev{S03}{described by a specification the owner publishes to the chain and pays
+for by the block.}{described by a specification the owner signs and broadcasts to the nodes, and pays
+for by the block in an on-chain transaction that carries the specification's hash.} Three-quarters of deployed applications (\num{873} of \num{1195}) are on the
 current specification version, and the mix is more general than a newcomer might guess: ordinary web
 services and content sites; blockchain infrastructure, including full nodes for other chains;
 and a substantial block of scientific-computing work --- \num{27} protein-folding and
-structural-biology deployments that between them hold roughly \SI{9}{\percent} of the fleet's
-committed CPU.
+\rev{S34}{structural-biology deployments that between them hold roughly \SI{9}{\percent} of the fleet's
+committed CPU.}{structural-biology deployments that between them hold roughly \SI{5}{\percent} of the fleet's
+CPU capacity.}
 
 That last point matters enough to come back to in \Cref{sec:short:whatfor}. For now: this is a
 running, general-purpose cloud, not a proposal for one.

@@ -12,10 +12,14 @@ a content-reporting quorum, application specification v9, a bonded attestation n
 post-quantum migration, and the machine-facing interfaces an autonomous tenant needs to provision,
 pay for and release capacity without a human. It also argues one positioning claim from the
 substrate rather than from intent: the interconnect requirement that centralises frontier-model
-inference does not apply to models that fit on a single device, so a dispersed fleet of
+inference does not apply to models that fit on a single device, \rev{R001}{so a dispersed fleet of
 collateralised commodity machines is a structurally appropriate home for small task-specialised
 models --- once accelerators can be subdivided, which is the one thing the current allocation
-model cannot do.
+model cannot do.}{so a dispersed fleet of
+collateralised commodity machines is a structurally appropriate home for small task-specialised
+models --- once accelerators can be subdivided and offered on it: the collateralised fleet has no
+accelerator allocation today, and the only one \Flux{} runs, \FluxEdge{}'s whole-device rental on
+separate, centrally managed machines, cannot subdivide a device.}
 
 The discipline that keeps the second half honest is that every undecided element is named rather
 than filled: each mechanism is given as state, transitions, invariants and failure handling, with
@@ -39,6 +43,7 @@ removal threshold, and no weighting or remedy in the design space raises that nu
 pools have been closed to new entrants by consensus since 2021 and hold \SI{0.0225}{\percent} of
 supply; they are to be retired rather than reopened, leaving \Flux{} settling transparently and
 treating payment privacy as an unsolved problem rather than a delivered feature. A header format chosen for consensus reasons forecloses light-client
-bridging. Of twenty-two mechanisms assessed, six are extensions of what exists, eleven are
-engineering, and four are open research problems
+bridging. Of twenty-two mechanisms assessed, \rev{R003}{six are extensions of what exists, eleven are
+engineering, and four are open research problems}{six are extensions of what exists, twelve are
+engineering, and four are open research problems}
 --- which the paper names rather than absorbs.

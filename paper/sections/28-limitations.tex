@@ -123,7 +123,7 @@ function as unbounded with a vanishing rate and states its tail explicitly
 name survives only as a module name with no work-submission, verification, or reward protocol — so §15
 describes the compute-rental marketplace as what it is and never invokes the term
 (\srcdoc{reconciliation record}); that GPUs are hot-attachable is unsupported by any code in the four
-GPU-adjacent repositories, so §15 states whole-device passthrough as the deployed mechanism and tags
+GPU-adjacent repositories, \rev{R206}{so §15 states whole-device passthrough as the deployed mechanism}{so §15 states whole-device passthrough on \FluxEdge{} as the deployed mechanism} and tags
 hot-attach \vision{} (\srcdoc{reconciliation record}); that shielded supply is fully publicly verifiable is
 weakened by turnstile enforcement being compiled in but disabled, so §20 states pool accounting as it
 is and names turnstile activation as the condition that would make the claim true
@@ -148,16 +148,19 @@ Each has already been argued in the section cited; they are collected here rathe
   $2^{40}$ chainwork contribution regardless of its difficulty target (§4). \shipped;
   \srccode{fluxd/\allowbreak{}src/\allowbreak{}pow.cpp}{284--290}.
 \item A 2-of-4 emergency key set can produce blocks with no time or stall-detection gating (§4).
-  The set is intended to move to 3-of-4 with fresh keys \planned, which changes the threshold and
-  not the property: the gating is absent at either size.
+  \rev{R247}{The set is intended to move to 3-of-4 with fresh keys \planned, which changes the threshold and
+  not the property: the gating is absent at either size.}{No change to the threshold is planned, and the threshold is not the property that matters: the
+  gating is absent at any size.}
   \shipped; \srccode{fluxd/\allowbreak{}src/\allowbreak{}emergencyblock.cpp}{183--191}.
 \item Placement is opportunistic self-selection with a 90-second broadcast collision wait, not
   deterministic scheduling (§9). \shipped; \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{54--65,77--787}.
 \item \texttt{fluxos-\allowbreak{}network-\allowbreak{}policy} is unsigned and takes fleet-wide effect within 7--13 hours,
   changeable without a required review step (§12). \shipped; \srccode{fluxos-network-policy/\allowbreak{}README.md}{30-32};
   \srccode{fluxos-network-policy/\allowbreak{}.github/\allowbreak{}CODEOWNERS}{1-15}.
-\item \texttt{api.\allowbreak{}runonflux.\allowbreak{}io} is the sole application-discovery source, with no on-chain or
-  peer-to-peer fallback (§12). \shipped; \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}flux/\allowbreak{}dataFetcher.js}{47-91}.
+\item \texttt{api.\allowbreak{}runonflux.\allowbreak{}io} is the \rev{R207}{sole application-discovery source, with no on-chain or
+  peer-to-peer fallback}{routing layer's (\FDM{}'s) sole application-discovery source, with no on-chain or
+  peer-to-peer fallback, although the nodes themselves replicate specifications and locations by
+  peer-to-peer gossip} (§12). \shipped; \srccode{flux-domain-manager/\allowbreak{}src/\allowbreak{}services/\allowbreak{}flux/\allowbreak{}dataFetcher.js}{47-91}.
 \item The shielded pool cannot be entered: transparent value has been blocked from joining it since
   height 835,554 (§20). \shipped; \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{1398--1408}.
 \item As specified, \PNR would create no marginal incentive to host, because payment reaches every
@@ -168,7 +171,7 @@ Each has already been argued in the section cited; they are collected here rathe
 \item A \Flux light client is not constructible on an external chain under the current header format,
   which forecloses light-client bridging (§22). \shipped, as a consequence of the header facts above;
   \srccode{fluxd/\allowbreak{}src/\allowbreak{}pow.cpp}{284--290}; \srcintent{mechanism specification}.
-\item GPU resource requests are silently stripped, rather than queued or rejected, when a host is
+\item \rev{R208}{GPU}{On \FluxEdge{}, GPU} resource requests are silently stripped, rather than queued or rejected, when a host is
   contended (§15). \shipped; established in §15.
 \item \texttt{Flux-Shared-DB} acknowledges a write before it has replicated (§13). \shipped;
   \srccode{Flux-Shared-DB/\allowbreak{}ClusterOperator/\allowbreak{}Operator.js}{1265-1338};
@@ -281,7 +284,7 @@ formerly listed are recorded in the sections that apply them.}
 \endhead
 \bottomrule
 \endfoot
-Emergency-block governance: the threshold moves to 3-of-4 with fresh keys, but whether the missing time or stall-detection gating is itself remedied
+\rev{R248}{Emergency-block governance: the threshold moves to 3-of-4 with fresh keys, but whether the missing time or stall-detection gating is itself remedied}{Emergency-block governance: the threshold stays at 2-of-4; whether the missing time or stall-detection gating is remedied}
 (time-lock, stall detection, retirement after \PoN stabilisation) & the author, explicitly & §4, §8, \S\ref{sec:migration} \\
 \addlinespace
 \PNR settlement: the four parameters still open after the author's confirmation of
@@ -324,7 +327,7 @@ audit-plus-operating-record shape (round 12) and the \num{10000000}\flux{} per-c
 Contract-held legacy balances on Ethereum and BSC: the set of LP, lending and bridge positions and
 their per-protocol resolution to beneficial holders, to be published before $\hsnap$; the treatment
 is settled \srcintent{design intake} and the enumeration is not measured in this
-corpus & Foundation and exchange partners & §22 \\
+corpus & \rev{R209}{Foundation}{the Flux team} and exchange partners & §22 \\
 \addlinespace
 Moderation category taxonomy: the enumeration of reportable categories, whose scope is ruled
 behavioural harm \srcintent{design intake} and whose members are undecided
@@ -334,8 +337,10 @@ behavioural harm \srcintent{design intake} and whose members are undecided
 
 \subsection{What the next revision must do}
 
-Some of this has closed on a schedule already stated elsewhere in this paper: the shielded pools'
-sunset height and the $\specv{9}$ enforcement height are both settled (§20, §10), the fork point is
+\rev{R210}{Some of this has closed on a schedule already stated elsewhere in this paper: the shielded pools'
+sunset height and the $\specv{9}$ enforcement height are both settled (§20, §10),}{Some of this has closed on a schedule already stated elsewhere in this paper: the shielded pools'
+sunset height is settled (§20), a $\specv{9}$ enforcement height was proposed although \specv{9}
+remains in development and has not activated (§10),} the fork point is
 bracketed from consensus evidence (§20), and the activation-date provenance gap is a bounded task
 — a corroborated explorer citation — rather than an open problem. Some of it
 is not expected to close by the next revision, and should not be presented as though it will: the four

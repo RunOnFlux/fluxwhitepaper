@@ -166,7 +166,8 @@ under \texttt{ZelBack/} and \texttt{tests/} for all three field names
 \srcbranch{MorningLightMountain713/\allowbreak{}flux}{feat/fluxos-v9}{(grep -rn "paymentMemo|referralCode|machineType" --include=*.js ZelBack tests)}.
 Those are exactly the fields \PNR (\S7), the referral program, and the VPS tier (\S11) are stated to
 depend on. The orchestration substrate of \specv{9} — placement, mesh identity, routing plumbing,
-persistent storage, pricing — is built and tested (\S\ref{sec:appspec-v9-scale}); the economic
+\rev{R057}{persistent storage, pricing — is built and tested (\S\ref{sec:appspec-v9-scale}); the economic}{persistent storage, pricing — is under active development with an extensive unit-test suite, on a
+contributor fork that has not been merged or shipped (\S\ref{sec:appspec-v9-scale}); the economic}
 fields the roadmap's dependency chain actually rests on are declared in a schema and nothing more.
 The dependency chain the roadmap draws between \specv{9} and \PNR, referrals and the VPS tier is
 real at the level of the schema; it currently terminates in fields no code reads. \S\ref{sec:feasibility} returns to
@@ -388,7 +389,7 @@ Root object, \texttt{additional\allowbreak{}Properties:\allowbreak{}false}, and 
 
 \subsection{Open parameters}
 
-\begin{remark}[\specv{9} timing: the quarter settled in round 11, the height in round 17]
+\begin{remark}[\specv{9} timing: \rev{R231}{the quarter settled in round 11, the height in round 17}{a planned quarter and a proposed height, neither yet reached}]
 \label{rem:v9-timing}
 \specv{9} is in development and is to be \textbf{activated in Q4~2026, with the migration of
 existing applications in the same quarter} \srcintent{design intake} (\planned).
@@ -403,7 +404,7 @@ implementation of the \texttt{paymentMemo}\slash\texttt{referralCode}\slash\text
 are declared but inert. At the \SI{30}{\second} target a Q4~2026 activation corresponds to roughly
 $\num{3000000}$--$\num{3260000}$, and the paper states that range as an implication of the stated
 quarter rather than as a number the team has given.
-\settlednote{$\hstar = \num{3050000}$ \srcintent{design intake},
+\rev{R058}{\settlednote{$\hstar = \num{3050000}$ \srcintent{design intake},
 approximately 2026-10-20 at the \SI{30}{\second} target --- inside the settled Q4~2026 window, about
 \num{45} days beyond the 2026-09-05 tip of \num{2921193}, and about \num{256} days before
 $\hpa = \num{3787502}$. That ordering is what \S\ref{sec:feasibility} requires: the \specv{9}
@@ -411,7 +412,14 @@ economic fields land, and are given roughly eight months to prove themselves, be
 referrals, the VPS tier and the provisioning API activate on top of them. The constraint of
 \Cref{rem:v9-timing} still binds and is now a scheduling obligation rather than an open question:
 the \texttt{paymentMemo}\slash\texttt{referralCode}\slash\texttt{machineType} implementation must be
-complete before this height, or the height activates a schema whose economic fields are inert.}
+complete before this height, or the height activates a schema whose economic fields are inert.}}{A target height of $\hstar = \num{3050000}$ (approximately 2026-10-20 at the \SI{30}{\second}
+target) was stated in design intake \srcintent{design intake}, but it was never configured in
+\FluxOS{}: \specv{9} is still in development, has not shipped and has not activated, and no
+enforcement height for it exists in the shipped configuration. The constraint of
+\Cref{rem:v9-timing} still binds: the
+\texttt{paymentMemo}\slash\texttt{referralCode}\slash\texttt{machineType} implementation must be
+complete before any enforcement height is set, or that height would activate a schema whose economic
+fields are inert.}
 \end{remark}
 
 \settlednote{\texttt{quorum\allowbreak{}Grant\allowbreak{}Activation\allowbreak{}Height} activates \emph{after} \specv{9}, once
@@ -422,7 +430,7 @@ unrelated failure modes, so binding them to one height would mean a fault in eit
 of both. The cost is a second upgrade event and a second announcement. The height is left unset
 because the trigger is an observed condition --- \specv{9} running stably --- and a height chosen
 today could only be a guess at when that condition will hold. Until it activates, the field remains
-what \S\ref{sec:one-platform} measures it as: read by production code, set only in integration-test
+\rev{R059}{what \S\ref{sec:one-platform} measures it as}{what \S\ref{sec:26-v9} records it as}: read by production code, set only in integration-test
 fixtures, and inert on mainnet.}
 
 %% Drain this section's float queue before the next begins.

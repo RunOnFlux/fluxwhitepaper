@@ -71,9 +71,12 @@ Stratus & 1,627 & 40,000 & 65,080,000 & 73.52\% \\
 total & 6,489 & --- & 88,514,500 & 100\% \\
 \bottomrule
 \end{tabular}
-\caption{Fleet census by tier, measured 2026-09-03 at chain height 2,917,115. Voting weight is
+\rev{R187}{\caption{Fleet census by tier, measured 2026-09-03 at chain height 2,917,115. Voting weight is
 collateral-weighted at one unit per 1,000 FLUX (88,514.5 weight units total).
-\srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}.}
+\srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}.}}{\caption{Fleet census by tier, measured 2026-09-03 at chain height 2,917,115. Voting weight under
+the planned moderation quorum of \S23 would be collateral-weighted at one unit per 1,000 FLUX
+(88,514.5 weight units total); no node voting exists today.
+\srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}.}}
 \label{tab:eval-fleet}
 \end{table}
 
@@ -125,8 +128,9 @@ over one rotation) and is cited there directly.
 \label{sec:eval-concentration}
 
 This is a derived quantity, computed from the fleet census
-\shipped \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}. Collateral-weighted
-voting power (one unit per 1,000 FLUX) is aggregated by two identity proxies present in the public
+\shipped \srcmeasured{api.runonflux.io/\allowbreak{}daemon/\allowbreak{}listzelnodes}{2026-09-03}. \rev{R188}{Collateral-weighted
+voting power (one unit per 1,000 FLUX) is aggregated}{Collateral-weighted
+voting power (one unit per 1,000 FLUX, the weight the planned moderation quorum of \S23 would use) is aggregated} by two identity proxies present in the public
 record: \texttt{payment\_address}, where a node's rewards are sent, and \texttt{pubkey}, the node
 key. Neither is proof of common ownership — one operator can use many addresses, and a shared
 custodian can serve many operators — so \textbf{every figure in this subsection is a lower bound on
@@ -203,8 +207,10 @@ data underlying \texttt{paper/\allowbreak{}data/\allowbreak{}concentration\_paym
 This is a measured quantity, \shipped \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}.
 The endpoint returns \textbf{1,195} application specification records, comprising 1,371 components
 (compose entries) and a total of \textbf{7,486} requested instances across all applications.
-Instances per application: median 2, mean 6.26, maximum 100, minimum 0; 439 applications (36.7\%)
-sit at the platform's 3-instance minimum. Table~\ref{tab:eval-appspec} gives the specification-version
+Instances per application: median 2, mean 6.26, maximum 100, minimum 0; \rev{R189}{439 applications (36.7\%)
+sit at the platform's 3-instance minimum.}{439 applications (36.7\%)
+sit at 3 instances, the minimum the endpoint reports (the validator's floor is 1 for \specv{8}
+applications, \Cref{tab:fluxos}).} Table~\ref{tab:eval-appspec} gives the specification-version
 distribution and Table~\ref{tab:eval-registry} the container-registry distribution.
 
 \begin{table}[H]
@@ -304,10 +310,13 @@ $\redmax = 20$ reductions (\srccode{flux-roadmap/\allowbreak{}supply/\allowbreak
 \S\ref{sec:eval-threats}), the block subsidy is fixed at 1.70207313 FLUX, and cumulative supply
 grows without bound at a constant \textbf{1,789,219.274256 FLUX per year, forever}
 (\srccode{flux-roadmap/\allowbreak{}supply/\allowbreak{}emission\_model.py}{514--546}). \textbf{There is no terminal supply.}
-Supply at the end of PON year 20 (height 24,095,199, the last block before the flat-rate regime
+\rev{R245}{Supply at the end of PON year 20 (height 24,095,199, the last block before the flat-rate regime
 begins) is 548,043,625.860464 FLUX; this is not a cap, only the point at which the annual emission
-\emph{rate} becomes constant. The currently-issued 429,466,823.9700 FLUX is 78.36\% of that
-year-20-onset level — a proxy for "how far along" the schedule is, stated explicitly as a proxy
+\emph{rate} becomes constant.}{Supply one year into the flat-rate tail (height 24,095,199, the end of the emission model's
+zero-indexed ``PON year 20'') is 548,043,625.860464 FLUX; this is not a cap, and the annual emission
+\emph{rate} has been constant since height 23,044,000.} The currently-issued 429,466,823.9700 FLUX is \rev{R246}{78.36\% of that
+year-20-onset level}{78.36\% of that
+level} — a proxy for "how far along" the schedule is, stated explicitly as a proxy
 rather than a fraction of a terminal supply, because no terminal supply exists to be a fraction of.
 \texttt{MAX\_MONEY} (440,000,000 FLUX) is crossed by cumulative issuance at height 3,730,295
 (approximately 2027-06-11); this is not a consensus failure, since \texttt{MAX\_MONEY} bounds a

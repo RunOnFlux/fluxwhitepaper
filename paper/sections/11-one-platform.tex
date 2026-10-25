@@ -3,11 +3,24 @@
 
 The roadmap names Q4 2026 the quarter in which ``the platform becomes one product''
 \srcroadmap{flux-roadmap-public.md:41}. Read literally, that is a claim about two products merging
-their sign-up flows. Read structurally, it is a claim about two runtimes — one that places Docker
+their sign-up flows. \rev{R060}{Read structurally, it is a claim about two runtimes — one that places Docker
 containers by gossip and self-selection, one that rents Kubernetes-scheduled compute by the second
 — being asked to speak one protocol to the fleet they both run on. This section takes the second
 reading and argues it on its own terms: today there are two products, two orchestration models, and
-one network of collateralised machines underneath both. The interesting question is not whether the
+one network of collateralised machines underneath both.}{Read structurally, it is a claim about two runtimes — one that places Docker
+containers by gossip and self-selection, one that rents Kubernetes-scheduled compute by the hour
+(per-second billing is planned, \S\ref{sec:agent-native}) — being asked, eventually, to speak one
+protocol to one fleet. This section takes the second reading and argues it on its own terms. Today
+there are two separate products, two orchestration models and two separate sets of machines:
+\FluxCloud applications run on collateralised \FluxNode s orchestrated peer-to-peer by \FluxOS, while
+\FluxEdge is a centralized service that rents machines which lock no \flux collateral, are not
+\FluxNode s and are not part of the \FluxNode network. The two share no machines, runtime or
+orchestration. None of the convergence has shipped (\planned): the near-term plan is one \FluxCloud
+platform with one interface offering both decentralized \FluxCloud compute and \FluxEdge GPU compute,
+while the two systems behind it stay separate,
+with GPU rentals still served by \FluxEdge's centralized backend, and that interface is in development;
+merging the two systems themselves comes after that, and how is not yet worked out; the
+long-term plan is one decentralized network running all kinds of applications.} The interesting question is not whether the
 two products get one web front end; it is whether a single runtime can advertise what a node can do
 and let placement decide what runs where. The paper's claim is that convergence, properly stated, is
 an architectural proposition about a capability-typed provider runtime, not a UI decision — and that
@@ -50,7 +63,7 @@ API-driven Kubernetes rental — not two skins on one placement engine. That dif
 convergence is an architectural claim rather than a rebrand: unifying the interface a tenant sees does
 not by itself unify how a workload gets a machine.
 
-The two stacks are already physically coupled, though: \FluxEdge's own contractor-authored
+\rev{R061}{The two stacks are already physically coupled, though: \FluxEdge's own contractor-authored
 GitOps repository packages \FluxAI's inference models (Llama~3.1, DeepSeek, FluxOne/Flux.1-dev) as
 Kubernetes manifests deployed through an Argo workflow whose node-selection parameters are
 documented as injected ``dynamically'' by \FluxEdge at submission time (\shipped,
@@ -61,7 +74,17 @@ source, \srcinferred\ for that specific link). So the self-hosting relationship 
 at when it says the platform becomes one product is, in one narrow and already-shipped sense, real:
 Flux's own AI product already depends on \FluxEdge capacity. What is not established is that a
 tenant-facing workload can move between the two runtimes, or that either runtime knows the other's
-resource model.
+resource model.}{The two stacks share no machines, runtime or orchestration. \FluxAI is a separate product and an
+ordinary tenant (customer) of \FluxEdge: \FluxEdge's own contractor-authored GitOps repository
+packages \FluxAI's inference models (Llama~3.1, DeepSeek, FluxOne/Flux.1-dev) as Kubernetes manifests
+deployed through an Argo workflow whose node-selection parameters are documented as injected
+``dynamically'' by \FluxEdge at submission time (\shipped,
+\srccode{fluxai-fluxedge/\allowbreak{}custom-workflow-fluxone.yaml}{7-9,17-18}). \FluxAI sources its
+compute from \FluxEdge machines, including home-hosted ones, and from Vast.ai and other AI compute
+providers; it does not run on \FluxCloud or the \FluxNode network. That is a customer relationship
+with one of the two runtimes, not a coupling between them, and no part of the convergence the
+roadmap describes has shipped. Today no tenant-facing workload can move between the two runtimes,
+and neither runtime knows the other's resource model.}
 
 \subsection{``One provider runtime'', concretely}
 
@@ -227,8 +250,9 @@ external fork. The VPS tier the roadmap schedules for H1~2027 is stated to depen
 \srcroadmap{flux-roadmap-public.md:124-125}, and is itself gated behind the Q4~2026 operator-protection
 work \srcroadmap{flux-roadmap-public.md:125}. So the tier has a name in the schema and nothing behind
 it: no scheduling logic reads \texttt{machineType}, no node advertises which value it satisfies, and
-no enforcement height is yet configured in \FluxOS{} for the specification version that carries the field, although one is now decided
-(Section~10). Section~\ref{sec:feasibility} should carry this forward as one of the concrete, enumerable gaps between
+\rev{R062}{no enforcement height is yet configured in \FluxOS{} for the specification version that carries the field, although one is now decided
+(Section~10).}{no enforcement height is configured in \FluxOS{} for the specification version that carries the field, and \specv{9} has
+not activated: it is still in development (Section~10).} Section~\ref{sec:feasibility} should carry this forward as one of the concrete, enumerable gaps between
 the roadmap's dependency chain and what the code implements, rather than as a vague ``not yet
 finished.''
 
@@ -313,8 +337,9 @@ capability vocabulary — not the three-flag \texttt{capabilities} object and th
 grade and storage durability, published somewhere a second implementation could target without
 vendoring a private repository. Second, a placement algorithm — whether a revision of Section~9's
 spawn loop or a successor — that reads that vocabulary when choosing a node, rather than the current
-mechanism, which ignores every field convergence would depend on. Third, an enforcement height in the shipped configuration: v9 has
-none today, though Section~10 records the one the team has settled on, and neither the provider-runtime contract nor the application schema that
+mechanism, which ignores every field convergence would depend on. Third, an enforcement height in the shipped configuration: \rev{R063}{v9 has
+none today, though Section~10 records the one the team has settled on, and neither}{v9 has
+none today and has not activated (Section~10), and neither} the provider-runtime contract nor the application schema that
 carries \texttt{machineType} becomes binding on the network until one is set. Until all three exist,
 ``one platform'' describes an intent the roadmap has stated clearly and a runtime the code has not yet
 built.

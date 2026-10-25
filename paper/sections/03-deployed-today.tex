@@ -165,10 +165,16 @@ instances \shipped\ \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{
 Summed across all requested instances, the committed resource footprint specified by these
 applications is \textbf{8,972.0} vCPU-equivalents, \textbf{17,544,229}~MB of RAM (17,133.0~GiB),
 and \textbf{160,107}~GB of disk
-\shipped\ \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}. Instances
+\shipped\ \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}. \rev{R013}{Instances
 requested per application have a median of \textbf{2}, a mean of \textbf{6.26}, a maximum of
 \textbf{100}, and a minimum of \textbf{0}; \textbf{439} applications (36.7\%) sit exactly at the
-network-wide instance floor of 3
+network-wide instance floor of 3}{Instances
+requested per application have a median of \textbf{2}, a mean of \textbf{6.26}, a maximum of
+\textbf{100}, and a minimum of \textbf{0}; \textbf{439} applications (36.7\%) sit at 3 instances, the
+floor for specifications below \specv{8}, while \textbf{599} \specv{8} applications request one or two,
+which \specv{8} has allowed since block \num{2176519}. The minimum of 0 comes from two \specv{2}
+specifications that predate the \texttt{instances} field, which \FluxOS{} treats as 3 and the census
+counts as zero}
 \shipped\ \srcmeasured{api.runonflux.io/\allowbreak{}apps/\allowbreak{}globalappsspecifications}{2026-09-03}.
 
 These figures are \emph{requested} resources as declared in each application's specification, not
@@ -297,11 +303,12 @@ building a coordinated, reason-aware graceful-shutdown and upgrade pipeline in p
 unceremonious container kill, though at present only its signal-and-cleanup stages run in
 production and its drain and pre-stop execution stages are implemented but not yet wired to real
 events \inprogress\ \srccode{flux-shutdownd/\allowbreak{}crates/\allowbreak{}shutdownd/\allowbreak{}src/\allowbreak{}pipeline/\allowbreak{}state\_machine.rs}{3--7};
-and, operated centrally by the Foundation rather than per-node,
+\rev{R014}{and, operated centrally by the Foundation rather than per-node,}{and, operated centrally by InFlux rather than per-node,}
 \texttt{appsmonitor} tracks on-chain application expiry and sends renewal notifications \shipped\
 \srccode{appsmonitor/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appsSubscriptionRenewalMonitor.js}{112--368} (\S16),
-\texttt{fluxstorage} holds oversized environment-variable and command payloads that do not fit an
-on-chain specification \shipped\ \srccode{fluxstorage/\allowbreak{}src/\allowbreak{}routes.js}{17--67} (\S23), and
+\texttt{fluxstorage} holds \rev{R015}{oversized environment-variable and command payloads that do not fit an
+on-chain specification}{oversized environment-variable and command payloads that do not fit an
+application specification} \shipped\ \srccode{fluxstorage/\allowbreak{}src/\allowbreak{}routes.js}{17--67} (\S23), and
 \texttt{fluxos-\allowbreak{}release-\allowbreak{}api} serves the FluxOS/ArcaneOS upgrade bundles that nodes poll for
 \shipped\ \srccode{fluxos-release-api/\allowbreak{}src/\allowbreak{}flux\_release\_api/\allowbreak{}api.py}{176--229} (\S23).
 \FluxOS's own placement and lifecycle behaviour that these services

@@ -33,12 +33,13 @@ It would be easy, and wrong, to present \Flux{} as an AI network.
 What actually runs on it today, by census rather than by aspiration, is a general-purpose mix:
 ordinary web applications, blockchain infrastructure, content sites --- and \textbf{27 folding and
 Rosetta deployments} doing real protein-folding and structural-biology work, which alone account for
-roughly \SI{9}{\percent} of committed fleet CPU. Scientific simulation is not a use case \Flux{} is
+\rev{S31}{roughly \SI{9}{\percent} of committed fleet CPU.}{roughly \SI{5}{\percent} of the fleet's CPU capacity.} Scientific simulation is not a use case \Flux{} is
 hoping to attract. It is a use case that is already there, paying, at scale.
 
 That matters more than it sounds, and the reason is economic rather than technical. A network that
-serves only inference is idle whenever inference is idle. A network that serves web hosting,
-scientific simulation, blockchain infrastructure and model inference --- from the same collateral,
+serves only inference is idle whenever inference is idle. \rev{S17}{A network that serves web hosting,
+scientific simulation, blockchain infrastructure and model inference --- from the same collateral,}{A network that serves web hosting,
+scientific simulation, blockchain infrastructure and CPU-served model inference on \FluxCloud{} --- from the same collateral,}
 the same placement, the same payment path --- has a demand base whose parts do not move together.
 The generality is the resilience.
 
@@ -47,10 +48,17 @@ which AI is one arriving workload class among several that are already running.
 
 \subsection{Cloud and edge, converging}
 
-\FluxCloud{} and \FluxEdge{} are to merge into a single product, offering accelerated compute through
+\rev{S18}{\FluxCloud{} and \FluxEdge{} are to merge into a single product, offering accelerated compute through
 one interface. A tenant should describe the work and let placement decide where it runs --- a
 container on a commodity node, or a GPU on a datacenter machine --- without having to know which
-product they are in. That convergence is planned, not shipped.
+product they are in. That convergence is planned, not shipped.}{Today \FluxCloud{} and \FluxEdge{} are two separate products. \FluxCloud{} applications run on the
+collateralised nodes described above; \FluxEdge{} is a centralized GPU service running on rented
+machines that lock no collateral and are not \FluxNode{}s. They share no machines, runtime or
+orchestration. The plan is one platform with one interface offering both --- decentralized compute
+and GPU compute, the GPU rentals still served by \FluxEdge{}'s centralized backend and the two systems
+behind it still separate --- and, after that, a merge of the systems themselves, whose design is
+not yet worked out. The long-term plan is one decentralized network that runs every kind of
+workload. None of this has shipped.}
 
 \limitnote{Convergence is at present an architectural intention with thin implementation behind it.
 The only concrete artefact is a small, new capability specification, and the placement code that
@@ -133,16 +141,32 @@ On commodity dual-channel hardware a four-billion-parameter quantised model runs
 tenant-available memory the capacity, at full utilisation, is on the order of tens of thousands of
 concurrent small-model instances.
 
-\limitnote{Those rates are a memory-bandwidth model --- achievable bandwidth divided by bytes read
+\rev{S19}{\limitnote{Those rates are a memory-bandwidth model --- achievable bandwidth divided by bytes read
 per token --- and have \emph{not} been measured on \Flux{} hardware. A benchmark on each tier's
 reference machines is scheduled for Q4~2026, and until it lands these are estimates rather than
 results. The capacity figures are upper bounds at full utilisation, not availability: roughly
 \SI{9}{\percent} of fleet CPU is already committed to the scientific workloads above. And the GPU
 path has a harder limit --- accelerators are attached whole, with no subdivision, so a tenant wanting
 a fraction of a card cannot have one, and a GPU request under contention is silently dropped rather
-than refused.}
+than refused.}}{\limitnote{Those rates are a memory-bandwidth model --- achievable bandwidth divided by bytes read
+per token --- and have \emph{not} been measured on \Flux{} hardware. A benchmark on each tier's
+reference machines is scheduled for Q4~2026, and until it lands these are estimates rather than
+results. The capacity figures are upper bounds at full utilisation, not availability: roughly
+\SI{5}{\percent} of fleet CPU is already committed to the scientific workloads above. And the GPU
+path --- which today exists only on \FluxEdge{}'s separate, centrally managed machines, since the
+collateralised nodes have no GPU allocation --- has a harder limit: accelerators are attached whole,
+with no subdivision, so a tenant wanting
+a fraction of a card cannot have one, and a GPU request under contention is silently dropped rather
+than refused.}}
 
-\subsection{What an autonomous tenant can and cannot do}
+\rev{S35}{}{Since publication the team has started serving its own models this way.
+\texttt{llm.\allowbreak{}runonflux.\allowbreak{}com} routes requests to CPU-only \FluxCloud{} applications on
+\FluxNodes{}, among them \texttt{fluxai:tiny}, a model fine-tuned from IBM's Granite for deployment
+and documentation help. It answers the \FluxCloud{} deployment assistant, which prefills a
+specification that the user signs and pays for, and the documentation assistant on \Flux{} websites,
+at about 18 tokens per second on a 12-vCPU instance.
+
+}\subsection{What an autonomous tenant can and cannot do}
 
 The agent story is the most likely place for a reader to assume more than is true, so it is worth
 closing on precisely.

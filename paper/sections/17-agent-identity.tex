@@ -216,8 +216,9 @@ system model of \S2 and not re-argued here.
   \item[(A3)] \emph{Chain state.} The \Flux\ L1 is a Zcash-derived UTXO chain with no covenant
   opcodes, no transaction introspection, and no account abstraction. Reorganisations are bounded by
   \texttt{MAX\_REORG\_LENGTH} $=40$ blocks
-  \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{8983--8988}, with the historical override to $5{,}000$ over heights
-  $[2{,}020{,}000,\,2{,}025{,}000]$ noted in \S5.
+  \srccode{fluxd/\allowbreak{}src/\allowbreak{}main.cpp}{8983--8988}, \rev{R111}{with the historical override to $5{,}000$ over heights
+  $[2{,}020{,}000,\,2{,}025{,}000]$ noted in \S5.}{with the historical override to $5{,}000$ over heights
+  $[2{,}020{,}000,\,2{,}025{,}000]$ noted in \S\ref{sec:consensus-cost}.}
   \item[(A4)] \emph{No escrow.} $sk_\agent$ is generated on the agent's host and is never
   transmitted. Any variant in which a service can sign for $\agent$ is a custody design and is
   labelled one.
@@ -491,7 +492,7 @@ recommendation.
   $\budget$ real, it needs no third party, and it makes $b_{\mathrm{rate}}$ and $b_{\mathrm{total}}$
   the enforceable objects \cref{prop:budget-balance} says they cannot otherwise be. \emph{Cost:} a
   consensus change and new consensus state, on a chain that has just completed one major transition
-  --- not cleanly (\S5) --- and has three further changes queued (\S8).
+  \rev{R112}{--- not cleanly (\S5) --- and has three further changes queued (\S8).}{--- not cleanly (\S\ref{sec:consensus-cost}) --- and has three further changes queued (\S8).}
 \end{enumerate}
 
 The paper's position is: \cref{con:allowance} is the deployable baseline; (c) is the principled

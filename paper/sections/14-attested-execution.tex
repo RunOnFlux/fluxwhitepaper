@@ -293,8 +293,8 @@ accept the following, none of which \fluxsas measures or attests to:
   \item \textbf{The hash allow-list service.} \texttt{stats.\allowbreak{}runonflux.\allowbreak{}io} and
   \texttt{arcanehashes.\allowbreak{}app.\allowbreak{}runonflux.\allowbreak{}io} decide what a running node considers a known-good image,
   fail open on outage, and are both Flux-operated.
-  \item \textbf{The absence of a hypervisor boundary between tenants}, stated at the head of this
-  section and repeated here for completeness. Application workloads run as
+  \item \rev{R069}{\textbf{The absence of a hypervisor boundary between tenants}, stated at the head of this
+  section and repeated here for completeness.}{\textbf{The absence of a hypervisor boundary between tenants}.} Application workloads run as
   containers directly on the \ArcaneOS host — the filesystem ships a
   \texttt{docker-to-podman-migration.\allowbreak{}service} unit, consistent with containers rather than
   per-tenant virtual machines as the isolation primitive on production nodes — and no evidence in
@@ -313,9 +313,10 @@ where it should not be; an authorization table that admits one node-local caller
 rather than to what it needs; a policy poller that fails open where its counterpart fails frozen;
 account checks that do not reach every session type; release bypasses with no publication-time
 signature gate; and a version-pairing question between two node-local components. None of these is
-a research problem, and none changes any property this paper asserts. Each is a change of bounded
+a research problem, and none changes any property this paper asserts. \rev{R070}{Each is a change of bounded
 size to code that already exists, and the disposition is to close them before publication rather
-than to publish them and close them afterwards \srcintent{design intake}.
+than to publish them and close them afterwards \srcintent{design intake}.}{Each is a change of bounded
+size to code that already exists, and the disposition is to close them \srcintent{design intake}.}
 
 \textbf{Why this class is stated without file and line, uniquely in this paper.} Everything else
 this paper cites, it cites precisely --- that discipline is the point of the document. The
@@ -336,7 +337,7 @@ does not have a patch. An attestation key derived from values every copy of the 
 cannot be made machine-bound by fixing a bug; it requires binding a key to a hardware root and
 exposing a verifier, which is the work \S\ref{sec:bonded-network}'s Requirement~0 describes and
 which the pcrlock finding in \S\ref{sec:boot-chain} makes considerably nearer than a first reading
-of this section suggests. This is the item that should still be open when the paper ships, and it
+of this section suggests. \rev{R232}{This is the item that should still be open when the paper ships,}{This is the item that stays open even once the Class A items close,} and it
 is the one the rest of the paper's attestation dependencies actually rest on. It is stated in full,
 without redaction, because it is a property rather than a procedure --- no derivation input, salt,
 domain value or extraction path appears anywhere in this section, and none is needed to state it
@@ -416,8 +417,9 @@ What would have to change, stated once so that the cost of reversing the decisio
 than vague: the bond would have to be a registered output of the \FluxNode{} family rather than a
 plain UTXO, held under a consensus lock; forfeiture would be consensus \emph{refusing the spend
 permanently}, which is a burn and is the only forfeiture primitive expressible without an
-adjudicating quorum; and the challenger's reward would have to be paid from the coinbase, which
-\S\ref{sec:pnr} already demonstrates is a workable route for value that consensus decides to move.
+adjudicating quorum; and the challenger's reward would have to be paid from the coinbase, \rev{R071}{which
+\S\ref{sec:pnr} already demonstrates is a workable route for value that consensus decides to move.}{which
+\S\ref{sec:pnr} proposes as the route for value that consensus decides to move.}
 That is a new transaction type, new chain-derived state and a network upgrade --- the same class of
 change as \PNR{} itself. It is not adopted here.
 

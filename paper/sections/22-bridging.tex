@@ -1,8 +1,9 @@
 \section{Bounded, publicly verifiable bridging --- replacing \Fusion, chain consolidation, and why not atomic swaps}
 \label{sec:bridging}\label{sec:bridge}
 
-A bridge lets FLUX that lives on the \Flux chain be used on Ethereum or BNB Smart Chain. Today that
-works because a single server holds one private key per chain and sends tokens out of a hot wallet
+A bridge lets FLUX that lives on the \Flux chain be used on Ethereum or BNB Smart Chain. \rev{R135}{Today that
+works because a single server holds one private key per chain and sends tokens out of a hot wallet}{Today that
+works because a single server holds single-signature private keys for each chain (up to three per chain, 32 in all) and sends tokens out of a hot wallet}
 when it observes an inbound payment. The replacement specified in this section locks FLUX in a
 publicly visible multi-key reserve on the \Flux L1 and lets one contract per foreign chain issue
 exactly that much FLUX there --- never more, because the contract itself refuses. Anyone with a
@@ -94,7 +95,7 @@ $(n_{\mathrm{att}}, k_{\mathrm{att}})$, $\beta_{\mathrm{att}}$ & $\mathbb{Z}_{>0
 $T_{\mathrm{att}}$, $T_{\mathrm{silence}}$, $T_{\mathrm{react}}$ & time & attestation cadence, silence timeout, reaction time \\
 $\Lambda_c$, $\Lambda$ & $\mathbb{Z}_{\ge 0}$ \sat & legacy circulating supply on $c$ at the snapshot; $\Lambda = \sum_c \Lambda_c$ \\
 $R_0$ & $\mathbb{Z}_{\ge 0}$ \sat & initial L1 backing locked before migration opens \\
-$\mathcal{I}_c$ & --- & issuer-held (Foundation) address set on $c$, published before $\hsnap$; its balances are excluded from $\Lambda_c$ \\
+$\mathcal{I}_c$ & --- & \rev{R136}{issuer-held (Foundation) address set on $c$}{issuer-held (team) address set on $c$}, published before $\hsnap$; its balances are excluded from $\Lambda_c$ \\
 $\hsnap$, $\hopen$, $\hclose$ & height & migration snapshot height; the opening of the one-directional window (retiring chains, March 2027) and its close at shutdown (August 2027)\\
 $\ell$, $\mathsf{used}_c$ & --- & lock identifier $(\mathrm{txid}, \mathrm{vout})$; consumed lock set on $c$ \\
 $n_b$, $B_c$ & $\mathbb{Z}_{\ge 0}$ & a burn nonce; the next burn nonce on $c$ \\
@@ -525,7 +526,7 @@ cannot exceed issued main-chain supply, which was \num{429466823.97}\flux at hei
 \num{560000000}\flux --- global, and enforced by \Cref{thm:reserve-dominance} rather than by a
 contract constant (\Cref{rem:global-cap}) --- therefore cannot bind on any honest path for as long as
 issued supply is below it. On the deployed schedule that is the early 2050s: issued supply reaches \num{548043625.86}\flux
-at the end of \PoN year 20 (height \num{24095199}, approximately 2046-10) and then grows at a
+\rev{R241}{at the end of \PoN year 20 (height \num{24095199}, approximately 2046-10) and then grows at a}{one year into the fixed-subsidy tail that begins at height \num{23044000} (height \num{24095199}, approximately 2046-10) and then grows at a}
 constant \num{1789219.274256}\flux per year, so \num{560000000}\flux is first issued about
 $\num{11956374}/\num{1789219} \approx 6.7$ years later, in 2053 \srcinferred
 (\Cref{sec:app-emission}). Only the per-chain constant $\bcap{c}$ binds on the unbacked path, and it
@@ -596,7 +597,7 @@ and every bound below is unchanged by it because each instalment passes the same
 2-of-4 emergency-block path \srccode{fluxd/\allowbreak{}src/\allowbreak{}emergencyblock.cpp}{183--191}, which bypasses
 eligibility but not the reorg limit. Trade-off: user-visible mint latency against nothing;
 40 is both the floor and the chosen value: it is exactly the consensus reorg bound, and exceeding it buys nothing.}
-\settlednote{$v_{\min} = \num{10}\flux$, $\varphi_{\mathrm{mint}} = 0$, $\varphi_{\mathrm{rel}} =$ the batch's gas share, recipient Foundation operations (\Cref{tab:22-recommended}). $v_{\min}$ and the fee schedule $(\varphi_{\mathrm{mint}}, \varphi_{\mathrm{rel}})$, plus
+\settlednote{$v_{\min} = \num{10}\flux$, $\varphi_{\mathrm{mint}} = 0$, $\varphi_{\mathrm{rel}} =$ the batch's gas share, \rev{R137}{recipient Foundation operations (\Cref{tab:22-recommended})}{recipient team operations (\Cref{tab:22-recommended})}. $v_{\min}$ and the fee schedule $(\varphi_{\mathrm{mint}}, \varphi_{\mathrm{rel}})$, plus
 the fee recipient. Domain: $v_{\min} > $ L1 dust threshold $+\ \varphi_{\mathrm{rel}}$. Trade-off:
 griefing resistance and release-batch size against small-holder access. Constraint: fees must not
 scale a signer's income with volume that signer can itself generate.}
@@ -1637,8 +1638,9 @@ mistake a reader could make here. \textbf{Only Ethereum and BSC are snapshot-and
 balances are captured at $\hsnap$ and reissued $1{:}1$ into the new contracts, coordinated
 with exchange partners and ecosystem integrators, and their holders take no action at all
 \srcintent{design intake}. \textbf{Every other chain redeems through the
-incumbent bridge} to the main chain during the redemption window, from $\hopen$ to $\hclose$, with unclaimed balances passing to
-the Foundation at close.
+incumbent bridge} to the main chain during the redemption window, from $\hopen$ to $\hclose$, \rev{R138}{with unclaimed balances passing to
+the Foundation at close.}{with unclaimed balances passing to
+the team at close.}
 
 \textbf{Solana sits in both descriptions and belongs to the second.} It is a surviving chain in the
 sense that a new Solana deployment follows the launch pair --- but its \emph{legacy} holders are not
@@ -1822,8 +1824,9 @@ parameters this subsection previously carried as open. \planned
       migrating \emph{to} the main chain, and mining entitlement stays claimable on the chain or on
       the main chain until shutdown; nothing can be swapped \emph{into} a retiring chain
       \srcintent{design intake}; \srcintent{08-answers-round-2.md, round 35}.
-\item \textbf{Unclaimed balances.} At window close, \textbf{unclaimed balances pass to the Flux
-      Foundation to fund development.}
+\item \textbf{Unclaimed balances.} At window close, \rev{R139}{\textbf{unclaimed balances pass to the Flux
+      Foundation to fund development.}}{\textbf{unclaimed balances pass to the team
+      to fund development.}}
 \end{enumerate}
 
 \noindent The fourth term is stated here in those words because it is a transfer from non-acting
@@ -1936,17 +1939,19 @@ roadmap's own precedent for a parallel-asset change is announcement at least \SI
 \srcroadmap{flux-roadmap-public.md:159}, which is \num{259200} L1 blocks \srcinferred;
 $\hsnap$ would be published at announcement, i.e.\ no later than
 $\hpa - \num{259200}$, together with each chain's issuer-held set $\mathcal{I}_c$ and the per-chain
-dead addresses to which the Foundation transfers its own holdings, since both are needed before
+\rev{R140}{dead addresses to which the Foundation transfers its own holdings}{dead addresses to which the team transfers its own holdings}, since both are needed before
 $\hsnap$ \srcintent{design intake}. Holders would be reached through per-asset redemption statistics
 published from the snapshot, relabelled explorer token pages, exchange notices, wallet banners, and
 the incumbent \Fusion endpoints answering with migration instructions for the whole window. The
-single most important public act is that the Foundation immobilises its own
-legacy holdings first, by transferring them to a published per-chain dead address
+\rev{R141}{single most important public act is that the Foundation immobilises its own
+legacy holdings first}{single most important public act is that the team immobilises its own
+legacy holdings first}, by transferring them to a published per-chain dead address
 \srcintent{design intake} --- the bulk of five EVM contracts' \num{440000000}-unit pre-mint each,
 \num{2.2e9} units in total \srcinferred --- because after it, a legacy contract's remaining
 \texttt{totalSupply} is public holdings only, the two disagreeing reserve-wallet lists stop
-mattering, and the residual that passes to the Foundation at close is a number about third-party
-holders rather than a number dominated by the Foundation's own unmoved supply.
+mattering, and \rev{R142}{the residual that passes to the Foundation at close is a number about third-party
+holders rather than a number dominated by the Foundation's own unmoved supply.}{the residual that passes to the team at close is a number about third-party
+holders rather than a number dominated by the team's own unmoved supply.}
 \settlednote{Zero, gasless via \texttt{permit} (\Cref{tab:22-recommended}). Migration fee (zero recommended --- holders should not pay for a consolidation they did
 not ask for), and whether \texttt{permit}/gasless migration is offered.}
 \proposednote{Direct notice by zero-value calldata to holder addresses above a threshold
@@ -1960,8 +1965,9 @@ absent from it. The public roadmap names Base a survivor twice
 \srcroadmap{flux-roadmap-public.md:97,131}; the settled decision recorded for this paper names ETH
 and BSC \srcintent{design intake}. Base is not BSC --- it is an Ethereum L2, and they differ
 in finality, bridging architecture, audit surface and holder base. Three statements follow, and the
-paper makes all three. First, under the settled decision Base is retired at $\hpa$ and its holders
-redeem through the route of the preceding paragraphs. Second, \textbf{the decision is final and no later
+paper makes all three. \rev{R143}{First, under the settled decision Base is retired at $\hpa$ and its holders
+redeem}{First, under the settled decision Base is retired --- one-directional from $\hopen$, shut down at $\hclose$ --- and its holders
+redeem} through the route of the preceding paragraphs. Second, \textbf{the decision is final and no later
 re-addition is contemplated} \srcintent{design intake} --- this closes a question
 earlier drafts left open. The engineering observation that made it worth leaving open remains true
 and is now only an observation: because the canonical contract is one EVM codebase, a later Base
@@ -1998,7 +2004,7 @@ hold the new address. \planned
       which of its addresses will be credited and must have decided how the credit reaches its users;
       contract-held balances are the open item of the note above. Transfers enable only when the
       carry is complete.
-\item \textbf{Foundation immobilises its legacy reserves} on the retiring chains, by transfer to
+\item \rev{R144}{\textbf{Foundation immobilises its legacy reserves}}{\textbf{The team immobilises its legacy reserves}} on the retiring chains, by transfer to
       the published per-chain dead addresses \srcintent{design intake}.
 \item \textbf{Open} holder-initiated migration on the retiring assets and public lock-to-mint on ETH
       and BSC.
@@ -2006,8 +2012,8 @@ hold the new address. \planned
       latter already roadmap-gated --- then steps 4--7 for Solana.
 \item \textbf{Close} the window at $\hclose = \num{3880000}$ (2027-08-02); the
       migrator dies; the residual backing --- against the \num{6226900.80}\flux measured exposure of
-      \Cref{tab:migration-exposure}, not against the ten-chain total --- passes to the Flux
-      Foundation.
+      \Cref{tab:migration-exposure}, not against the ten-chain total --- \rev{R145}{passes to the Flux
+      Foundation.}{passes to the team.}
 \end{enumerate}
 
 \noindent Steps 3--7 are staged \srcintent{08-answers-round-2.md, round 34}: the Ethereum and BNB Chain
@@ -2027,7 +2033,7 @@ does not control.}
 
 \paragraph{The long tail.} Legacy contracts cannot be paused or destroyed: a plain ERC-20 has no
 such function \srccode{flux-eth-bsc/\allowbreak{}flux.sol}{6--13}. They remain transferable and tradeable forever.
-After the Foundation immobilises its reserves and the window closes, the remaining legacy supply is
+\rev{R146}{After the Foundation immobilises its reserves}{After the team immobilises its reserves} and the window closes, the remaining legacy supply is
 \emph{declared} worthless but is still a token someone may sell to someone who has not read the
 notice. The adversary's gain in that case is bounded by the buyer's capital and touches no bridge
 state; the mitigation is the public record --- immobilised balances, the closed window, and per-chain
@@ -2060,12 +2066,13 @@ $v_{\min}$ & \textbf{\num{10}\flux} & exceeds dust $+\ \varphi_{\mathrm{rel}}$ w
 batch entry worth its gas share \\
 $\varphi_{\mathrm{mint}}$ & \textbf{0} & do not tax entry \\
 $\varphi_{\mathrm{rel}}$ & \textbf{actual gas share of the batch} & cost recovery, not revenue \\
-fee recipient & \textbf{Foundation operations} & not $\pool$: bridge fees must not pay node rewards \\
+fee recipient & \rev{R147}{\textbf{Foundation operations}}{\textbf{team operations}} & not $\pool$: bridge fees must not pay node rewards \\
 $T_{\mathrm{rel}}$ release cadence & \textbf{\SI{4}{\hour}} & 6 batches/day; bounded exit latency,
 modest signer load \\
-$\mathsf{R}_{\mathrm{hot}}$ (window) & \textbf{\num{500000}\flux} & $\approx$ 14 days at the measured
-mean; covers front-loading \\
-cold$\to$hot top-up & \textbf{when hot $<\ $\num{200000}\flux} & $\approx$ 6 days' cover at trigger \\
+$\mathsf{R}_{\mathrm{hot}}$ (window) & \textbf{\num{500000}\flux} & \rev{R148}{$\approx$ 14 days at the measured
+mean}{$\approx$ 12 days at the measured
+mean}; covers front-loading \\
+cold$\to$hot top-up & \textbf{when hot $<\ $\num{200000}\flux} & \rev{R149}{$\approx$ 6 days' cover at trigger}{$\approx$ 5 days' cover at trigger} \\
 $\Delta_g$ pause guard & \textbf{\SI{48}{\hour}} & reuses the agreed upgrade timelock; one
 operational constant \\
 MintAuth transport & \textbf{Flux feed $+$ mandatory IPFS mirror} & IPFS is existing project
@@ -2133,11 +2140,15 @@ last clause matters more than it looks: a rotation procedure that has never been
 not a control, and the first time it is attempted should not be during an incident.
 
 \paragraph{What is left open, and why.} $(n_{\mathrm{att}}, k_{\mathrm{att}})$ and
-$\beta_{\mathrm{att}}$ cannot be fixed independently of the slashing construction, because
+\rev{R150}{$\beta_{\mathrm{att}}$ cannot be fixed independently of the slashing construction, because
 \eqref{eq:bond-condition} is vacuous if no bond can actually be forfeited: a bond that cannot be
 slashed is a deposit, and sizing it is a decision about optics rather than security. The slashing
 construction is Research-class (\S\ref{sec:feasibility}), so both remain open and are not given
-recommended values here. Assigning a number to $\beta_{\mathrm{att}}$ before that is settled would
+recommended values here.}{$\beta_{\mathrm{att}}$ have no recommended values. Nothing is ever slashed (\Cref{op:slashing}), so
+\eqref{eq:bond-condition} is withdrawn: a bond that cannot be
+slashed is a deposit, and sizing it is a decision about optics rather than security. What remains
+open is the size and threshold of a named, accountability-based attester set, which nobody has yet
+chosen.} Assigning a number to $\beta_{\mathrm{att}}$ before that is settled would
 be exactly the kind of plausible-looking fill this paper exists to avoid.
 
 \subsection{What cannot be achieved}
@@ -2154,8 +2165,9 @@ outstanding claim and \emph{no cryptographic recourse}. At the decided $(n_R, k_
 number is \textbf{two}: any two of the four co-founders, by refusal, absence, incapacity or legal
 order, stop every redemption to the L1 indefinitely. One refuser does not, so D1 survives against a
 single uncooperative party --- but by a margin of one key, and no longer for the reason the earlier
-form of this argument gave. That reason was that the Foundation holds at most $n_R - k_R$ keys and so
-cannot block alone; it is not available now, because the Foundation's founders hold all four
+form of this argument gave. \rev{R151}{That reason was that the Foundation holds at most $n_R - k_R$ keys and so
+cannot block alone; it is not available now, because the Foundation's founders hold all four}{That reason was that no single organisation holds more than $n_R - k_R$ keys and so
+none can block alone; it is not available now, because the four co-founders hold all four}
 (\Cref{as:admin}), and a correlated unavailability of two of them is a single event rather than two
 independent ones. \textbf{D1 is therefore satisfied against one uncooperative party, with no margin
 beyond that, and cannot be satisfied against a refusing quorum without an L1

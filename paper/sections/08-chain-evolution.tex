@@ -82,7 +82,7 @@ things that a naive reading of ``pruning'' might endanger: evaluating slot eligi
 $H(\text{collateral} \Vert \text{prevHash} \Vert \tslot) \le \text{target}$ and signing
 \srccode{fluxd/\allowbreak{}src/\allowbreak{}pon/\allowbreak{}pon.cpp}{70--86}, and validating the \FluxNode\ registry against which that
 collateral outpoint is checked. The reason the claim holds is that the registry does not live inside
-the block store it would otherwise be pruned along with: \FluxNode\ state is a single global structure,
+the block store it would otherwise be pruned along with: \rev{R049}{\FluxNode\ state is a single global structure,}{\FluxNode\ state, which every node derives deterministically from the START and CONFIRM transactions on the chain, is held per node in a local cache,}
 \texttt{g\_fluxnode\allowbreak{}Cache}, persisted in its own LevelDB database keyed by datadir path
 \texttt{determ\_zelnodes} \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnodecachedb.cpp}{26}, and is rebuilt from that
 store at every startup independently of how much of the block chain is retained
@@ -93,8 +93,9 @@ A pruned \PoN\ node retains block-production capability if and only if the \Flux
 UTXO set for collateral outpoints are retained, regardless of pruning depth.
 \end{property}
 
-This is stateable precisely because the registry already lives outside the block store rather than
-being derived from block history on demand; a chain whose node registry had to be replayed from full
+\rev{R050}{This is stateable precisely because the registry already lives outside the block store rather than
+being derived from block history on demand;}{This is stateable precisely because each node's locally derived copy of the registry is persisted outside the block store rather than
+being re-derived from block history on demand;} a chain whose node registry had to be replayed from full
 block history would not have this property, and \fluxd's separation of the two stores is what makes
 pruning and \PoN\ compatible without further engineering \shipped\
 \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnodecachedb.cpp}{26,49--79}.
@@ -102,9 +103,11 @@ pruning and \PoN\ compatible without further engineering \shipped\
 \begin{remark}[Archival is a tenant product, not a node obligation --- settled]
 \label{rem:archive-product}
 The pruning-depth policy and the archival-redundancy target were carried as open. They are settled by
-a decision that resolves both at once and relocates the problem: \textbf{archive nodes are
+a decision that resolves both at once and relocates the problem: \rev{R051}{\textbf{archive nodes are
 applications running on \FluxCloud}. The team deploys them as tenant workloads and sells access to
-RPC and other node APIs as a product \srcintent{design intake} (\planned).
+RPC and other node APIs as a product}{\textbf{archive nodes are to be
+applications running on \FluxCloud}. The team would deploy them as tenant workloads and sell access to
+RPC and other node APIs as a product} \srcintent{design intake} (\planned).
 
 Two consequences, and the second is the one worth stating carefully.
 
@@ -129,14 +132,18 @@ independent archive deployments required before history is durable is therefore 
 The roadmap pairs pruning with a paid product built from the archive nodes pruning requires, describing
 RPC, archive and indexing services as the network's ``first capacity-selling product'' and stating that
 this ``pairs directly with chain pruning: the archive nodes pruning requires become the product''
-\srcdoc{flux-roadmap-public.md:33-34}. This is the clearest instance in the deployed system of the
+\srcdoc{flux-roadmap-public.md:33-34}. \rev{R052}{This is the clearest instance in the deployed system of the
 demand-funded thesis applied to the chain layer itself: an operational cost the network would otherwise
 carry for free (full history) becomes a service the network sells, and the archive tier pruning makes
-necessary is the same tier that generates the revenue. \srcroadmap{RPC, archive and indexing services,
+necessary is the same tier that generates the revenue.}{This is the clearest instance in the plan of the
+demand-funded thesis applied to the chain layer itself: an operational cost the network would otherwise
+carry for free (full history) would become a service the network sells, and the archive tier pruning makes
+necessary would be the same tier that generates the revenue.} \srcroadmap{RPC, archive and indexing services,
 Q3 2026}
 
-See \Cref{rem:archive-product}: archival capacity \emph{is} a paid product, deployed as
-\FluxCloud{} applications, and the consequence for history availability is stated there rather than
+See \Cref{rem:archive-product}: \rev{R053}{archival capacity \emph{is} a paid product, deployed as
+\FluxCloud{} applications,}{archival capacity is \emph{to be} a paid product, deployed as
+\FluxCloud{} applications (\planned; not yet deployed),} and the consequence for history availability is stated there rather than
 left conditional. \srcinferred
 
 \textbf{Class: Extension.} The mechanism exists; what remains is the operational decision to enable it
@@ -502,7 +509,7 @@ tasks once NIST-standardised primitives are chosen, whereas the disposition of u
 unsolved in the field.
 
 \paragraph{One advantage \Flux\ has that a general UTXO migration does not.} \FluxNode\ collateral
-is a \emph{registered} set: every collateral outpoint and the operator behind it is enumerable from the
+is a \emph{registered} set: \rev{R054}{every collateral outpoint and the operator behind it is enumerable}{every collateral outpoint and the keys and payment address registered with it are enumerable} from the
 same \texttt{g\_fluxnode\allowbreak{}Cache}\slash\texttt{determ\_zelnodes} registry already cited in
 Section~\ref{sec:chain-evolution}'s pruning discussion
 \srccode{fluxd/\allowbreak{}src/\allowbreak{}fluxnode/\allowbreak{}fluxnodecachedb.cpp}{26,49--79}. A migration that targets node collateral

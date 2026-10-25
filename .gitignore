@@ -28,3 +28,10 @@ short/*.fls
 short/*.fdb_latexmk
 short/*.synctex.gz
 short/sections/*.aux
+
+# Revision builds: final-mode and markup jobnames are local review copies.
+paper/final.*
+paper/markup.*
+short/final.*
+short/markup.*
+short/main.pdf

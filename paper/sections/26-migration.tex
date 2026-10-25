@@ -11,11 +11,14 @@ than on substance. The headline finding is that the riskiest edge in the graph i
 unknown but a sequencing one. \PNR's payoff to hosting is provably zero at the margin
 (\S\ref{sec:pnr}), so the mechanism's integrity depends entirely on an eligibility gate that
 \S\ref{sec:consensus} and \S\ref{sec:attestation} already show is bound neither to the operator nor
-to the machine that passes it. Activating \PNR before hardening that gate is not a parallel
-workstream; it is deploying an incentive to defeat a check that does not yet exist. A second,
+to the machine that passes it. \rev{R191}{Activating \PNR before hardening that gate is not a parallel
+workstream; it is deploying an incentive to defeat a check that does not yet exist.}{Activating \PNR raises the payoff to defeating that gate, though only by a small increment
+over the issuance that already flows through it, so hardening the gate is urgent on its own merits
+and \PNR's ramp should track it (\S\ref{sec:26-precondition}).} A second,
 independent finding — that most of Part~IV waits on three v9 fields with no consumer code today —
-makes the v9 enforcement height, since settled at $\hstar = \num{3050000}$
-(\S\ref{sec:appspec-v9}), the single most schedule-relevant date in this document.
+\rev{R192}{makes the v9 enforcement height, since settled at $\hstar = \num{3050000}$
+(\S\ref{sec:appspec-v9}), the single most schedule-relevant date in this document.}{makes the v9 enforcement height --- proposed at $\hstar = \num{3050000}$
+(\S\ref{sec:appspec-v9}) but not activated, since \specv{9} remains in development --- the single most schedule-relevant date in this document.}
 Everything below is \planned or \vision unless stated otherwise; no date appears here that the
 roadmap or the design intake did not state, and quarter labels are reproduced verbatim.
 
@@ -125,9 +128,10 @@ record that the two events are now simultaneous rather than sequential (\S\ref{s
 
 \PNR pays all nodes from a shared fee pool through the \PoN rotation rather than paying the node
 that hosts a given application (\planned; \srcintent{design intake}). A node's income is therefore
-independent of \emph{which} applications it hosts. That is not free-riding, because an operator
+independent of \emph{which} applications it hosts. \rev{R193}{That is not free-riding, because an operator
 cannot decline placement --- \FluxOS{}'s spawner selects at random from the network-wide list and no
-opt-out exists (\shipped;
+opt-out exists (\shipped;}{That is not free-riding, because an operator
+does not choose placement --- each node's \FluxOS{} spawner selects at random from the network-wide list (\shipped;}
 \srccode{flux/\allowbreak{}ZelBack/\allowbreak{}src/\allowbreak{}services/\allowbreak{}appLifecycle/\allowbreak{}appSpawner.js}{311}) ---
 but it does mean \PNR supplies no gradient that rewards hosting well
 (\planned; \srcintent{mechanism specification} \srcdoc{reconciliation record}). What compels a node to perform, in this design, is not \PNR — it is the eligibility gate
@@ -173,7 +177,7 @@ every capable machine and simply has no consumer. The dependency is therefore no
 opt-in bonded network with $k$-of-$n$ challengeable claims (\planned;
 \srcroadmap{flux-roadmap-public.md:135-138}), which is a larger and later object, but the narrower
 piece of work of binding the attestation key to that policy and serving a verifiable quote. Stated
-that way the dependency and \PNR's own March-2027 activation height are compatible; stated as a
+that way the dependency and \rev{R194}{\PNR's own March-2027 activation height}{\PNR's own activation height $\hpa$ (2027-07-01)} are compatible; stated as a
 dependency on the bonded network, they are not, and the paper would be committing to two things that
 conflict. The final row of Table~\ref{tab:dep-graph} is read accordingly.
 
@@ -189,21 +193,23 @@ datacenter tier and the one-provider-runtime convergence depend on the v9 \textt
 
 Three of the fields this depends on have zero consumer code anywhere in \FluxOS today:
 \texttt{paymentMemo}, \texttt{referralCode}, and \texttt{machineType} (\inprogress;
-\srcdoc{reconciliation record}). The orchestration substrate of v9 is built and tested — 932 changed
+\srcdoc{reconciliation record}). \rev{R195}{The orchestration substrate of v9 is built and tested — 932 changed}{The orchestration substrate of v9 is in development and under test, unmerged on a contributor fork — 932 changed}
 files and a regression suite of 289 unit-test files running 7,763 test cases on every push
 (\inprogress; \srcdoc{reconciliation record}) — but the economic fields the roadmap's own dependency
 chain rests on are declared in the schema and unimplemented beneath it. The currently enforced
 specification version remains \specv{8}, and 322 of 1{,}195 deployed applications (26.9\%) sit on
 six versions older than that (\inprogress; \srcdoc{reconciliation record}; \srcmeasured{network census, \S5}{2026-09-03}).
 
-The v9 enforcement height, settled at $\hstar = \num{3050000}$ (\S\ref{sec:appspec-v9}), is
-therefore the most schedule-relevant date in this document (\srcdoc{feasibility assessment}). Meeting it
+\rev{R196}{The v9 enforcement height, settled at $\hstar = \num{3050000}$ (\S\ref{sec:appspec-v9}), is
+therefore}{The v9 enforcement height, proposed at $\hstar = \num{3050000}$ (\S\ref{sec:appspec-v9}) but not
+activated, since \specv{9} remains in development, is
+therefore} the most schedule-relevant date in this document (\srcdoc{feasibility assessment}). Meeting it
 requires two things that do not exist yet: implemented consumers for the payment-memo, referral, and
 machine-type fields, and \texttt{latest\allowbreak{}Supported\allowbreak{}Spec\allowbreak{}Version} raised in lockstep with a fleet-wide
 version floor. The mastership/active-standby quorum plane, whose gating field
 (\texttt{quorum\allowbreak{}Grant\allowbreak{}Activation\allowbreak{}Height}) is read by production code today but set only in test fixtures
 (\inprogress; \srcdoc{reconciliation record}), is deliberately decoupled from $\hstar$ and activates
-later, once \specv{9} is stable (\S\ref{sec:appspec-v9}). \settlednote{Partly. \specv{9} activation
+later, once \specv{9} is stable (\S\ref{sec:appspec-v9}). \rev{R197}{\settlednote{Partly. \specv{9} activation
 and the migration of existing applications are both stated for \textbf{Q4~2026}
 \srcintent{design intake}, the enforcement height is $\hstar = \num{3050000}$
 \srcintent{design intake}, constrained to follow the economic-field implementation
@@ -211,7 +217,15 @@ and the migration of existing applications are both stated for \textbf{Q4~2026}
 rather than by owner action \srcintent{design intake}. What remains open is the
 mechanism by which the 322 applications on legacy versions are rewritten --- an automatic migration
 still needs a specified transformation per source version, and none is stated in any artefact read
-for this paper.}
+for this paper.}}{\settlednote{Partly. \specv{9} activation
+and the migration of existing applications are both stated for \textbf{Q4~2026}
+\srcintent{design intake}, the enforcement height was proposed as $\hstar = \num{3050000}$
+\srcintent{design intake} but has not activated (\specv{9} remains in development), constrained to follow the economic-field implementation
+(\Cref{rem:v9-timing}), and the migration policy is that all applications are migrated automatically
+rather than by owner action \srcintent{design intake}. What remains open is the
+mechanism by which the 322 applications on legacy versions are rewritten --- an automatic migration
+still needs a specified transformation per source version, and none is stated in any artefact read
+for this paper.}}
 
 \subsection{The privacy prerequisite}\label{sec:26-privacy}
 
@@ -265,7 +279,7 @@ annually thereafter & $+1{,}051{,}200$ & --- & $\times 0.9$ & $+5$pp \\
 the parallel-asset mining-reward cut and the swap contract taking effect
 (\S\ref{sec:26-schedule}; \srcintent{design intake}), not a half-year ahead of it as
 the public roadmap's superseded sequencing would have had it. Node share $\nodeshare$ ramps to a
-declared cap $\nodesharecap = 50\%$, reached around 2033 on the stated annual step
+\rev{R198}{declared cap $\nodesharecap = 50\%$, reached around 2033 on the stated annual step}{declared cap $\nodesharecap = 50\%$, reached at height \num{9378400} (2032-10-23) on the stated annual step}
 (\srcintent{design intake}).}
 \label{tab:activation-schedule}
 \end{table}
@@ -349,7 +363,7 @@ of $\sim$1.43M\flux/yr (the team's assumption of 1{,}193 applications at 100\flu
 counts 1{,}195 applications and 7{,}486 instances, \S\ref{sec:eval-apps}); \PNR is $\sim$4.3\% of
 operator income at activation; under flat demand there is no crossover, ever (\srcintent{design intake};
 \srcdoc{reconciliation record}) &
-Ramp lowers the parity threshold to $\sim$6.8M\flux/yr by 2032-10, $\sim$5.6 years post-$\hpa$
+Ramp lowers the parity threshold to $\sim$6.8M\flux/yr by 2032-10, \rev{R199}{$\sim$5.6 years post-$\hpa$}{$\sim$5.3 years post-$\hpa$}
 (\S\ref{sec:eval-pnr-crossover}); no stated policy if demand still undershoots (O13, open) \\
 \addlinespace
 Simultaneous activation removes the roadmap's proving-period checkpoint & \PNR credibility;
@@ -382,9 +396,11 @@ that requires rework (open) \\
 \specv{9} migration strands legacy applications & \PNR, credits, provisioning API, datacenter tier
 (\S\ref{sec:26-v9}) &
 322 of 1{,}195 deployed applications (26.9\%) sit on six versions older than \specv{8}
-(\srcdoc{reconciliation record}; \srcmeasured{network census, \S5}{2026-09-03}); the enforcement
+(\srcdoc{reconciliation record}; \srcmeasured{network census, \S5}{2026-09-03}); \rev{R200}{the enforcement
 height is settled at $\hstar = \num{3050000}$ but no per-version transformation or eviction
-policy exists &
+policy exists}{an enforcement
+height of $\hstar = \num{3050000}$ was proposed but has not activated (\specv{9} remains in development), and no per-version transformation or eviction
+policy exists} &
 Forced automatic migration at $\hstar$ \srcintent{design intake}; the
 transformation per source version is unspecified (\S\ref{sec:26-v9}) \\
 \addlinespace
@@ -427,11 +443,15 @@ resources sold must grow roughly in line with the compounding schedule in
 Table~\ref{tab:activation-schedule} for \PNR to become more than a $\sim$4\% supplement to operator
 income; this is a claim about deployment counts and resources sold, never about price
 (\srcintent{design intake}; \srcdoc{reconciliation record}).
-\item \textbf{Attestation hardening must precede or coincide with \PNR mainnet activation, not
-follow it.} If the bonded attestation network is not operational by the time \PNR begins paying
+\item \textbf{\rev{R201}{Attestation hardening must precede or coincide with \PNR mainnet activation, not
+follow it.}{Attestation hardening should proceed on its own merits, and \PNR's ramp should
+track it.}} \rev{R202}{If the bonded attestation network is not operational by the time \PNR begins paying
 operators, the eligibility gate — already shown not to be operator- or machine-bound
 (\S\ref{sec:26-precondition}) — becomes a directly monetized target rather than a weak but
-unexploited assumption.
+unexploited assumption.}{If the eligibility gate — already shown not to be operator- or machine-bound
+(\S\ref{sec:26-precondition}) — is still unbound as $\nodeshare$ ramps toward $\nodesharecap$, a growing
+share of operator income becomes a monetized target behind it; the narrower fix is machine-binding the
+attestation key, not the full bonded network (\S\ref{sec:26-precondition}).}
 \item \textbf{\specv{9}'s three economic fields need implemented consumers before any of their
 dependents activate.} \texttt{paymentMemo}, \texttt{referralCode}, and \texttt{machineType} must
 each acquire consumer code, and \texttt{latest\allowbreak{}Supported\allowbreak{}Spec\allowbreak{}Version} must rise in lockstep with a
